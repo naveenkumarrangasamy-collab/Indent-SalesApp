@@ -46,7 +46,8 @@ These tabs are created on the first submit (or with **Access → Create missing 
    - `owner_email`: the indent owner's email. This email is always an active owner.
    - `owner_initial_pin`: a temporary PIN for the owner's first sign-in. The app then asks the owner to choose their own PIN.
    - `pin_pepper`: a long random string. Set it once and keep it; changing it makes every PIN invalid.
-   - `[gcp_service_account]`: the fields from the JSON key. Keep the `\n` line breaks inside `private_key`.
+   - `gcp_service_account_json`: open the downloaded JSON key file in Notepad, copy everything from the first `{` to the last `}`, and paste it between the `'''` triple quotes. (A `[gcp_service_account]` section with one line per field also works.)
+   - Keep the simple `name = value` lines at the top, before any `[section]` line.
 4. **First sign-in as owner** → **Access → Sheet setup & checks**:
    1. **Create missing tabs**: adds `Store_Map`, `Varieties`, `Access`, `Indent_Lines`, `Change_Log`, `PO_Freeze`, `Drafts` (and `SKU_Map`) with header rows. Existing tabs are not touched.
    2. Check **SKU mapping** on the same page: it should say *live from 'All Cux City' + 'Mapping Whole'*.

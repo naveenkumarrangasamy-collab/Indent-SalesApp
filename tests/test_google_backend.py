@@ -166,3 +166,15 @@ def test_google_status_reasons(monkeypatch):
     assert "sheet_id" in config.google_status()[1]
     monkeypatch.setattr(config, "_secrets", lambda: {"sheet_id": "x", "gcp_service_account": {"type": "service_account"}})
     assert "missing: project_id, private_key, client_email, token_uri" in config.google_status()[1]
+
+
+def test_service_account_as_pasted_json(monkeypatch):
+    import json
+    from core import config
+    key = {"type": "service_account", "project_id": "p", "client_email": "a@p.iam.gserviceaccount.com",
+           "private_key": "-----BEGIN PRIVATE KEY-----\nX\n-----END PRIVATE KEY-----\n",
+           "token_uri": "https://oauth2.googleapis.com/token"}
+    monkeypatch.setattr(config, "_secrets", lambda: {"sheet_id": "s", "gcp_service_account_json": json.dumps(key)})
+    assert config.google_status() == (True, "") and config.service_account_info()["client_email"] == key["client_email"]
+    monkeypatch.setattr(config, "_secrets", lambda: {"sheet_id": "s", "gcp_service_account_json": "{oops"})
+    assert "not valid JSON" in config.google_status()[1]

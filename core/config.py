@@ -27,17 +27,41 @@ def get(key: str, default=None):
 
 def sheet_id() -> str:
     """Accepts either `sheet_id` or a full `sheet_url` in secrets."""
-    raw = str(get("sheet_id", "") or get("sheet_url", "") or "").strip()
+    conn = dict(get("connections") or {}).get("gsheets") or {}
+    raw = str(get("sheet_id", "") or get("sheet_url", "") or dict(conn).get("spreadsheet", "") or "").strip()
     m = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", raw)
     return m.group(1) if m else raw
 
 
-def service_account_info() -> dict | None:
+def _raw_service_account() -> tuple[dict | None, str]:
+    """The service account from the secrets, in any of three forms:
+    1. gcp_service_account_json = the whole JSON key file pasted as text
+    2. [gcp_service_account] with one line per field
+    3. [connections.gsheets] (the st-gsheets-connection layout)
+    Returns (info or None, error text)."""
+    import json
+
+    raw = get("gcp_service_account_json")
+    if raw:
+        try:
+            info = json.loads(str(raw))
+        except json.JSONDecodeError as e:
+            return None, ("`gcp_service_account_json` is not valid JSON (line "
+                          f"{e.lineno}). Paste the whole key file between the triple quotes.")
+        return (info if isinstance(info, dict) else None), ""
     info = get("gcp_service_account")
-    if not info:
-        return None
-    info = dict(info)
-    if not info.get("private_key") or not info.get("client_email"):
+    if info:
+        return dict(info), ""
+    conn = (get("connections") or {})
+    gs = dict(conn).get("gsheets") if conn else None
+    if gs:
+        return {k: v for k, v in dict(gs).items() if k not in ("spreadsheet", "worksheet")}, ""
+    return None, ""
+
+
+def service_account_info() -> dict | None:
+    info, _ = _raw_service_account()
+    if not info or not info.get("private_key") or not info.get("client_email"):
         return None
     return info
 
@@ -54,15 +78,17 @@ def google_status() -> tuple[bool, str]:
     local mode, so a missing secret is never silent."""
     if not sheet_id():
         return False, "`sheet_id` is missing from the app secrets."
-    info = get("gcp_service_account")
+    info, err = _raw_service_account()
+    if err:
+        return False, err
     if not info:
-        return False, "The `[gcp_service_account]` section is missing from the app secrets."
-    info = dict(info)
+        return False, ("The service account key is missing from the app secrets "
+                       "(add `gcp_service_account_json` with the key file, see README).")
     missing = [k for k in _SA_REQUIRED if not str(info.get(k, "")).strip()]
     if missing:
-        return False, "`[gcp_service_account]` is missing: " + ", ".join(missing) + "."
+        return False, "The service account key is missing: " + ", ".join(missing) + "."
     if "BEGIN PRIVATE KEY" not in str(info.get("private_key", "")):
-        return False, "`private_key` in `[gcp_service_account]` does not look like a key (paste it whole)."
+        return False, "`private_key` in the service account key does not look like a key (paste it whole)."
     return True, ""
 
 
