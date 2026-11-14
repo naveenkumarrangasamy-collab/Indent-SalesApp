@@ -12,7 +12,7 @@ Built from `MT_INDENT_BUILD_SPEC.md`, with one change: users sign in with their 
 | Indent | everyone | Step 1 delivery details, step 2 items. Draft autosaves to the `Drafts` tab and is restored at the next sign-in. |
 | My indents (All indents for the owner) | everyone | List, open, correct (new version), last 10 versions with Load, change log, PO upload and freeze. |
 | City / SKU report | everyone | Total qty per City → Customer → SKU with lot, lot size and Spec-Size; PDF and CSV. |
-| Production sheet | everyone | One row per city + customer SKU name, adding up all stores in the filter (delivery date, city, customer), with lot, lot size, Spec-Size and store names; PDF and CSV. Sales see their own indents; the owner sees all. |
+| Production sheet | everyone | One row per customer SKU name (same name in any case/spacing clubbed), adding up every store in the filter (delivery date, city, customer); lot, lot size, Spec-Size; no store names; PDF and CSV. |
 | Access | owner | Add users with an initial PIN, reset PINs, revoke/restore, change role, create missing tabs, SKU-mapping source and master-data checks. |
 
 Every user can change their own PIN from the sidebar.
@@ -23,10 +23,14 @@ Every user can change their own PIN from the sidebar.
 - **Google Sheet data** (SKUs, stores, varieties, access) is re-read every **5 minutes** (`master_refresh_minutes`), or at once with ↻ Refresh data.
 - **Edit / Delete everywhere**: items on the Indent page, items in All indents, and whole indents (home screen and All indents). Deleting a whole indent marks it **Cancelled** (a new version): it leaves production, frees the store/date, and its history stays in the sheet.
 - **Add item**: choosing a different parent SKU clears the SKU, variety, qty and price of that line; choosing a different SKU clears variety, qty and price.
+- **PO e-mail**: on Confirm, the PO PDF is e-mailed to rakeshdhasa@gmail.com (`po_mail_to`, `po_mail_cc`) with the **customer name as the subject** and the indent details in the body. Needs `smtp_user` + `smtp_password` (a Gmail App password) in the secrets; without them the indent is still frozen and the app says the e-mail was not sent.
+- **City access**: on the Access page each sales person can be given one or more **cities**. They place indents only in those cities and see, edit and delete every indent there, whoever created it. A sales person without a city sees only their own indents; owners see everything.
+- **change_note** (Indent_Lines): every version's rows carry one note: *Created by …*, *Edited by … (same user / other user; created by …): what changed*, *Deleted by …*, *PO uploaded by …*.
+- **Open indents first**: All indents, the home screen and "Indents included" list open (Submitted) indents on top, then PO-frozen, then deleted.
 - **Upload PO** (home screen or All indents): PDF only, asks "Is this PO for customer X and store Y?", then freezes the indent. To keep the PDF itself, set `po_drive_folder_id` to a folder in a **Shared drive** shared with the service account as Content manager, and enable the Google Drive API; the link is saved in PO_Freeze. Without it only the file name is saved.
 
 - **One indent per store per delivery date.** Choosing a store and date that already have an indent shows it, blocks Continue and offers **Edit IND-…** instead; a correction cannot be moved onto another indent's store and date either.
-- **Delivery date** must be after today (corrections: after the day the indent was created).
+- **Delivery date** is **today (T) or tomorrow (T+1)** (`delivery_days_ahead`); a correction may keep its saved date.
 - **Expected delivery time**: 10:00 AM to 8:00 PM. Pick a 30-minute slot, or type a time in that range (6:45 PM, 18:45) and press Enter. Change with `delivery_from` / `delivery_to` in the secrets.
 - **Qty** is a whole number only. **Lot** (Kg, Pcs, Pack for gm packs, Box, Tray) and **Lot size** (e.g. "2 Pcs", "200 gm", "17.5 Kg Box") come from the customer SKU name and cannot be edited; Lot size is also saved in Indent_Lines.
 - **Variety** is asked only for **Apple** (`variety_parents` in the secrets). The list comes from the *Apple Varity* tab; while that tab is empty, the standard list is used (Gala, Granny Smith, Queen, RD, Pink Lady, Crispy Pink, Braeburn, Sonya, Fuji, Jazz).

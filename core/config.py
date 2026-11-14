@@ -107,6 +107,14 @@ def variety_parents() -> list[str]:
     return [str(x) for x in (v if isinstance(v, (list, tuple)) else [v])]
 
 
+def delivery_days_ahead() -> int:
+    """Latest delivery date = today + this many days (default 1: T and T+1)."""
+    try:
+        return max(0, int(get("delivery_days_ahead", 1)))
+    except (TypeError, ValueError):
+        return 1
+
+
 def delivery_window() -> tuple[str, str]:
     """Earliest and latest expected delivery time (HH:MM), default 10 AM-8 PM."""
     return str(get("delivery_from", "10:00")), str(get("delivery_to", "20:00"))

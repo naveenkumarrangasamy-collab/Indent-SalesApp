@@ -58,18 +58,18 @@ def _placed(user: User) -> None:
     except SheetError:
         return
     summ = indents.summary(df)
-    if not user.is_owner:
-        summ = summ[summ["created_by"].str.lower() == user.email]
+    summ = indents.visible_to(summ, user)
     today = config.now_ist().date().isoformat()
-    up = summ[summ["delivery_date"].astype(str) >= today].sort_values(
-        ["delivery_date", "customer", "store"])
+    up = indents.open_first(summ[summ["delivery_date"].astype(str) >= today],
+                            then=["delivery_date", "customer", "store"], ascending=[True, True, True])
     if up.empty:
         return
     up = up[up["status"] != "Cancelled"]
     if up.empty:
         return
     ind = state.get()
-    with st.expander(f"Indents placed · {len(up)} upcoming", expanded=True, icon=":material/inventory_2:"):
+    label = f"Indents placed · {len(up)} upcoming" + (f" · {', '.join(user.cities)}" if user.city_scoped else "")
+    with st.expander(label, expanded=True, icon=":material/inventory_2:"):
         w = [1.0, 0.9, 2.0, 1.8, 0.5, 0.9, 0.8, 0.8, 0.9, 1.05]
         head = st.columns(w)
         for col, label in zip(head, ["Delivery", "Customer", "Store", "Indent", "Items", "Amount",

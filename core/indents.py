@@ -95,11 +95,37 @@ def can_edit(created_iso: str, now: datetime | None = None) -> bool:
         return False
 
 
-def min_delivery_date(created_iso: str | None = None) -> date:
-    """Delivery must be after today (new indent) or after the day the indent
-    was created (corrections), so a saved date stays valid while editing."""
-    base = _ist(created_iso).date() if created_iso else config.now_ist().date()
-    return base + timedelta(days=1)
+def delivery_bounds(keep: str | None = None) -> tuple[date, date]:
+    """Allowed delivery dates: today (T) and tomorrow (T+1). When correcting an
+    indent, its saved date (`keep`) stays allowed even if it has passed."""
+    today = config.now_ist().date()
+    lo, hi = today, today + timedelta(days=config.delivery_days_ahead())
+    if keep:
+        try:
+            lo = min(lo, date.fromisoformat(keep))
+        except ValueError:
+            pass
+    return lo, hi
+
+
+def date_allowed(delivery_date: str, keep: str | None = None) -> bool:
+    if keep and delivery_date == keep:
+        return True
+    lo, hi = delivery_bounds()
+    return lo.isoformat() <= str(delivery_date) <= hi.isoformat()
+
+
+def date_rule_text() -> str:
+    lo, hi = delivery_bounds()
+    return f"today ({lo:%d %b}) or tomorrow ({hi:%d %b})" if (hi - lo).days == 1 \
+        else f"{lo:%d %b} to {hi:%d %b}"
+
+
+def creator_of(df: pd.DataFrame, indent_id: str) -> str:
+    sub = df[df["indent_id"] == indent_id]
+    if sub.empty:
+        return ""
+    return str(sub.sort_values(["version", "_row"]).iloc[0]["submitted_by"])
 
 
 def created_at(df: pd.DataFrame, indent_id: str) -> str:
@@ -178,17 +204,55 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
     out["total_amount"] = out["total_amount"].round(2)
     out["can_edit"] = (out["created_at"].map(can_edit)
                        & ~out["status"].isin([STATUS_FROZEN, STATUS_CANCELLED]))
-    return out.sort_values("last_edited_at", ascending=False)[cols].reset_index(drop=True)
+    return open_first(out[cols])
+
+
+STATUS_ORDER = {STATUS_SUBMITTED: 0, STATUS_FROZEN: 1, STATUS_CANCELLED: 2}
+
+
+def open_first(df: pd.DataFrame, then: list[str] | None = None,
+               ascending: list[bool] | None = None) -> pd.DataFrame:
+    """Open (Submitted) indents on top, then PO-frozen, then deleted; within
+    each group by `then` (default: most recently edited first)."""
+    if df is None or df.empty:
+        return df
+    then = then or ["last_edited_at"]
+    ascending = ascending if ascending is not None else [False] * len(then)
+    out = df.assign(_rank=df["status"].map(STATUS_ORDER).fillna(0))
+    return out.sort_values(["_rank"] + then, ascending=[True] + ascending).drop(columns="_rank") \
+              .reset_index(drop=True)
+
+
+def visible_to(summ: pd.DataFrame, user) -> pd.DataFrame:
+    """Indents this user may see and work on: owner all; a sales user with
+    cities every indent in those cities; otherwise the ones they created."""
+    if summ is None or summ.empty or user.is_owner:
+        return summ
+    if user.cities:
+        cities = {c.casefold() for c in user.cities}
+        return summ[summ["city"].astype(str).str.strip().str.casefold().isin(cities)]
+    return summ[summ["created_by"].astype(str).str.lower() == user.email]
+
+
+def scope_text(user) -> str:
+    if user.is_owner:
+        return "all indents"
+    if user.cities:
+        return "all indents in " + ", ".join(user.cities)
+    return "indents you created"
 
 
 def versions(df: pd.DataFrame, indent_id: str) -> pd.DataFrame:
     sub = df[df["indent_id"] == indent_id]
     if sub.empty:
-        return pd.DataFrame(columns=["version", "status", "submitted_at", "submitted_by", "lines", "amount"])
+        return pd.DataFrame(columns=["version", "status", "submitted_at", "submitted_by", "lines", "amount",
+                                     "change_note"])
+    if "change_note" not in sub.columns:
+        sub = sub.assign(change_note="")
     g = (sub.sort_values("_row").groupby("version")
             .agg(status=("status", "first"), submitted_at=("submitted_at", "first"),
                  submitted_by=("submitted_by", "first"), lines=("customer_sku_name", "count"),
-                 amount=("amount", "sum")).reset_index())
+                 amount=("amount", "sum"), change_note=("change_note", "first")).reset_index())
     g["amount"] = g["amount"].round(2)
     return g.sort_values("version", ascending=False).reset_index(drop=True)
 
@@ -216,13 +280,13 @@ def snapshot(df: pd.DataFrame, indent_id: str, version: int | None = None) -> In
 # --------------------------------------------------------------- validation
 
 def validate(header: IndentHeader, lines: list[IndentLine], m: Masters,
-             min_date: date | None = None) -> list[str]:
+             check_date: bool = False, keep_date: str | None = None) -> list[str]:
     errors: list[str] = []
     missing = header.missing()
     if missing:
         errors.append("Delivery details missing: " + ", ".join(missing) + ".")
-    if min_date and header.delivery_date and header.delivery_date < min_date.isoformat():
-        errors.append(f"Delivery date must be on or after {min_date:%d %b %Y}.")
+    if check_date and header.delivery_date and not date_allowed(header.delivery_date, keep_date):
+        errors.append(f"Delivery date must be {date_rule_text()}.")
     start, end = config.delivery_window()
     if header.expected_time and not start <= header.expected_time <= end:
         errors.append(f"Expected delivery time must be between {start} and {end}.")
@@ -273,8 +337,44 @@ def next_indent_id(existing_ids, city: str, on: date) -> str:
     return f"IND-{on:%Y%m%d}-{city_code(city)}-{n:04d}"
 
 
+def _who(user: str, creator: str) -> str:
+    if not creator or user.lower() == creator.lower():
+        return "same user"
+    return f"other user; created by {creator}"
+
+
+def _when(stamp: str) -> str:
+    try:
+        return _ist(stamp).strftime("%d %b %Y %H:%M")
+    except ValueError:
+        return stamp
+
+
+def summarize_changes(changes: list[dict], limit: int = 900) -> str:
+    parts = []
+    for c in changes:
+        t, sku, f = c["change_type"], c.get("customer_sku_name", ""), c.get("field", "")
+        if t == "header_changed":
+            parts.append(f"{f.replace('_', ' ')} {c['old_value']} → {c['new_value']}")
+        elif t == "line_added":
+            parts.append(f"added {sku}")
+        elif t == "line_removed":
+            parts.append(f"deleted {sku}")
+        else:
+            parts.append(f"{sku}: {f} {c['old_value']} → {c['new_value']}")
+    text = "; ".join(parts)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def change_note(action: str, user: str, creator: str, stamp: str, detail: str = "") -> str:
+    """One-cell history note written on every row of a version, e.g.
+    'Edited by b@x (other user; created by a@x) on 15 Nov 2026 10:05: qty …'."""
+    who = f"{action} by {user}" + ("" if action == "Created" else f" ({_who(user, creator)})")
+    return f"{who} on {_when(stamp)}" + (f": {detail}" if detail else "")
+
+
 def build_rows(indent_id: str, version: int, status: str, submitted_at: str, submitted_by: str,
-               header: IndentHeader, lines: list[IndentLine]) -> list[dict]:
+               header: IndentHeader, lines: list[IndentLine], note: str = "") -> list[dict]:
     rows = []
     for line in lines:
         rows.append({
@@ -284,6 +384,7 @@ def build_rows(indent_id: str, version: int, status: str, submitted_at: str, sub
             "parent_sku": line.parent_sku, "customer_sku_name": line.customer_sku_name,
             "variety": line.variety, "lot": line.lot, "lot_size": lot_size(line.customer_sku_name),
             "qty": to_number(line.qty), "price": to_number(line.price), "amount": line.amount,
+            "change_note": note,
         })
     return rows
 
@@ -305,8 +406,8 @@ def _append_verified(backend, rows: list[dict], indent_id: str, version: int,
 
 
 def submit_new(header: IndentHeader, lines: list[IndentLine], user: str) -> str:
-    if header.delivery_date < min_delivery_date().isoformat():
-        raise SheetError("The delivery date must be after today.")
+    if not date_allowed(header.delivery_date):
+        raise SheetError(f"The delivery date must be {date_rule_text()}.")
     backend = get_backend()
     for _ in range(3):
         df = prepare(backend.read(INDENT_LINES))
@@ -316,7 +417,8 @@ def submit_new(header: IndentHeader, lines: list[IndentLine], user: str) -> str:
         now = config.now_ist()
         indent_id = next_indent_id(df["indent_id"], header.city, now.date())
         stamp = now.isoformat()
-        rows = build_rows(indent_id, 1, STATUS_SUBMITTED, stamp, user, header, lines)
+        rows = build_rows(indent_id, 1, STATUS_SUBMITTED, stamp, user, header, lines,
+                          note=change_note("Created", user, user, stamp))
         if _append_verified(backend, rows, indent_id, 1, stamp, user):
             clear_cache()
             return indent_id
@@ -350,8 +452,8 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
     if not can_edit(created):
         raise CutoffError(f"{indent_id} can no longer be edited: the edit window closed at "
                           f"{edit_deadline(created):%d %b %Y, %I:%M %p}.")
-    if header.delivery_date < min_delivery_date(created).isoformat():
-        raise SheetError(f"The delivery date must be on or after {min_delivery_date(created):%d %b %Y}.")
+    if not date_allowed(header.delivery_date, keep=cur.header.delivery_date):
+        raise SheetError(f"The delivery date must be {date_rule_text()}.")
     dup = find_duplicate(df, header, exclude_id=indent_id)
     if dup:
         raise DuplicateError(duplicate_message(dup, header), dup)
@@ -360,7 +462,9 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
         raise NothingChangedError("Nothing changed compared with the saved version.")
     new_v = cur.version + 1
     stamp = config.now_iso()
-    rows = build_rows(indent_id, new_v, STATUS_SUBMITTED, stamp, user, header, lines)
+    creator = creator_of(df, indent_id)
+    rows = build_rows(indent_id, new_v, STATUS_SUBMITTED, stamp, user, header, lines,
+                      note=change_note("Edited", user, creator, stamp, summarize_changes(changes)))
     if not _append_verified(backend, rows, indent_id, new_v, stamp, user):
         clear_cache()
         raise ConflictError(f"Someone else saved {indent_id} at the same moment. "
@@ -384,7 +488,9 @@ def freeze(indent_id: str, base_version: int, po_file_name: str, user: str,
     _check_editable(cur, indent_id, base_version)
     new_v = cur.version + 1
     stamp = config.now_iso()
-    rows = build_rows(indent_id, new_v, STATUS_FROZEN, stamp, user, cur.header, cur.lines)
+    rows = build_rows(indent_id, new_v, STATUS_FROZEN, stamp, user, cur.header, cur.lines,
+                      note=change_note("PO uploaded", user, creator_of(df, indent_id), stamp,
+                                       f"{po_file_name}; indent frozen"))
     if not _append_verified(backend, rows, indent_id, new_v, stamp, user):
         clear_cache()
         raise ConflictError(f"Someone else saved {indent_id} at the same moment. Please try again.")
@@ -404,7 +510,7 @@ def freeze(indent_id: str, base_version: int, po_file_name: str, user: str,
     return new_v
 
 
-__all__ = ["find_duplicate", "DuplicateError", "edit_deadline", "can_edit", "min_delivery_date", "created_at", "CutoffError", "read_lines", "current_rows", "summary", "versions", "snapshot", "validate",
+__all__ = ["find_duplicate", "DuplicateError", "edit_deadline", "can_edit", "delivery_bounds", "date_allowed", "created_at", "CutoffError", "read_lines", "current_rows", "summary", "versions", "snapshot", "validate",
            "submit_new", "submit_update", "freeze", "next_indent_id", "build_rows",
            "ConflictError", "FrozenError", "NothingChangedError", "fmt_num"]
 
@@ -423,7 +529,9 @@ def cancel(indent_id: str, base_version: int, user: str) -> int:
                           f"{edit_deadline(created):%d %b %Y, %I:%M %p}.")
     new_v = cur.version + 1
     stamp = config.now_iso()
-    rows = build_rows(indent_id, new_v, STATUS_CANCELLED, stamp, user, cur.header, cur.lines)
+    rows = build_rows(indent_id, new_v, STATUS_CANCELLED, stamp, user, cur.header, cur.lines,
+                      note=change_note("Deleted", user, creator_of(df, indent_id), stamp,
+                                       "whole indent deleted (Cancelled)"))
     if not _append_verified(backend, rows, indent_id, new_v, stamp, user):
         clear_cache()
         raise ConflictError(f"Someone else saved {indent_id} at the same moment. Please try again.")

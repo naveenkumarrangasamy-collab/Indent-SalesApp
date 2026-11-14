@@ -39,16 +39,16 @@ def test_aggregate_clubs_same_sku_across_stores():
         dict(BASE, indent_id="A", version="1", customer="Zepto", store="S1", parent_sku="Avocado",
              customer_sku_name="1PC - Hass Avocado Imported", qty="30"),
         dict(BASE, indent_id="B", version="1", customer="Zepto", store="S2", parent_sku="Avocado",
-             customer_sku_name="1PC - Hass Avocado Imported", qty="12"),
-        dict(BASE, indent_id="B", version="1", customer="Swiggy", store="S3", parent_sku="Avocado",
+             customer_sku_name="1PC -  hass avocado imported ", qty="12"),     # same name, other spacing/case
+        dict(BASE, indent_id="C", version="1", customer="Swiggy", store="S3", parent_sku="Avocado",
              customer_sku_name="1PC - Nectar Avocado", qty="5"),
     ])
     agg = aggregate(df, _masters(), with_spec=True)
-    hass = agg[agg["Customer SKU Name"] == "1PC - Hass Avocado Imported"]
-    assert len(hass) == 1                                   # two stores -> one row
+    assert "Store Names" not in agg.columns and "City" not in agg.columns
+    hass = agg[agg["Customer SKU Name"].str.casefold() == "1pc - hass avocado imported"]
+    assert len(hass) == 1
     r = hass.iloc[0]
-    assert (r["Total Qty"], r["Stores"], r["Indents"], r["Store Names"]) == (42, 2, 2, "S1, S2")
-    assert r["Origin"] == "Tanzania" and r["Spec-Size"] == "20C, 22C" and r["City"] == "Bangalore"
+    assert (r["Total Qty"], r["Indents"], r["Origin"], r["Spec-Size"]) == (42, 2, "Tanzania", "20C, 22C")
     assert len(agg) == 2
 
 

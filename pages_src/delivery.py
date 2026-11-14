@@ -124,6 +124,16 @@ def fmt_slot(hhmm: str) -> str:
         return hhmm
 
 
+def _my_cities(m: Masters) -> list[str]:
+    """Cities this user may place indents in (sales users with cities set)."""
+    u = st.session_state.get("user") or {}
+    cities = m.cities()
+    allowed = {c.casefold() for c in (u.get("cities") or [])}
+    if u.get("role") != "owner" and allowed:
+        cities = [c for c in cities if c.casefold() in allowed]
+    return cities
+
+
 def _drop_stale(m: Masters) -> None:
     """A restored draft may hold a city / customer / store / time that is no
     longer in the sheet. For new indents, clear those so the lists match."""
@@ -132,7 +142,7 @@ def _drop_stale(m: Masters) -> None:
         return
     h = ind["header"]
     dropped = []
-    if h.get("city") and h["city"] not in m.cities():
+    if h.get("city") and h["city"] not in _my_cities(m):
         dropped.append(h["city"])
         h.update(city="", customer="", store="")
     if h.get("customer") and h["customer"] not in m.customers(h.get("city", "")):
@@ -195,17 +205,21 @@ def render(m: Masters) -> None:
 
     c1, c2 = st.columns(2)
     k = _k("date")
-    min_d = state.min_delivery_date()
+    min_d, max_d = state.date_bounds()
     cur_d = date.fromisoformat(hdr.delivery_date) if hdr.delivery_date else None
-    if cur_d and cur_d < min_d:  # e.g. an old draft: ask for a new date
+    if cur_d and not (min_d <= cur_d <= max_d):  # e.g. an old draft: ask for a new date
         cur_d = None
-    c1.date_input("Delivery date", value=cur_d, min_value=min_d, key=k, on_change=_on_simple,
-                  args=(k, "delivery_date"), format="DD/MM/YYYY",
-                  help=f"From {min_d:%d %b %Y} onwards")
+    c1.date_input("Delivery date", value=cur_d, min_value=min_d, max_value=max_d, key=k,
+                  on_change=_on_simple, args=(k, "delivery_date"), format="DD/MM/YYYY",
+                  help=f"Today or tomorrow ({min_d:%d %b} – {max_d:%d %b})")
 
-    cities = m.cities()
-    if hdr.city and hdr.city not in cities:
+    cities = _my_cities(m)
+    if hdr.city and hdr.city not in cities and state.get()["mode"] == "edit":
         cities = cities + [hdr.city]
+    u = st.session_state.get("user") or {}
+    if u.get("role") != "owner" and u.get("cities") and not cities:
+        st.warning("None of your cities (" + ", ".join(u["cities"]) + ") is in the Google Sheet yet. "
+                   "Ask the indent owner to check your city on the Access page.")
     k = _k("city")
     c2.selectbox("City", cities, index=_index(cities, hdr.city), key=k, placeholder="Choose city",
                  on_change=_on_city, args=(k,))
@@ -248,8 +262,8 @@ def render(m: Masters) -> None:
                     + " are not in the sheet yet. Ask the indent owner to add them.")
 
     missing = hdr.missing()
-    if hdr.delivery_date and hdr.delivery_date < min_d.isoformat():
-        missing = missing + [f"a delivery date from {min_d:%d %b %Y}"]
+    if hdr.delivery_date and not indents.date_allowed(hdr.delivery_date, state.keep_date()):
+        missing = missing + [f"a delivery date of {indents.date_rule_text()}"]
     if _duplicate_notice(hdr):
         missing = missing + ["a store / date without an indent"]
     if st.button("Continue →", type="primary", disabled=bool(missing)):

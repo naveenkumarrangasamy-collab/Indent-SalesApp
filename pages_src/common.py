@@ -140,7 +140,8 @@ def current_user() -> auth.User | None:
     try:
         m = masters.load_masters()
     except SheetError:
-        return auth.User(**u)  # sheet briefly unavailable: keep the session
+        return auth.User(**{k: u.get(k) for k in ("email", "name", "role")},
+                         cities=u.get("cities") or [])  # sheet briefly unavailable: keep the session
     user = auth.resolve_user(m.access, u["email"])
     if user is None:
         sign_out(message=f"Access for {u['email']} has been removed.")
@@ -149,7 +150,7 @@ def current_user() -> auth.User | None:
 
 
 def sign_in(user: auth.User) -> None:
-    st.session_state.user = {"email": user.email, "name": user.name, "role": user.role}
+    st.session_state.user = user.to_dict()
 
 
 def sign_out(message: str | None = None) -> None:

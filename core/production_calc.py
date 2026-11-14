@@ -13,8 +13,8 @@ from core.lots import lot_size
 from core.masters import Masters
 from core.models import fmt_num, to_number
 
-OUTPUT_COLUMNS = ["City", "Parent SKU", "Customer SKU Name", "Variety", "Origin", "Lot", "Lot Size",
-                  "Spec-Size", "Total Qty", "Stores", "Indents", "Store Names"]
+OUTPUT_COLUMNS = ["Parent SKU", "Customer SKU Name", "Variety", "Origin", "Lot", "Lot Size",
+                  "Spec-Size", "Total Qty", "Indents"]
 
 CITY_SKU_COLUMNS = ["City", "Customer", "Parent SKU", "Customer SKU Name", "Variety", "Lot",
                     "Lot Size", "Spec-Size", "Qty", "Indents", "Stores"]
@@ -41,28 +41,40 @@ def _prep(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return df
 
 
+def _join(values) -> str:
+    seen = []
+    for v in values:
+        v = str(v or "").strip()
+        if v and v not in seen:
+            seen.append(v)
+    return " / ".join(seen)
+
+
 def aggregate(lines: pd.DataFrame, masters: Masters, with_spec: bool = False) -> pd.DataFrame:
-    """Production sheet: one row per City + Customer SKU name (+ variety, lot,
-    lot size, Spec-Size), adding up every store that ordered it. Origin only
-    when with_spec (show_spec)."""
+    """Production sheet: ONE row per customer SKU name (names that differ only
+    in case or spacing count as the same), adding up every store, customer and
+    city in the filter. Apple keeps one row per variety. No store names."""
     cols = OUTPUT_COLUMNS if with_spec else [c for c in OUTPUT_COLUMNS if c != "Origin"]
     if lines is None or lines.empty:
         return pd.DataFrame(columns=cols)
     df = _prep(lines, masters)
     df["Origin"] = ([masters.spec(r.city, r.customer, r.customer_sku_name)[0] or NO_ORIGIN
                      for r in df.itertuples()] if with_spec else "")
-    df["_sku"] = df["customer_sku_name"].map(lambda v: " ".join(str(v).split()))
-    keys = ["city", "parent_sku", "_sku", "variety", "Origin", "lot", "Lot Size", "Spec-Size"]
-    g = (df.groupby(keys, dropna=False)
-           .agg(**{"Total Qty": ("qty", "sum"),
-                   "Stores": ("store", "nunique"),
-                   "Indents": ("indent_id", "nunique"),
-                   "Store Names": ("store", lambda s: ", ".join(sorted(set(s), key=str.casefold)))})
+    df["_name"] = df["customer_sku_name"].map(lambda v: " ".join(str(v).split()))
+    df["_key"] = df["_name"].str.casefold()
+    g = (df.groupby(["_key", "variety"], dropna=False, sort=False)
+           .agg(**{"Parent SKU": ("parent_sku", "first"),
+                   "Customer SKU Name": ("_name", lambda s: s.mode().iloc[0]),
+                   "Origin": ("Origin", _join),
+                   "Lot": ("lot", _join),
+                   "Lot Size": ("Lot Size", _join),
+                   "Spec-Size": ("Spec-Size", _join),
+                   "Total Qty": ("qty", "sum"),
+                   "Indents": ("indent_id", "nunique")})
            .reset_index()
-           .rename(columns={"city": "City", "parent_sku": "Parent SKU", "_sku": "Customer SKU Name",
-                            "variety": "Variety", "lot": "Lot"}))
+           .rename(columns={"variety": "Variety"}))
     g["Total Qty"] = _whole(g["Total Qty"])
-    g = g.sort_values(["City", "Parent SKU", "Customer SKU Name", "Variety", "Lot"],
+    g = g.sort_values(["Parent SKU", "Customer SKU Name", "Variety"],
                       key=lambda s: s.astype(str).str.casefold())
     return g[cols].reset_index(drop=True)
 

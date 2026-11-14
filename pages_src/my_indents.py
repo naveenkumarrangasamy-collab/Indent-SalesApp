@@ -46,15 +46,18 @@ def _request_open(cur, load=None) -> None:
 
 def render(user: User) -> None:
     common.show_flash()
-    st.markdown("### All indents" if user.is_owner else "### My indents")
+    st.markdown("### All indents" if user.is_owner or user.city_scoped else "### My indents")
+    if user.city_scoped:
+        st.caption("Indents of every user in " + ", ".join(user.cities) + ". Open (not yet PO) indents are on top.")
+    else:
+        st.caption("Open (not yet PO) indents are on top; PO-frozen and deleted ones follow.")
     try:
         df = indents.read_lines()
     except SheetError as e:
         common.sheet_error(e, "Indents could not be loaded.")
         return
     summ = indents.summary(df)
-    if not user.is_owner:
-        summ = summ[summ["created_by"].str.lower() == user.email]
+    summ = indents.visible_to(summ, user)
     if summ.empty:
         st.info("No submitted indents yet.")
         return
@@ -85,7 +88,7 @@ def render(user: User) -> None:
         "Last edited": view["last_edited_at"].map(fmt_ts), "By": view["last_edited_by"],
         "Editable": view["can_edit"].map(lambda b: "yes" if b else "closed"),
     })
-    if user.is_owner:
+    if user.is_owner or user.city_scoped:
         show["Created by"] = view["created_by"].values
     st.caption(f"{len(view)} indent(s). Click a row to open it.")
     sel = st.dataframe(show, hide_index=True, width="stretch", on_select="rerun",
@@ -182,6 +185,9 @@ def _versions(df: pd.DataFrame, cur, frozen: bool) -> None:
         c[3].write(v["submitted_by"])
         c[4].write(str(v["lines"]))
         c[5].write(f"{v['amount']:,.2f}")
+        note = str(v.get("change_note", "") or "")
+        if note:
+            c[3].caption(note)
         if c[6].button("Load", icon=":material/history:", key=f"load_{cur.indent_id}_{v['version']}",
                        disabled=frozen,
                        help="Copy this version into the form. It is saved only when you press Update."):

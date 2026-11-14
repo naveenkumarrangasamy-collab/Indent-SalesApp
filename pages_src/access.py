@@ -38,6 +38,7 @@ def _users(m: masters.Masters, me: User) -> None:
     if not acc.empty:
         show = pd.DataFrame({"Email": acc["Email"], "Name": acc["Name"], "Role": acc["Role"],
                              "Status": acc["Status"],
+                             "City": acc["City"].map(lambda v: v or "— (own indents only)"),
                              "PIN set": acc["PIN_Hash"].map(lambda v: "yes" if v else "no"),
                              "Updated": acc["Updated_At"].str[:16].str.replace("T", " "),
                              "By": acc["Updated_By"]})
@@ -51,6 +52,10 @@ def _users(m: masters.Masters, me: User) -> None:
         email = st.text_input("Work email")
         name = st.text_input("Name")
         role = st.selectbox("Role", [ROLE_SALES, ROLE_OWNER])
+        cities = st.multiselect("City (sales)", m.cities(), placeholder="Choose one or more cities",
+                                help="The sales person places indents only in these cities and can see, "
+                                     "edit and delete every indent there. Leave empty: own indents only. "
+                                     "Owners see everything.")
         pin = st.text_input("Initial PIN (4–6 digits)", type="password", max_chars=6)
         if st.form_submit_button("Add user", type="primary"):
             email_n = auth.norm_email(email)
@@ -62,8 +67,10 @@ def _users(m: masters.Masters, me: User) -> None:
                 st.error("PIN must be 4 to 6 digits.")
             else:
                 _save(lambda: auth.upsert_access(email_n, by=me.email, name=name, role=role,
-                                                 status=ACCESS_ACTIVE, pin=pin),
-                      f"{email_n} added. Share the PIN with them privately.")
+                                                 status=ACCESS_ACTIVE, pin=pin,
+                                                 cities=cities if role == ROLE_SALES else []),
+                      f"{email_n} added" + (f" for {', '.join(cities)}" if cities and role == ROLE_SALES else "")
+                      + ". Share the PIN with them privately.")
 
     with c2:
         st.markdown("**Manage a user**")
@@ -74,6 +81,15 @@ def _users(m: masters.Masters, me: User) -> None:
         target = st.selectbox("User", emails, key="acc_target")
         row = auth.access_row(acc, target)
         is_secret_owner = auth.norm_email(target) == config.owner_email()
+        if str(row.get("Role", "")).lower() != ROLE_OWNER:
+            current = auth.parse_cities(row.get("City", ""))
+            options = list(dict.fromkeys(m.cities() + current))
+            with st.form(f"cities_{target}"):
+                new_cities = st.multiselect("City", options, default=current,
+                                            help="Empty: the user sees only their own indents.")
+                if st.form_submit_button("Save cities", icon=":material/location_city:"):
+                    _save(lambda: auth.upsert_access(target, by=me.email, cities=new_cities),
+                          f"{target}: cities set to {', '.join(new_cities) or 'none (own indents only)'}.")
         with st.form("reset_pin", clear_on_submit=True):
             new_pin = st.text_input("New PIN for this user", type="password", max_chars=6)
             if st.form_submit_button("Reset PIN"):

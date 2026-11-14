@@ -23,7 +23,8 @@ def test_pin_and_email_rules():
 
 
 def _access(rows):
-    return pd.DataFrame(rows, columns=TABS[ACCESS])
+    cols = TABS[ACCESS]
+    return pd.DataFrame([list(r) + [""] * (len(cols) - len(r)) for r in rows], columns=cols)
 
 
 def test_authenticate_blocks_unknown_revoked_and_wrong_pin(monkeypatch):
@@ -236,3 +237,45 @@ def test_session_token_survives_refresh_but_not_pin_change(monkeypatch):
     old = auth.make_session_token(acc, "s@x.com", days=-1)
     assert auth.user_from_session_token(acc, old) is None                       # expired
     assert auth.user_from_session_token(acc, "garbage") is None
+
+
+def test_cities_on_access_and_users():
+    acc = _access([["s@x.com", "S", "sales", "active", "", "", ""]])
+    acc["City"] = ["PTP Bangalore, Chennai"]
+    u = auth.resolve_user(acc, "s@x.com")
+    assert u.cities == ["PTP Bangalore", "Chennai"] and u.city_scoped
+    assert auth.parse_cities("A; b ,A") == ["A", "b"]
+
+
+def test_po_mail(monkeypatch):
+    from core import mailer
+    from core.models import IndentHeader, IndentLine, IndentSnapshot
+    cur = IndentSnapshot("IND-1", 2, "Submitted", "", "a@x.com",
+                         IndentHeader("2026-11-15", "PTP Bangalore", "Zepto", "Zepto - A", "11:00"),
+                         [IndentLine("Avocado", "1PC - Hass Avocado Imported", "", "Pcs", 30, 120)])
+    monkeypatch.setattr(mailer.config, "get", lambda k, d=None: {}.get(k, d))
+    ok, msg = mailer.send_po_mail(cur, "po.pdf", b"%PDF-1.4", "a@x.com")
+    assert not ok and "smtp_user" in msg                                   # not configured
+    sent = {}
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout=None): sent["host"] = (host, port)
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def starttls(self, context=None): sent["tls"] = True
+        def login(self, u, p): sent["login"] = (u, p)
+        def send_message(self, m): sent["msg"] = m
+    secrets = {"smtp_user": "sender@gmail.com", "smtp_password": "abcd efgh ijkl mnop"}
+    monkeypatch.setattr(mailer.config, "get", lambda k, d=None: secrets.get(k, d))
+    monkeypatch.setattr(mailer.smtplib, "SMTP", FakeSMTP)
+    ok, msg = mailer.send_po_mail(cur, "PO-778.pdf", b"%PDF-1.4 test", "a@x.com")
+    m = sent["msg"]
+    assert ok and m["Subject"] == "Zepto" and m["To"] == "rakeshdhasa@gmail.com"
+    assert sent["login"] == ("sender@gmail.com", "abcdefghijklmnop") and sent["tls"]
+    att = [p for p in m.iter_attachments()]
+    assert att[0].get_filename() == "PO-778.pdf" and att[0].get_content() == b"%PDF-1.4 test"
+
+
+def test_user_label():
+    assert auth.User("a@x.com", "", "sales").label == "a@x.com"
+    assert auth.User("a@x.com", "Asha", "sales", ["X"]).label == "Asha"

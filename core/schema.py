@@ -26,12 +26,12 @@ TABS: dict[str, list[str]] = {
     STORE_MAP: ["City", "Customer", "Store Name"],
     VARIETIES: ["Parent SKU", "Variety"],
     # Access is edited from the app's Access page (owner only).
-    ACCESS: ["Email", "Name", "Role", "Status", "PIN_Hash", "Updated_At", "Updated_By"],
+    ACCESS: ["Email", "Name", "Role", "Status", "PIN_Hash", "Updated_At", "Updated_By", "City"],
     # Output tabs (written by the app, append-only).
     INDENT_LINES: ["indent_id", "version", "status", "submitted_at", "submitted_by",
                    "delivery_date", "city", "customer", "store", "expected_time",
                    "parent_sku", "customer_sku_name", "variety", "lot", "lot_size", "qty",
-                   "price", "amount"],
+                   "price", "amount", "change_note"],
     CHANGE_LOG: ["changed_at", "indent_id", "from_version", "to_version", "changed_by",
                  "change_type", "customer_sku_name", "field", "old_value", "new_value"],
     PO_FREEZE: ["indent_id", "version", "po_file_name", "po_customer", "po_store",

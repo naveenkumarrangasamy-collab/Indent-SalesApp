@@ -14,7 +14,7 @@ import re
 import secrets
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -34,14 +34,44 @@ class User:
     email: str
     name: str
     role: str
+    cities: list[str] = field(default_factory=list)
 
     @property
     def is_owner(self) -> bool:
         return self.role == ROLE_OWNER
 
     @property
+    def city_scoped(self) -> bool:
+        """A sales user with cities set works on every indent in those cities."""
+        return not self.is_owner and bool(self.cities)
+
+    def in_my_cities(self, city: str) -> bool:
+        return str(city or "").strip().casefold() in {c.casefold() for c in self.cities}
+
+    def can_work_on(self, city: str, created_by: str) -> bool:
+        """May this user see / edit / delete an indent of this city and creator?"""
+        if self.is_owner:
+            return True
+        if self.cities:
+            return self.in_my_cities(city)
+        return str(created_by or "").strip().lower() == self.email
+
+    @property
     def label(self) -> str:
         return self.name or self.email
+
+    def to_dict(self) -> dict:
+        return {"email": self.email, "name": self.name, "role": self.role, "cities": list(self.cities)}
+
+
+def parse_cities(value) -> list[str]:
+    """'PTP Bangalore, Chennai' -> ['PTP Bangalore', 'Chennai']."""
+    out = []
+    for part in re.split(r"[,;\n]", str(value or "")):
+        part = " ".join(part.split())
+        if part and part.casefold() not in {c.casefold() for c in out}:
+            out.append(part)
+    return out
 
 
 def norm_email(email: str) -> str:
@@ -146,7 +176,8 @@ def resolve_user(access: pd.DataFrame, email: str) -> User | None:
         return None
     role = str(row.get("Role", "")).strip().lower()
     role = ROLE_OWNER if role == ROLE_OWNER else ROLE_SALES
-    return User(email=email, name=row.get("Name", ""), role=role)
+    return User(email=email, name=row.get("Name", ""), role=role,
+                cities=parse_cities(row.get("City", "")) if role == ROLE_SALES else [])
 
 
 @dataclass
@@ -224,7 +255,8 @@ def user_from_session_token(access: pd.DataFrame, token: str) -> User | None:
 # ---------------------------------------------------------------- writes
 
 def upsert_access(email: str, *, by: str, name: str | None = None, role: str | None = None,
-                  status: str | None = None, pin: str | None = None) -> None:
+                  status: str | None = None, pin: str | None = None,
+                  cities: list[str] | None = None) -> None:
     """Add or update one row of the Access tab (reads it fresh first)."""
     from core.sheets import get_backend
 
@@ -241,6 +273,8 @@ def upsert_access(email: str, *, by: str, name: str | None = None, role: str | N
         values["Status"] = status
     if pin is not None:
         values["PIN_Hash"] = hash_pin(pin)
+    if cities is not None:
+        values["City"] = ", ".join(cities)
     if row is None:
         values.setdefault("Name", "")
         values.setdefault("Role", ROLE_SALES)

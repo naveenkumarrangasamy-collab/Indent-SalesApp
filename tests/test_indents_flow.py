@@ -173,15 +173,20 @@ def test_update_blocked_after_cutoff(backend, monkeypatch):
         indents.submit_update(iid, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 99})], "s@x.com")
 
 
-def test_delivery_date_must_be_after_today(backend):
-    today = config.now_ist().date().isoformat()
-    with pytest.raises(indents.SheetError, match="after today"):
-        indents.submit_new(IndentHeader(**{**H.to_dict(), "delivery_date": today}), [HASS], "s@x.com")
+def test_delivery_date_today_or_tomorrow(backend):
+    today = config.now_ist().date()
+    day_after = (today + timedelta(days=2)).isoformat()
+    with pytest.raises(indents.SheetError, match="today"):
+        indents.submit_new(IndentHeader(**{**H.to_dict(), "delivery_date": day_after}), [HASS], "s@x.com")
+    yesterday = (today - timedelta(days=1)).isoformat()
+    assert not indents.date_allowed(yesterday) and indents.date_allowed(today.isoformat())
+    assert indents.date_allowed(yesterday, keep=yesterday)        # a correction keeps its own date
+    iid = indents.submit_new(IndentHeader(**{**H.to_dict(), "delivery_date": today.isoformat()}), [HASS], "s@x.com")
+    assert iid
     m = _masters()
-    errs = indents.validate(IndentHeader(**{**H.to_dict(), "delivery_date": today}), [HASS], m,
-                            min_date=indents.min_delivery_date())
-    assert any("Delivery date must be on or after" in e for e in errs)
-    assert indents.min_delivery_date("2026-11-14T18:00:00+05:30").isoformat() == "2026-11-15"
+    errs = indents.validate(IndentHeader(**{**H.to_dict(), "delivery_date": day_after}), [HASS], m,
+                            check_date=True)
+    assert any("Delivery date must be today" in e for e in errs)
 
 
 def test_summary_marks_editable(backend):
@@ -252,3 +257,36 @@ def test_variety_only_for_apple():
     assert m.varieties_for("Apple") == ["Queen", "Gala"]
     m.varieties = m.varieties[m.varieties["Parent SKU"] != "Apple"]
     assert m.varieties_for("Apple")[:3] == ["Gala", "Granny Smith", "Queen"]  # default list
+
+
+
+def test_change_note_in_indent_lines(backend):
+    iid = indents.submit_new(H, [HASS, BLUE], "a@x.com")
+    indents.submit_update(iid, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 40})], "b@x.com")
+    indents.cancel(iid, 2, "a@x.com")
+    raw = backend.read("Indent_Lines")
+    notes = raw.groupby("version")["change_note"].first().to_dict()
+    assert notes["1"].startswith("Created by a@x.com on ")
+    assert notes["2"].startswith("Edited by b@x.com (other user; created by a@x.com) on ")
+    assert "1PC - Hass Avocado Imported: qty 30 → 40" in notes["2"] and "deleted 1PC - Blueberry Imported" in notes["2"]
+    assert notes["3"].startswith("Deleted by a@x.com (same user) on ")
+    assert set(raw[raw["version"] == "2"]["change_note"]) == {notes["2"]}   # same cell text on every row
+    v = indents.versions(indents.read_lines(fresh=True), iid)
+    assert v.iloc[0]["status"] == "Cancelled" and v.iloc[0]["change_note"].startswith("Deleted")
+
+
+def test_open_indents_first_and_city_scope(backend):
+    a = indents.submit_new(H, [HASS], "a@x.com")
+    b = indents.submit_new(IndentHeader(**{**H.to_dict(), "store": "Store B"}), [HASS], "b@x.com")
+    c = indents.submit_new(IndentHeader(**{**H.to_dict(), "store": "Store C", "city": "Chennai"}), [HASS], "a@x.com")
+    indents.freeze(a, 1, "po.pdf", "a@x.com")
+    s = indents.summary(indents.read_lines(fresh=True))
+    assert list(s["status"]) == ["Submitted", "Submitted", "Frozen"]      # PO-frozen goes down
+    from core.auth import User
+    blr = User("b@x.com", "", "sales", ["bangalore"])
+    assert set(indents.visible_to(s, blr)["indent_id"]) == {a, b}          # every indent in his city
+    own = User("a@x.com", "", "sales")
+    assert set(indents.visible_to(s, own)["indent_id"]) == {a, c}          # no city: own indents
+    owner = User("o@x.com", "", "owner")
+    assert len(indents.visible_to(s, owner)) == 3
+    assert blr.can_work_on("Bangalore", "a@x.com") and not blr.can_work_on("Chennai", "b@x.com")

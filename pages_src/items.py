@@ -331,7 +331,14 @@ def _review(m: Masters, user: User) -> None:
 # ------------------------------------------------------------ actions
 
 def _check(m: Masters) -> list[str]:
-    return indents.validate(state.header(), state.lines(), m, min_date=state.min_delivery_date())
+    errors = indents.validate(state.header(), state.lines(), m, check_date=True,
+                              keep_date=state.keep_date())
+    u = st.session_state.get("user") or {}
+    city = state.header().city
+    if u.get("role") != "owner" and u.get("cities") and \
+            city.casefold() not in {c.casefold() for c in u["cities"]}:
+        errors.append(f"You can place indents only in {', '.join(u['cities'])}, not {city}.")
+    return errors
 
 
 def _submit(m: Masters, user: User) -> None:

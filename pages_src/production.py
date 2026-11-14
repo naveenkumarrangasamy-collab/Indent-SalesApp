@@ -37,11 +37,10 @@ def _filtered(user: User, prefix: str):
     summ = indents.summary(df)
     current = indents.current_rows(df)
     if not user.is_owner:
-        mine = set(summ.loc[summ["created_by"].str.lower() == user.email, "indent_id"])
-        current = current[current["indent_id"].isin(mine)]
-        summ = summ[summ["indent_id"].isin(mine)]
+        summ = indents.visible_to(summ, user)
+        current = current[current["indent_id"].isin(set(summ["indent_id"]))]
     if current.empty:
-        st.info("No submitted indents yet." if user.is_owner
+        st.info("No submitted indents yet." if user.is_owner or user.city_scoped
                 else "You have not submitted any indents yet.")
         return None
 
@@ -59,7 +58,7 @@ def _filtered(user: User, prefix: str):
     city = c[1].selectbox("City", ["All cities"] + cities, key=f"{prefix}_city")
     custs = sorted(current["customer"].unique())
     cust = c[2].selectbox("Customer", ["All customers"] + custs, key=f"{prefix}_cust")
-    scope = "all indents" if user.is_owner else "indents you created"
+    scope = indents.scope_text(user)
     c[3].caption(f"Current version of every submitted or frozen indent · {scope}. "
                  "Only dates that have indents are listed.")
 
@@ -86,7 +85,7 @@ def _filtered(user: User, prefix: str):
 def render(user: User) -> None:
     common.show_flash()
     st.markdown("### Production sheet")
-    st.caption("What to produce: one row per customer SKU name, adding up all stores in the filter.")
+    st.caption("What to produce: one row per customer SKU name, adding up every store in the filter.")
     res = _filtered(user, "ps")
     if res is None:
         return
@@ -101,11 +100,11 @@ def render(user: User) -> None:
         agg = agg.drop(columns=["Variety"])
     st.dataframe(agg, hide_index=True, width="stretch",
                  column_config={"Total Qty": st.column_config.NumberColumn(format="%g"),
-                                "Customer SKU Name": st.column_config.TextColumn(width="large"),
-                                "Store Names": st.column_config.TextColumn(width="large")})
+                                "Customer SKU Name": st.column_config.TextColumn(width="large")})
     _downloads("Production sheet", agg, f"production_{label}", "ps", lines)
     with st.expander("Indents included"):
-        inc = summ[summ["indent_id"].isin(set(lines["indent_id"]))]
+        inc = indents.open_first(summ[summ["indent_id"].isin(set(lines["indent_id"]))],
+                                 then=["delivery_date", "customer", "store"], ascending=[True, True, True])
         st.dataframe(pd.DataFrame({
             "Indent": inc["indent_id"], "Status": inc["status"], "Ver": inc["version"],
             "Delivery": inc["delivery_date"], "City": inc["city"], "Customer": inc["customer"],

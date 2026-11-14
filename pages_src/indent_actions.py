@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core import config, indents
+from core import config, indents, mailer
 from core.auth import User
 from core.schema import STATUS_SUBMITTED
 from core.sheets import SheetError, get_backend
@@ -58,8 +58,10 @@ def _po_dialog(indent_id: str, user: User) -> None:
             _close()
             st.rerun()
         return
+    to = ", ".join(mailer.settings()["to"])
     st.caption("Uploading the customer's PO freezes the indent: after confirming, it can no longer "
-               "be edited or deleted.")
+               f"be edited or deleted. The PDF is e-mailed to {to} with subject "
+               f"'{cur.header.customer}'.")
     up = st.file_uploader("PO file (PDF)", type=["pdf"], key=f"po_file_{indent_id}")
     if up is not None:
         st.warning(f"Is **{up.name}** the PO for customer **{cur.header.customer}** and store "
@@ -84,8 +86,11 @@ def _po_dialog(indent_id: str, user: User) -> None:
             return
         if state.get()["mode"] == "edit" and state.get()["indent_id"] == indent_id:
             state.start_new()
+        with st.spinner("E-mailing the PO…"):
+            sent, mail_msg = mailer.send_po_mail(cur, up.name, up.getvalue(), user.email)
         _close()
         common.flash("success", f"{indent_id} is frozen with PO {up.name} (version {v})." + note)
+        common.flash("success" if sent else "warning", mail_msg)
         st.rerun()
     if b[1].button("Cancel", width="stretch"):
         _close()

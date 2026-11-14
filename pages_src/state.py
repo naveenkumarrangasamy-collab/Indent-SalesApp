@@ -92,10 +92,17 @@ def changed_vs_base() -> bool:
     return changelog.has_changes(b[0], b[1], header(), lines())
 
 
-def min_delivery_date():
-    from core.indents import min_delivery_date as _min
+def keep_date() -> str | None:
+    """When correcting an indent, its saved delivery date stays allowed."""
     ind = get()
-    return _min(ind.get("created_at") or None) if ind["mode"] == "edit" else _min()
+    if ind["mode"] == "edit" and ind.get("base"):
+        return ind["base"]["header"].get("delivery_date") or None
+    return None
+
+
+def date_bounds():
+    from core.indents import delivery_bounds
+    return delivery_bounds(keep_date())
 
 
 def has_unsaved_work() -> bool:

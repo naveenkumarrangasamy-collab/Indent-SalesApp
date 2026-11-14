@@ -26,7 +26,8 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _key(s: str) -> str:
-    return str(s or "").strip().casefold()
+    """Matching key: case-insensitive, extra spaces ignored."""
+    return " ".join(str(s or "").split()).casefold()
 
 
 @dataclass
