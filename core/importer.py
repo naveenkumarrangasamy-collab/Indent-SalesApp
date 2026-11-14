@@ -18,6 +18,9 @@ Optional columns the team can add (matched by header name, any position):
 
 If "All Cux City" has no usable rows, the names from "Mapping Whole" are used.
 
+- A column headed "Apple Variety" (or "<Parent> Variety") in All Cux City
+  lists the varieties the user chooses from for that parent.
+
 - "Customer List" gives the stores per customer: Customer List (the
   customer), Store names, and optionally City. A store with no City is
   offered for that customer in every city.
@@ -136,12 +139,37 @@ def _default_active(group: list[dict], active_origins: dict[str, str]) -> None:
             x["Active"] = "Y" if x["Spec-Origin"].casefold() == want else "N"
 
 
+def _variety_columns(values: list[list]) -> list[tuple[int, str]]:
+    """Columns headed '<Parent> Variety' (e.g. 'Apple Variety'): (index, parent)."""
+    if not values:
+        return []
+    out = []
+    for i, h in enumerate(values[0]):
+        text = _s(h)
+        low = text.casefold()
+        for suffix in (" varieties", " variety"):
+            if low.endswith(suffix) and len(text) > len(suffix):
+                out.append((i, text[: -len(suffix)].strip()))
+                break
+    return out
+
+
 def build_varieties(all_cux_city: list[list]) -> list[dict]:
-    """(Parent SKU, Variety) pairs where Classification differs from the
-    parent. Rows that only carry a Classification (a list of varieties under
-    an Apple block) inherit the parent from the row above."""
+    """(Parent SKU, Variety) pairs.
+
+    - A column headed '<Parent> Variety' (e.g. 'Apple Variety') lists the
+      varieties of that parent, one per cell, anywhere down the column.
+    - Also: Classification values that differ from the parent (rows that
+      only carry a Classification inherit the parent from the row above).
+    """
     out: list[dict] = []
     seen: set[tuple] = set()
+    for idx, parent in _variety_columns(all_cux_city):
+        for row in all_cux_city[1:]:
+            v = _s(row[idx]) if idx < len(row) else ""
+            if v and _k(parent, v) not in seen:
+                seen.add(_k(parent, v))
+                out.append({"Parent SKU": parent, "Variety": v})
     last_parent = ""
     recs, _ = _records(all_cux_city)
     for r in recs:

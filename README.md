@@ -41,7 +41,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 
 ### SKU mapping (read live from the team's own tabs)
 
-- **All Cux City** is the list of SKU names: City, Customer, Parent SKU, Classification, Customer SKU Name. For Apple, *Classification* is the variety, and it is pre-selected for that SKU. The rows of variety names under the Apple block (RD, Pink Lady, Fuji, ...) become the Apple variety list.
+- **All Cux City** is the list of SKU names: City, Customer, Parent SKU, Classification, Customer SKU Name.
+- **Apple varieties**: a column headed **Apple Variety** (any `<Parent> Variety` header works) lists the varieties the user chooses from, one per cell, anywhere down the column. A parent with varieties makes Variety required on page 3. If *Classification* holds a variety (different from the parent), it is pre-selected for that SKU.
 - **Mapping Whole** gives origin and size per SKU name (Spec-Origin, Spec-Size). Its rows are matched to All Cux City by City + Customer + SKU name. SKU names that appear only in Mapping Whole are not offered, which avoids near-duplicate names.
 - **Active origin**: by default Tanzania (Avocado), Peru (Blueberry) and RSA (Mandarin); a SKU with one origin row is active. To choose explicitly, add an **Active** column to Mapping Whole with `Y` on the origin being sourced.
 - **Lot is fixed per SKU** and cannot be edited in the app. It comes from an optional **Lot** (or **UOM**) column in either tab, or else from the unit in the name (`1PC/2PC/3PC` → Pcs, `200gm` → gms, `1Kg` → Kg, `Box`, `Tray`). A SKU with neither cannot be added; the Access page lists any such SKUs.

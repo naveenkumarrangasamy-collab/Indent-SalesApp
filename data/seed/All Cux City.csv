@@ -1,4 +1,4 @@
-City,Customer,Parent SKU,Classification,Customer SKU Name
+City,Customer,Parent SKU,Classification,Customer SKU Name,,Apple Variety
 PTP Bangalore,Zepto,Avocado,Avocado,1PC - Snacky Avocado Imported
 PTP Bangalore,Zepto,Avocado,Avocado,1PC - Hass Avocado Imported
 PTP Bangalore,Zepto,Avocado,Avocado,1PC - Large Avocado Imported
@@ -25,19 +25,19 @@ PTP Bangalore,Zepto,Kiwi,Kiwi,2PC - Bloom Kiwi
 PTP Bangalore,Zepto,Kiwi,Kiwi,3PC - Bloom Kiwi
 PTP Bangalore,Zepto,Kiwi,Kiwi,2PC - Bloom Kiwi Sungold Imported (New Zealand)
 PTP Bangalore,Zepto,Kiwi,Kiwi,3PC - Bloom Kiwi Sungold Imported (New Zealand)
-PTP Bangalore,Zepto,Apple,Gala,2PC - Apple Royal Gala Imported
-PTP Bangalore,Zepto,Apple,Gala,2PC - Bloom Apple Royal Gala Imported
-PTP Bangalore,Zepto,Apple,Gala,2PC - Apple Snacky
-PTP Bangalore,Zepto,Apple,Granny Smith,2PC - Apple Green Imported (Granny Smith)
-PTP Bangalore,Zepto,Apple,Granny Smith,2PC - Bloom Apple Green Imported (Granny Smith)
-PTP Bangalore,Zepto,Apple,Queen,2PC - Apple Queen Imported
-,,,RD,200gm - Snacky Apple
-,,,Pink Lady,
-,,,Crispy Pink,
-,,,Braeburn,
-,,,Sonya,
-,,,Fuji,
-,,,Jazz,
+PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Royal Gala Imported,,Gala
+PTP Bangalore,Zepto,Apple,Apple,2PC - Bloom Apple Royal Gala Imported,,Gala
+PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Snacky,,Gala
+PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Green Imported (Granny Smith),,Granny Smith
+PTP Bangalore,Zepto,Apple,Apple,2PC - Bloom Apple Green Imported (Granny Smith),,Granny Smith
+PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Queen Imported,,Queen
+,,,,200gm - Snacky Apple,,RD
+,,,,,,Pink Lady
+,,,,,,Crispy Pink
+,,,,,,Braeburn
+,,,,,,Sonya
+,,,,,,Fuji
+,,,,,,Jazz
 PTP Bangalore,Zepto,Litchi,Litchi,200gm - Litchi Imported (Longan)
 PTP Bangalore,Zepto,Grapes,Grapes,250gm - Bloom Grapes Red globe
 PTP Bangalore,Zepto,Grapes,Grapes,200gm - Crimson grapes

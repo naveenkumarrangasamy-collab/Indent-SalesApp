@@ -183,3 +183,16 @@ def test_stores_from_customer_list_any_city():
 def test_customer_list_with_city_column():
     rows = importer.build_store_map([["City", "Customer List", "Store names"], ["Chennai", "Zepto", "Zepto - Chennai"]])
     assert rows == [{"City": "Chennai", "Customer": "Zepto", "Store Name": "Zepto - Chennai"}]
+
+
+def test_variety_column_with_parent_header():
+    ac = [["City", "Customer", "Parent SKU", "Classification", "Customer SKU Name", "", "Apple Variety"],
+          ["PTP Bangalore", "Zepto", "Kiwi", "Kiwi", "2PC - Green Kiwi", "", "Gala"],
+          ["PTP Bangalore", "Zepto", "Apple", "Apple", "2PC - Apple Queen Imported", "", "Gala"],
+          ["", "", "", "", "", "", "Queen"],
+          ["", "", "", "", "", "", "Fuji"]]
+    assert importer.build_varieties(ac) == [{"Parent SKU": "Apple", "Variety": v} for v in ("Gala", "Queen", "Fuji")]
+    rows = importer.build_sku_map([], ac)
+    assert all(r["Variety"] == "" for r in rows)  # Classification == parent: user picks the variety
+    headerless = [r[:6] + [""] for r in [ac[0][:6]] + ac[1:]]
+    assert importer.build_varieties(headerless) == []
