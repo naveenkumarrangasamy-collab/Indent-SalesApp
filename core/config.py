@@ -92,6 +92,11 @@ def google_status() -> tuple[bool, str]:
     return True, ""
 
 
+def secret_names() -> list[str]:
+    """Names (never values) of the top-level secrets, to help fix setup."""
+    return sorted(_secrets().keys())
+
+
 def show_spec() -> bool:
     """Origin / size are not used for now (set show_spec = true to bring them back)."""
     return bool(get("show_spec", False))

@@ -41,10 +41,13 @@ def connection_banner() -> None:
     from core.sheets import CONNECT_ERROR
 
     reason = CONNECT_ERROR["reason"] or config.google_status()[1]
+    names = config.secret_names()
+    found = ("Secrets the app can see: " + ", ".join(f"`{n}`" for n in names) + "."
+             if names else "The app sees **no secrets at all** (the Secrets box is empty or not saved).")
     st.error("**Not connected to the Google Sheet.** The app is showing built-in test data and "
              "nothing is saved to your sheet. " + (reason or "")
-             + " Fix it in Streamlit Cloud → Manage app → Settings → Secrets, then Reboot app.",
-             icon="⚠️")
+             + " Fix it in Streamlit Cloud → Manage app → Settings → Secrets, then Reboot app.\n\n"
+             + found, icon="⚠️")
 
 
 def badge(status: str) -> str:

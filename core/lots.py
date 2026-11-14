@@ -23,11 +23,21 @@ _ALTERNATION = "|".join(sorted(_WORD_TO_LOT, key=len, reverse=True))
 _PATTERN = re.compile(rf"(?<![A-Za-z])({_ALTERNATION})(?![A-Za-z0-9])", re.IGNORECASE)
 
 
+# "17.5Kg Box", "18KG Box", "500 gm tray": the weight is the size of the
+# box / tray, so the lot is Box / Tray.
+_PACKED = re.compile(r"\d(?:[\d.,]*)\s*(?:kgs?|gms?|grams?)\s*[-–]?\s*(box(?:es)?|trays?)(?![A-Za-z0-9])",
+                     re.IGNORECASE)
+
+
 def detect_lot(sku_name: str | None) -> str | None:
     """Return 'Kg', 'gms', 'Pcs', 'Box' or 'Tray', or None if no unit word."""
     if not sku_name:
         return None
-    m = _PATTERN.search(str(sku_name))
+    packed = _PACKED.search(str(sku_name))
+    first = _PATTERN.search(str(sku_name))
+    if packed and first and packed.start() <= first.start():
+        return "Box" if packed.group(1).lower().startswith("box") else "Tray"
+    m = first
     if not m:
         return None
     return _WORD_TO_LOT[m.group(1).lower()]

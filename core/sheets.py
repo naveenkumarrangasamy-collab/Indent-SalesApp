@@ -439,12 +439,23 @@ def make_backend():
             return GoogleBackend(config.sheet_id(), config.service_account_info())
         except Exception as e:  # bad key etc.: fall back, and say why on every page
             CONNECT_ERROR["reason"] = f"The service account key could not be used ({type(e).__name__}: {e})."
-    # Local mode: start from the committed seed files on first run.
+    # Local mode. Input tabs (SKU names, stores, varieties) are refreshed from
+    # the committed seed files on every start, so a redeploy never leaves
+    # stale test data behind. Output tabs (indents, drafts, access) are kept.
     seed = LOCAL_DATA_DIR / "seed"
-    if seed.is_dir() and not any(LOCAL_DATA_DIR.glob("*.csv")):
+    if seed.is_dir():
         import shutil
+        from core.schema import OUTPUT_TABS, ACCESS
+        keep = set(OUTPUT_TABS) | {ACCESS}
+        LOCAL_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        seed_names = {f.name for f in seed.glob("*.csv")}
         for f in seed.glob("*.csv"):
-            shutil.copy(f, LOCAL_DATA_DIR / f.name)
+            target = LOCAL_DATA_DIR / f.name
+            if f.stem not in keep or not target.exists():
+                shutil.copy(f, target)
+        for f in LOCAL_DATA_DIR.glob("*.csv"):  # input tabs no longer in the seed
+            if f.name not in seed_names and f.stem not in keep:
+                f.unlink()
     return LocalBackend(LOCAL_DATA_DIR)
 
 

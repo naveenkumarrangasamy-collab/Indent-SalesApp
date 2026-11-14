@@ -1,25 +1,80 @@
 City,Customer,Parent SKU,Customer SKU Name,Spec-Origin,Spec-Size,Box Kgs
-PTP Bangalore,Zepto,Avocado,1PC - Snacky Avocado Imported,Tanzania,"22C, 24C",
-PTP Bangalore,Zepto,Avocado,1PC - Hass Avocado Imported,Tanzania,"20C, 22C",
-PTP Bangalore,Zepto,Avocado,1PC - Large Avocado Imported,Tanzania,"16C, 18C, 14C",
-PTP Bangalore,Zepto,Avocado,2PC - Mini Avocado Imported,Tanzania,"26C, 28C",
-PTP Bangalore,Zepto,Avocado,1PC - Snacky Avocado Imported,Kenya,"22C, 24C",
-PTP Bangalore,Zepto,Avocado,1PC - Hass Avocado Imported,Kenya,"20C, 22C",
-PTP Bangalore,Zepto,Avocado,1PC - Large Avocado Imported,Kenya,"16C, 18C, 14C",
-PTP Bangalore,Zepto,Avocado,2PC - Mini Avocado Imported,Kenya,"26C, 28C",
-PTP Bangalore,Zepto,Avocado,1PC - Snacky Avocado Imported,Australia,"22C, 24C",
-PTP Bangalore,Zepto,Avocado,1PC - Hass Avocado Imported,Australia,"20C, 22C",
-PTP Bangalore,Zepto,Avocado,1PC - Large Avocado Imported,Australia,"16C, 18C, 14C",
-PTP Bangalore,Zepto,Avocado,2PC - Mini Avocado Imported,Australia,"26C, 28C",
-PTP Bangalore,Zepto,Blueberry,1PC - Blueberry Imported,Peru,"14mm, 16mm",
-PTP Bangalore,Zepto,Blueberry,1PC - Bloom Blueberry Imported,Peru,"18mm, 20mm",
-PTP Bangalore,Zepto,Blueberry,1PC - Blueberry Imported,Chile,"14mm, 16mm",
-PTP Bangalore,Zepto,Blueberry,1PC - Bloom Blueberry Imported,Chile,"18mm, 20mm",
-PTP Bangalore,Zepto,Blueberry,1PC - Blueberry Imported,Poland,"14mm, 16mm",
-PTP Bangalore,Zepto,Blueberry,1PC - Bloom Blueberry Imported,Poland,"18mm, 20mm",
-PTP Bangalore,Zepto,Mandarin,3PC - Baby Orange Imported,China,"60, 65",
-PTP Bangalore,Zepto,Mandarin,2PC - Bloom Baby Orange,China,"55, 50",
-PTP Bangalore,Zepto,Mandarin,3PC - Baby Orange Imported,RSA,"2C, 3C",
-PTP Bangalore,Zepto,Mandarin,2PC - Bloom Baby Orange,RSA,1C,
-PTP Bangalore,Zepto,Mandarin,3PC - Baby Orange Imported,Australia,"2C, 3C",
-PTP Bangalore,Zepto,Mandarin,2PC - Bloom Baby Orange,Australia,1C,
+PTP Bangalore,Zepto,Avocado,1PC - Snacky Avocado Imported,Tanzania,"22C, 24C",4Kg
+PTP Bangalore,Zepto,Avocado,1PC - Hass Avocado Imported,Tanzania,"20C, 22C"
+PTP Bangalore,Zepto,Avocado,1PC - Large Avocado Imported,Tanzania,"16C, 18C, 14C"
+PTP Bangalore,Zepto,Avocado,2PC - Mini Avocado Imported,Tanzania,"26C, 28C"
+PTP Bangalore,Zepto,Avocado,1PC - Snacky Avocado Imported,Kenya,"22C, 24C"
+PTP Bangalore,Zepto,Avocado,1PC - Hass Avocado Imported,Kenya,"20C, 22C"
+PTP Bangalore,Zepto,Avocado,1PC - Large Avocado Imported,Kenya,"16C, 18C, 14C"
+PTP Bangalore,Zepto,Avocado,2PC - Mini Avocado Imported,Kenya,"26C, 28C"
+PTP Bangalore,Zepto,Avocado,1PC - Snacky Avocado Imported,Australia,"22C, 24C"
+PTP Bangalore,Zepto,Avocado,1PC - Hass Avocado Imported,Australia,"20C, 22C"
+PTP Bangalore,Zepto,Avocado,1PC - Large Avocado Imported,Australia,"16C, 18C, 14C"
+PTP Bangalore,Zepto,Avocado,2PC - Mini Avocado Imported,Australia,"26C, 28C"
+PTP Bangalore,Zepto,Blueberry,1PC - Blueberry Imported,Peru,"14mm, 16mm"
+PTP Bangalore,Zepto,Blueberry,1PC - Bloom Blueberry Imported,Peru,"18mm, 20mm"
+PTP Bangalore,Zepto,Blueberry,1PC - Blueberry Imported,Chile,"14mm, 16mm"
+PTP Bangalore,Zepto,Blueberry,1PC - Bloom Blueberry Imported,Chile,"18mm, 20mm"
+PTP Bangalore,Zepto,Blueberry,1PC - Blueberry Imported,Poland,"14mm, 16mm"
+PTP Bangalore,Zepto,Blueberry,1PC - Bloom Blueberry Imported,Poland,"18mm, 20mm"
+PTP Bangalore,Zepto,Mandarin,3PC - Baby Orange Imported,China,"60, 65"
+PTP Bangalore,Zepto,Mandarin,2PC - Bloom Baby Orange,China,"55, 50"
+PTP Bangalore,Zepto,Mandarin,3PC - Baby Orange Imported,RSA,"2C, 3C"
+PTP Bangalore,Zepto,Mandarin,2PC - Bloom Baby Orange,RSA,1C
+PTP Bangalore,Zepto,Mandarin,3PC - Baby Orange Imported,Australia,"2C, 3C"
+PTP Bangalore,Zepto,Mandarin,2PC - Bloom Baby Orange,Australia,1C
+PTP Bangalore,Zepto,Apple,2PC - Apple Green Imported (Granny Smith)
+PTP Bangalore,Zepto,Apple,2PC - Bloom Apple Granny Smith Imported 
+PTP Bangalore,Zepto,Apple,2PC - Apple Queen Imported 
+PTP Bangalore,Zepto,Apple,2PC - Apple Royal Gala Imported 
+PTP Bangalore,Zepto,Apple,2PC - Bloom Apple Royal Gala Imported
+PTP Bangalore,Zepto,Apple,2PC - Snacky Apple
+PTP Bangalore,Zepto,Kiwi,2PC - Snacky Kiwi
+PTP Bangalore,Zepto,Kiwi,2PC - Bloom Kiwi Sungold Imported (New Zealand)
+
+,,Apple,2PC
+,,,Apple Newzealand Gala 120C - HG - PTP Big Lot 2PC
+,,,Royal Gala Apple 2Pcs
+,,,4PC
+,,,2 pcs 2PCS Apple Turkey Gala Big lot
+,,,2PCS Apple Turkey Gala
+,,,4 pcs 4PCS Apple Turkey Gala Big lot
+,,,4PCS Apple Turkey Gala
+,,,2PCS Apple Turkey Granny Smith
+,,,2PCS Apple Serbian Royal Gala
+,,,Apple Royal Gala Imported - 2Pcs
+,,,Apple Washington Imported - 2Pcs
+,,,Apple Queen Imported - 2Pcs
+,,,Snacky Apple - 2Pcs
+,,,Apple Green Imported (Granny Smith) - 2Pcs
+,,,Bloom Apple Granny Smith Imported - 2Pcs
+,,,Bloom Apple Royal Gala Imported - 2Pcs
+,,,Daily Apple 2Pcs
+
+,,Mandarin,3PC
+,,,Australia Mandarin - 3Pcs
+,,,Baby Orange (Mandarin) - 3Pcs
+,,,2PC
+,,,Australia Mandarin - 2Pcs
+,,,Bloom Baby Orange (Mandarin) - 2Pcs
+
+,,Kiwi,2PC
+,,,3PC
+,,,Bulk Green Kiwi 1Pc
+,,,2PC-Snacky Kiwi
+,,,2 PCS
+,,,I-Kiwi - 36mm - PTPbiglot3pcs
+,,,I-Kiwi - 36mm - PTPbiglot2pcs
+,,,3Pcs I-Kiwi
+,,,Green Kiwi 3Pcs
+,,,I-Kiwi - 42mm - PTPbiglot2pcs
+,,,2Pcs I-Kiwi
+,,,Kiwi Green - 3Pcs
+,,,Snacky Kiwi - 2Pcs
+,,,Bloom Kiwi Sungold Imported (New Zealand) - 2Pcs
+,,,Kiwi Sungold - 2Pcs
+
+,,Lemon,1PC
+,,,Lemon Italian - 1 PC
+
+,,Dragon,1 PC

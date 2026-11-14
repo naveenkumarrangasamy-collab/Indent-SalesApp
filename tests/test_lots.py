@@ -6,7 +6,15 @@ from core.lots import detect_lot
 @pytest.mark.parametrize("name,lot", [
     # spec section 9
     ("1PC - Snacky Avocado Imported", "Pcs"),
-    ("5 Kg Tray Mix", "Kg"),
+    ("5 Kg Mix Tray", "Kg"),
+    ("5 Kg Tray Mix", "Tray"),           # a 5 kg tray
+    ("18KG Box", "Box"),
+    ("17.5Kg Box - Nz Apple Royal Gala Exf135c", "Box"),
+    ("9.5Kg Box - Mandarin Imp", "Box"),
+    ("1Kg - Bulk Daily Apple", "Kg"),
+    ("200-250gm - BH-Mini Orange (Imported)", "gms"),
+    ("2 PC - BH-Royal Gala Apple - Imported", "Pcs"),
+    ("1Pack - Bulk Green Kiwi", None),
     ("Mixed Box 2Kg", "Box"),
     ("Avocado Imported", None),
     # names from the team's sheet
@@ -39,4 +47,4 @@ def test_detect_lot(name, lot):
 
 def test_first_unit_wins():
     assert detect_lot("Tray of 2 kg") == "Tray"
-    assert detect_lot("2kg tray") == "Kg"
+    assert detect_lot("2kg of fruit, tray") == "Kg"

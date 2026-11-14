@@ -178,3 +178,20 @@ def test_service_account_as_pasted_json(monkeypatch):
     assert config.google_status() == (True, "") and config.service_account_info()["client_email"] == key["client_email"]
     monkeypatch.setattr(config, "_secrets", lambda: {"sheet_id": "s", "gcp_service_account_json": "{oops"})
     assert "not valid JSON" in config.google_status()[1]
+
+
+def test_local_mode_refreshes_stale_input_tabs(monkeypatch, tmp_path):
+    """The server kept test data from the first deploy; inputs must refresh, outputs stay."""
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    (seed / "Customer List.csv").write_text("City,Customer List,Store names\nPTP Bangalore,Zepto,Zepto - A\n")
+    (seed / "Indent_Lines.csv").write_text("indent_id\n")
+    (tmp_path / "Store_Map.csv").write_text("City,Customer,Store Name\nBangalore,Zepto,Zepto Sample Store 1 (local demo)\n")
+    (tmp_path / "Customer List.csv").write_text("City,Customer List,Store names\nBangalore,Zepto,old\n")
+    (tmp_path / "Indent_Lines.csv").write_text("indent_id\nIND-KEEP\n")
+    monkeypatch.setattr(sheets, "LOCAL_DATA_DIR", tmp_path)
+    monkeypatch.setattr(sheets.config, "google_status", lambda: (False, "no key"))
+    sheets.make_backend()
+    assert "Zepto - A" in (tmp_path / "Customer List.csv").read_text()
+    assert not (tmp_path / "Store_Map.csv").exists()          # stale demo stores gone
+    assert "IND-KEEP" in (tmp_path / "Indent_Lines.csv").read_text()  # saved indents kept

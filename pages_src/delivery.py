@@ -73,7 +73,36 @@ def fmt_slot(hhmm: str) -> str:
         return hhmm
 
 
+def _drop_stale(m: Masters) -> None:
+    """A restored draft may hold a city / customer / store / time that is no
+    longer in the sheet. For new indents, clear those so the lists match."""
+    ind = state.get()
+    if ind["mode"] == "edit":
+        return
+    h = ind["header"]
+    dropped = []
+    if h.get("city") and h["city"] not in m.cities():
+        dropped.append(h["city"])
+        h.update(city="", customer="", store="")
+    if h.get("customer") and h["customer"] not in m.customers(h.get("city", "")):
+        dropped.append(h["customer"])
+        h.update(customer="", store="")
+    if h.get("store") and h["store"] not in m.stores_for(h.get("city", ""), h.get("customer", "")):
+        dropped.append(h["store"])
+        h["store"] = ""
+    if h.get("expected_time") and h["expected_time"] not in TIME_SLOTS:
+        h["expected_time"] = ""
+    if dropped:
+        if ind["lines"]:
+            state.set_lines([], structural=True)
+        state.mark_dirty(force=True)
+        _bump()
+        st.info("Your saved draft used " + ", ".join(dropped)
+                + ", which is no longer in the Google Sheet, so it was cleared. Please choose again.")
+
+
 def render(m: Masters) -> None:
+    _drop_stale(m)
     hdr = state.header()
     st.subheader("Delivery details")
 
