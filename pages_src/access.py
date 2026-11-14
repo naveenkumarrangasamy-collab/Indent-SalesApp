@@ -171,5 +171,5 @@ def _setup(m: masters.Masters | None, me: User) -> None:
         no_store = [f"{r.City} / {r.Customer}" for r in pairs.itertuples()
                     if r.City and r.Customer and not m.stores_for(r.City, r.Customer)]
         if no_store:
-            st.warning("No stores in Store_Map for: " + ", ".join(no_store)
+            st.warning("No stores in 'Customer List' for: " + ", ".join(no_store)
                        + ". Users cannot raise indents for these until stores are added.")

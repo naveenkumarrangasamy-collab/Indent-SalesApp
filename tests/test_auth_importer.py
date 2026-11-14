@@ -158,3 +158,28 @@ def test_sku_map_tab_used_without_legacy_tabs():
                        ["Pune", "Zepto", "Onion", "Onion loose", "Kg"]]}
     frames, source = frames_from_values(raw)
     assert source == "SKU_Map tab" and frames["SKU_Map"].iloc[0]["Lot"] == "Kg"
+
+
+CL = [["Customer List", "Store names"],
+      ["Zepto", "Zepto - Yalachanayakanapura"], ["Zepto", "Zepto - Cholappanahalli"],
+      ["Swiggy", "Swiggy WH1"], ["Zomato", "ZOMATO HYPERPURE PVT Ltd"], ["", ""],
+      ["Firstclub", "FIRST CLUB PTP BLR"], ["Zepto", "Zepto - Cholappanahalli"]]
+
+
+def test_stores_from_customer_list_any_city():
+    from core.masters import frames_from_values, masters_from_frames
+
+    assert len(importer.build_store_map(CL)) == 5
+    raw = {"All Cux City": AC, "Mapping Whole": MW, "Customer List": CL,
+           "Store_Map": [["City", "Customer", "Store Name"], ["Pune", "Zepto", "Zepto - Pune DS"]]}
+    m = masters_from_frames(*frames_from_values(raw))
+    assert m.stores_for("Bangalore", "Zepto") == ["Zepto - Yalachanayakanapura", "Zepto - Cholappanahalli"]
+    assert m.stores_for("Pune", "zepto") == ["Zepto - Yalachanayakanapura", "Zepto - Cholappanahalli",
+                                             "Zepto - Pune DS"]
+    assert m.stores_for("Bangalore", "Namdhari") == []
+    assert m.stores_for("Bangalore", "Firstclub") == ["FIRST CLUB PTP BLR"]
+
+
+def test_customer_list_with_city_column():
+    rows = importer.build_store_map([["City", "Customer List", "Store names"], ["Chennai", "Zepto", "Zepto - Chennai"]])
+    assert rows == [{"City": "Chennai", "Customer": "Zepto", "Store Name": "Zepto - Chennai"}]

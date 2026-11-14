@@ -105,9 +105,9 @@ def render(m: Masters) -> None:
     if hdr.city and hdr.customer:
         pending = []
         if not m.has_sku_mapping(hdr.city, hdr.customer):
-            pending.append("SKU names (SKU_Map)")
+            pending.append("SKU names (All Cux City)")
         if not m.stores_for(hdr.city, hdr.customer):
-            pending.append("stores (Store_Map)")
+            pending.append("stores (Customer List)")
         if pending:
             st.info(f"Mapping pending for {hdr.customer} in {hdr.city}: " + " and ".join(pending)
                     + " are not in the sheet yet. Ask the indent owner to add them.")

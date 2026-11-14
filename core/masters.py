@@ -50,7 +50,7 @@ class Masters:
     def customers(self, city: str) -> list[str]:
         """The five MT customers first, then any other customer mapped for the city."""
         found = [c for c in list(self.sku.loc[self.sku["City"].map(_key) == _key(city), "Customer"])
-                 + list(self.stores.loc[self.stores["City"].map(_key) == _key(city), "Customer"]) if c]
+                 + list(self.stores.loc[self._city_match(self.stores, city), "Customer"]) if c]
         out = list(DEFAULT_CUSTOMERS)
         known = {_key(c) for c in out}
         for c in _unique_sorted(found):
@@ -62,10 +62,15 @@ class Masters:
     def has_sku_mapping(self, city: str, customer: str) -> bool:
         return not self._sku_for(city, customer).empty
 
+    def _city_match(self, df: pd.DataFrame, city: str) -> pd.Series:
+        """Store rows for this city; a store with no city applies to every city."""
+        c = df["City"].map(_key)
+        return (c == _key(city)) | (c == "")
+
     def stores_for(self, city: str, customer: str) -> list[str]:
         df = self.stores
-        df = df[(df["City"].map(_key) == _key(city)) & (df["Customer"].map(_key) == _key(customer))]
-        return _unique_sorted(df["Store Name"])
+        df = df[self._city_match(df, city) & (df["Customer"].map(_key) == _key(customer))]
+        return _unique_in_order(df["Store Name"])
 
     def parents(self, city: str, customer: str) -> list[str]:
         return _unique_sorted(self._sku_for(city, customer)["Parent SKU"])
@@ -191,6 +196,13 @@ def frames_from_values(raw: dict[str, list[list]]) -> tuple[dict[str, pd.DataFra
         frames[VARIETIES] = merged[merged["Variety"].astype(str).str.strip() != ""].drop_duplicates()
         frames[VARIETIES]["_row"] = 0
         source = f"live from '{importer.ALL_CUX_CITY}' + '{importer.MAPPING_WHOLE}'"
+    stores = importer.build_store_map(raw.get(importer.CUSTOMER_LIST, []))
+    if stores:
+        live = pd.DataFrame(stores, columns=TABS[STORE_MAP])
+        merged = pd.concat([live, frames[STORE_MAP][TABS[STORE_MAP]]], ignore_index=True)
+        merged["_k"] = merged.apply(lambda r: (_key(r["City"]), _key(r["Customer"]), _key(r["Store Name"])), axis=1)
+        frames[STORE_MAP] = merged.drop_duplicates("_k").drop(columns="_k").reset_index(drop=True)
+        frames[STORE_MAP]["_row"] = 0
     return frames, source
 
 

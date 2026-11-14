@@ -17,6 +17,10 @@ Optional columns the team can add (matched by header name, any position):
   SKU with a single origin row is active.
 
 If "All Cux City" has no usable rows, the names from "Mapping Whole" are used.
+
+- "Customer List" gives the stores per customer: Customer List (the
+  customer), Store names, and optionally City. A store with no City is
+  offered for that customer in every city.
 """
 from __future__ import annotations
 
@@ -25,7 +29,8 @@ from core.schema import norm_header
 
 MAPPING_WHOLE = "Mapping Whole"
 ALL_CUX_CITY = "All Cux City"
-LEGACY_TABS = [ALL_CUX_CITY, MAPPING_WHOLE]
+CUSTOMER_LIST = "Customer List"
+LEGACY_TABS = [ALL_CUX_CITY, MAPPING_WHOLE, CUSTOMER_LIST]
 
 # Origin currently being sourced, per parent (the yellow rows in the spec).
 DEFAULT_ACTIVE_ORIGINS = {"avocado": "tanzania", "blueberry": "peru", "mandarin": "rsa"}
@@ -151,4 +156,28 @@ def build_varieties(all_cux_city: list[list]) -> list[dict]:
             if key not in seen:
                 seen.add(key)
                 out.append({"Parent SKU": parent, "Variety": cls})
+    return out
+
+
+_CUSTOMER_HEADERS = ("customerlist", "customer", "customername")
+_STORE_HEADERS = ("storenames", "storename", "store", "stores")
+
+
+def build_store_map(customer_list: list[list]) -> list[dict]:
+    """Store_Map rows from the 'Customer List' tab."""
+    recs, headers = _records(customer_list)
+    cust_h = next((h for h in _CUSTOMER_HEADERS if h in headers), None)
+    store_h = next((h for h in _STORE_HEADERS if h in headers), None)
+    if not cust_h or not store_h:
+        return []
+    out, seen = [], set()
+    for r in recs:
+        customer, store, city = r.get(cust_h, ""), r.get(store_h, ""), r.get("city", "")
+        if not (customer and store):
+            continue
+        key = _k(city, customer, store)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"City": city, "Customer": customer, "Store Name": store})
     return out

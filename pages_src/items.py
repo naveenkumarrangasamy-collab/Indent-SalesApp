@@ -253,7 +253,7 @@ def render(m: Masters, user: User) -> None:
         st.rerun()
 
     if not m.has_sku_mapping(hdr.city, hdr.customer):
-        st.info(f"Mapping pending: no SKU names in SKU_Map for {hdr.customer} in {hdr.city}.")
+        st.info(f"Mapping pending: no SKU names in 'All Cux City' for {hdr.customer} in {hdr.city}.")
     else:
         _add_form(m)
 

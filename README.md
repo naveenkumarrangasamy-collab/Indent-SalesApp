@@ -32,7 +32,7 @@ Every user can change their own PIN from the sidebar.
 4. **First sign-in as owner** → **Access → Sheet setup & checks**:
    1. **Create missing tabs**: adds `Store_Map`, `Varieties`, `Access`, `Indent_Lines`, `Change_Log`, `PO_Freeze`, `Drafts` (and `SKU_Map`) with header rows. Existing tabs are not touched.
    2. Check **SKU mapping** on the same page: it should say *live from 'All Cux City' + 'Mapping Whole'*.
-   3. **Fill `Store_Map`** in the sheet (City, Customer, Store Name). The sheet has no store list today, and users cannot pass the delivery step without one.
+   3. Stores come from the **Customer List** tab; add a row there for every new store.
    4. Add the sales users under **Users & PINs**, and share each PIN privately.
 
 ## Google Sheet tabs
@@ -49,9 +49,13 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - Edits in these tabs show in the app within a minute, or at once with **↻ Refresh data**.
 - If the sheet has no *All Cux City* tab, the app uses an **SKU_Map** tab instead (City, Customer, Parent SKU, Customer SKU Name, Spec-Origin, Spec-Size, Active, Variety, Lot).
 
+### Stores (read live from the team's own tab)
+
+- **Customer List**: *Customer List* (the customer) and *Store names*. Page 2 lists the stores of the chosen customer, in sheet order. The tab has no City column, so each store is offered for its customer in every city; add a **City** column if stores should be limited to a city.
+- A **Store_Map** tab (City, Customer, Store Name), if present, is added to that list.
+
 ### Other tabs
 
-- **Store_Map**: City, Customer, Store Name.
 - **Varieties**: Parent SKU, Variety. Optional extra varieties; a parent with varieties (today: Apple) makes variety required.
 - **Access**: Email, Name, Role (`owner`/`sales`), Status (`active`/`revoked`), PIN_Hash, Updated_At, Updated_By. Manage it from the Access page. PINs are stored only as salted, peppered PBKDF2 hashes.
 - **Indent_Lines, Change_Log, PO_Freeze**: append-only output, as in the spec. The current version of an indent is its highest `version`. Freezing appends one more version with `status = Frozen`.
