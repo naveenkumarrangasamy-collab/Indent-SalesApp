@@ -83,27 +83,90 @@ def build_po_message(cur, file_name: str, pdf: bytes, uploaded_by: str, sender: 
     return msg
 
 
+_STAGE_HELP = {
+    "connect": "could not reach the mail server (check smtp_host / smtp_port)",
+    "starttls": "the server closed the connection while starting encryption",
+    "login": "the server closed the connection at login (wrong password type or SMTP blocked for "
+             "this account)",
+    "send": "the server closed the connection while receiving the e-mail",
+}
+
+
+def _attempts(host: str, port: int) -> list[tuple[str, int, str]]:
+    """Try the configured way first, then the other standard Gmail way."""
+    first = (host, port, "ssl" if port == 465 else "starttls")
+    other = (host, 587, "starttls") if first[2] == "ssl" else (host, 465, "ssl")
+    return [first] if first[:2] == other[:2] else [first, other]
+
+
+def deliver(msg: EmailMessage) -> tuple[bool, str]:
+    """Send with automatic fallback between 587/STARTTLS and 465/SSL.
+    Returns (sent, explanation)."""
+    s = settings()
+    if not configured():
+        return False, ("e-mail is not set up: add smtp_user and smtp_password (a Gmail App password) "
+                       "to the app secrets.")
+    tried = []
+    for host, port, mode in _attempts(s["host"], s["port"]):
+        stage = "connect"
+        try:
+            ctx = ssl.create_default_context()
+            smtp = (smtplib.SMTP_SSL(host, port, timeout=30, context=ctx) if mode == "ssl"
+                    else smtplib.SMTP(host, port, timeout=30))
+            with smtp:
+                smtp.ehlo()
+                if mode == "starttls":
+                    stage = "starttls"
+                    smtp.starttls(context=ctx)
+                    smtp.ehlo()
+                stage = "login"
+                smtp.login(s["user"], s["password"])
+                stage = "send"
+                refused = smtp.send_message(msg)
+            if refused:
+                return False, f"the server refused these recipients: {', '.join(refused)}"
+            return True, f"sent via {host}:{port} ({mode.upper()})"
+        except smtplib.SMTPAuthenticationError as e:
+            detail = (e.smtp_error or b"").decode(errors="replace")[:200]
+            return False, ("the mail server refused the login for " + s["user"] + ". For Gmail use a "
+                           "16-character App password (Google Account > Security > App passwords), not "
+                           "the normal password. Company (Workspace) accounts may need the admin to "
+                           f"allow it. Server said: {e.smtp_code} {detail}")
+        except (smtplib.SMTPException, OSError) as e:
+            tried.append(f"{host}:{port} {mode.upper()} - {_STAGE_HELP[stage]} ({type(e).__name__}: {e})")
+    return False, "could not send. Tried " + " | ".join(tried)
+
+
 def send_po_mail(cur, file_name: str, pdf: bytes, uploaded_by: str) -> tuple[bool, str]:
     """Returns (sent, message for the user)."""
     s = settings()
-    if not configured():
-        return False, ("PO e-mail not sent: add smtp_user and smtp_password (a Gmail app password) "
-                       "to the app secrets.")
-    msg = build_po_message(cur, file_name, pdf, uploaded_by, s["sender"], s["to"], s["cc"])
-    try:
-        if s["port"] == 465:
-            with smtplib.SMTP_SSL(s["host"], s["port"], timeout=30,
-                                  context=ssl.create_default_context()) as smtp:
-                smtp.login(s["user"], s["password"])
-                smtp.send_message(msg)
-        else:
-            with smtplib.SMTP(s["host"], s["port"], timeout=30) as smtp:
-                smtp.starttls(context=ssl.create_default_context())
-                smtp.login(s["user"], s["password"])
-                smtp.send_message(msg)
-    except smtplib.SMTPAuthenticationError:
-        return False, ("PO e-mail not sent: the mail server refused the login. For Gmail use an "
-                       "App password (not the normal password) in smtp_password.")
-    except (smtplib.SMTPException, OSError) as e:
-        return False, f"PO e-mail not sent: {e}"
-    return True, f"PO e-mailed to {', '.join(s['to'] + s['cc'])}."
+    msg = build_po_message(cur, file_name, pdf, uploaded_by, s["sender"] or s["user"], s["to"], s["cc"])
+    ok, why = deliver(msg)
+    if ok:
+        return True, f"PO e-mailed to {', '.join(s['to'] + s['cc'])} (subject '{msg['Subject']}')."
+    return False, f"PO e-mail not sent: {why}"
+
+
+def send_test_mail(sent_by: str) -> tuple[bool, str]:
+    s = settings()
+    msg = EmailMessage()
+    msg["Subject"] = "MT Indent - test e-mail"
+    msg["From"] = s["sender"] or s["user"]
+    msg["To"] = ", ".join(s["to"])
+    if s["cc"]:
+        msg["Cc"] = ", ".join(s["cc"])
+    msg.set_content(f"This is a test from the MT Indent app, sent by {sent_by}. "
+                    "PO e-mails will arrive like this, with the PO PDF attached.")
+    ok, why = deliver(msg)
+    return ok, (f"Test e-mail sent to {', '.join(s['to'] + s['cc'])}: {why}." if ok
+                else f"Test e-mail failed: {why}")
+
+
+def status_text() -> str:
+    s = settings()
+    pw = "set" if s["password"] else "missing"
+    pw_len = len(s["password"])
+    hint = "" if not s["password"] or pw_len == 16 else \
+        f" (it is {pw_len} characters; a Gmail App password has 16)"
+    return (f"Sender: {s['user'] or 'missing'} · password: {pw}{hint} · server: {s['host']}:{s['port']} · "
+            f"to: {', '.join(s['to'])}" + (f" · cc: {', '.join(s['cc'])}" if s["cc"] else ""))

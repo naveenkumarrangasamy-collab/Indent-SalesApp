@@ -230,6 +230,16 @@ def _po(cur, user: User) -> None:
                f"confirmed by {r['confirmed_by']} on {fmt_ts(r['confirmed_at'])}.")
     if link.startswith("http"):
         st.link_button("Open PO file", link, icon=":material/picture_as_pdf:")
+    with st.expander("Re-send the PO e-mail", icon=":material/forward_to_inbox:"):
+        from core import mailer
+        st.caption("If the e-mail did not go out when the PO was uploaded, choose the same PDF "
+                   "again to re-send it. The indent stays frozen.")
+        up = st.file_uploader("PO file (PDF)", type=["pdf"], key=f"resend_{cur.indent_id}")
+        if st.button("Send PO e-mail", icon=":material/send:", disabled=up is None,
+                     key=f"resend_btn_{cur.indent_id}"):
+            with st.spinner("Sending…"):
+                ok, msg = mailer.send_po_mail(cur, up.name, up.getvalue(), user.email)
+            (st.success if ok else st.error)(msg)
 
 
 # ------------------------------------------------------------ per-line edit / delete

@@ -23,12 +23,14 @@ def render(user: User) -> None:
         common.sheet_error(e)
         m = None
 
-    t_users, t_setup = st.tabs(["Users & PINs", "Sheet setup & checks"])
+    t_users, t_setup, t_mail = st.tabs(["Users & PINs", "Sheet setup & checks", "PO e-mail"])
     with t_users:
         if m is not None:
             _users(m, user)
     with t_setup:
         _setup(m, user)
+    with t_mail:
+        _mail(user)
 
 
 # ------------------------------------------------------------------ users
@@ -191,3 +193,22 @@ def _setup(m: masters.Masters | None, me: User) -> None:
         if no_store:
             st.warning("No stores in 'Customer List' for: " + ", ".join(no_store)
                        + ". Users cannot raise indents for these until stores are added.")
+
+
+def _mail(me: User) -> None:
+    from core import mailer
+
+    st.markdown("**PO e-mail settings**")
+    st.caption(mailer.status_text())
+    if not mailer.configured():
+        st.warning("E-mail is not set up. Add `smtp_user` and `smtp_password` to the app secrets.")
+    st.markdown(
+        "For a Gmail sender: turn on **2-Step Verification** on that Google account, then open "
+        "**Google Account → Security → App passwords**, create one (any name), and paste the "
+        "16-character code as `smtp_password`. The normal Gmail password does not work. "
+        "A company (Workspace) mailbox may need the admin to allow App passwords.")
+    if st.button("Send test e-mail", icon=":material/send:", type="primary",
+                 disabled=not mailer.configured()):
+        with st.spinner("Sending…"):
+            ok, msg = mailer.send_test_mail(me.email)
+        (st.success if ok else st.error)(msg)

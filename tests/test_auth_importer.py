@@ -262,6 +262,7 @@ def test_po_mail(monkeypatch):
         def __init__(self, host, port, timeout=None): sent["host"] = (host, port)
         def __enter__(self): return self
         def __exit__(self, *a): pass
+        def ehlo(self): pass
         def starttls(self, context=None): sent["tls"] = True
         def login(self, u, p): sent["login"] = (u, p)
         def send_message(self, m): sent["msg"] = m
@@ -279,3 +280,62 @@ def test_po_mail(monkeypatch):
 def test_user_label():
     assert auth.User("a@x.com", "", "sales").label == "a@x.com"
     assert auth.User("a@x.com", "Asha", "sales", ["X"]).label == "Asha"
+
+
+
+def _po_cur():
+    from core.models import IndentHeader, IndentLine, IndentSnapshot
+    return IndentSnapshot("IND-1", 2, "Submitted", "", "a@x.com",
+                          IndentHeader("2026-11-15", "PTP Bangalore", "Zepto", "Zepto - A", "11:00"),
+                          [IndentLine("Avocado", "1PC - Hass Avocado Imported", "", "Pcs", 30, 120)])
+
+
+def test_po_mail_falls_back_when_connection_closes(monkeypatch):
+    """The user's error: 'Connection unexpectedly closed' on one port -> try the other."""
+    import smtplib
+    from core import mailer
+    secrets = {"smtp_user": "sender@gmail.com", "smtp_password": "abcdefghijklmnop", "smtp_port": 587}
+    monkeypatch.setattr(mailer.config, "get", lambda k, d=None: secrets.get(k, d))
+    log = []
+
+    class Plain:
+        def __init__(self, host, port, timeout=None): log.append(("plain", port))
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def ehlo(self): pass
+        def starttls(self, context=None): pass
+        def login(self, u, p): raise smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+
+    class SSL(Plain):
+        def __init__(self, host, port, timeout=None, context=None): log.append(("ssl", port))
+        def login(self, u, p): pass
+        def send_message(self, m): log.append(("sent", m["Subject"])); return {}
+
+    monkeypatch.setattr(mailer.smtplib, "SMTP", Plain)
+    monkeypatch.setattr(mailer.smtplib, "SMTP_SSL", SSL)
+    ok, msg = mailer.send_po_mail(_po_cur(), "po.pdf", b"%PDF", "a@x.com")
+    assert ok and log == [("plain", 587), ("ssl", 465), ("sent", "Zepto")]
+
+    # both fail -> the message says where and why
+    monkeypatch.setattr(mailer.smtplib, "SMTP_SSL", lambda *a, **k: (_ for _ in ()).throw(OSError("blocked")))
+    ok, msg = mailer.send_po_mail(_po_cur(), "po.pdf", b"%PDF", "a@x.com")
+    assert not ok and "587 STARTTLS - the server closed the connection at login" in msg and "465 SSL" in msg
+
+
+def test_po_mail_bad_password_message(monkeypatch):
+    import smtplib
+    from core import mailer
+    secrets = {"smtp_user": "sender@gmail.com", "smtp_password": "normalpassword"}
+    monkeypatch.setattr(mailer.config, "get", lambda k, d=None: secrets.get(k, d))
+
+    class Plain:
+        def __init__(self, *a, **k): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def ehlo(self): pass
+        def starttls(self, context=None): pass
+        def login(self, u, p): raise smtplib.SMTPAuthenticationError(535, b"5.7.8 Username and Password not accepted")
+    monkeypatch.setattr(mailer.smtplib, "SMTP", Plain)
+    ok, msg = mailer.send_po_mail(_po_cur(), "po.pdf", b"%PDF", "a@x.com")
+    assert not ok and "App password" in msg and "535" in msg
+    assert "14 characters" in mailer.status_text()
