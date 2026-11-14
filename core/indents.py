@@ -17,6 +17,7 @@ import pandas as pd
 import streamlit as st
 
 from core import changelog, config
+from core.lots import lot_size
 from core.masters import Masters
 from core.models import IndentHeader, IndentLine, IndentSnapshot, fmt_num, to_number
 from core.schema import (CHANGE_LOG, INDENT_LINES, LOTS, PO_FREEZE,
@@ -208,6 +209,8 @@ def validate(header: IndentHeader, lines: list[IndentLine], m: Masters,
             errors.append(f"Choose a lot for '{name}'.")
         if to_number(line.qty) <= 0:
             errors.append(f"Qty for '{name}' must be greater than 0.")
+        elif not float(to_number(line.qty)).is_integer():
+            errors.append(f"Qty for '{name}' must be a whole number (no decimals).")
         if to_number(line.price) <= 0:
             errors.append(f"Price for '{name}' must be greater than 0.")
     return errors
@@ -239,7 +242,7 @@ def build_rows(indent_id: str, version: int, status: str, submitted_at: str, sub
             "submitted_at": submitted_at, "submitted_by": submitted_by,
             **header.to_dict(),
             "parent_sku": line.parent_sku, "customer_sku_name": line.customer_sku_name,
-            "variety": line.variety, "lot": line.lot,
+            "variety": line.variety, "lot": line.lot, "lot_size": lot_size(line.customer_sku_name),
             "qty": to_number(line.qty), "price": to_number(line.price), "amount": line.amount,
         })
     return rows

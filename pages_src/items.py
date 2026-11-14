@@ -9,6 +9,7 @@ import streamlit as st
 from core import changelog, config, indents
 from core.auth import User
 from core.masters import Masters
+from core.lots import lot_size
 from core.models import IndentLine, clean_str, fmt_num, to_number
 from core.sheets import SheetError
 from pages_src import common, state
@@ -62,6 +63,8 @@ def _add_line(m: Masters) -> None:
                       "'Lot' column value for it in the sheet.")
     if qty <= 0:
         errors.append("Qty must be greater than 0.")
+    elif not float(qty).is_integer():
+        errors.append("Qty must be a whole number.")
     if price <= 0:
         errors.append("Price must be greater than 0.")
     current = state.lines()
@@ -86,7 +89,7 @@ def _add_form(m: Masters) -> None:
 
     with st.container(border=True):
         st.markdown("**Add item**")
-        c = st.columns([1.1, 2.4, 1.2, 0.9, 0.9, 1.0])
+        c = st.columns([1.1, 2.4, 1.1, 0.8, 1.0, 0.8, 1.0])
         parent = c[0].selectbox("Parent SKU", parents, index=None, key=_ak("parent"),
                                 placeholder="Choose", on_change=_on_parent)
         names = ([n for n in m.sku_names(hdr.city, hdr.customer, parent) if n.casefold() not in used]
@@ -103,8 +106,11 @@ def _add_form(m: Masters) -> None:
         lot_now = m.lot_for(hdr.city, hdr.customer, sku) if sku else ""
         c[3].text_input("Lot", value=lot_now or ("not mapped" if sku else ""), disabled=True,
                         help="Set automatically from the SKU mapping; it cannot be changed here.")
-        c[4].number_input("Qty", min_value=0.0, value=None, step=1.0, key=_ak("qty"), placeholder="0")
-        c[5].number_input("Price / lot", min_value=0.0, value=None, step=1.0, key=_ak("price"),
+        c[4].text_input("Lot size", value=lot_size(sku) if sku else "", disabled=True,
+                        help="Pack size written in the customer SKU name")
+        c[5].number_input("Qty", min_value=0, value=None, step=1, format="%d", key=_ak("qty"),
+                          placeholder="0", help="Whole numbers only")
+        c[6].number_input("Price / lot", min_value=0.0, value=None, step=1.0, key=_ak("price"),
                           placeholder="0.00")
 
         if sku:
@@ -141,7 +147,9 @@ def _lines_table(m: Masters) -> None:
         rows.append({"Parent SKU": x.parent_sku, "Customer SKU Name": x.customer_sku_name,
                      "Spec": " · ".join(v for v in (origin, size) if v) or "—",
                      "Variety": x.variety or None, "Lot": x.lot or None,
-                     "Qty": float(x.qty), "Price": float(x.price), "Amount": x.amount,
+                     "Lot Size": lot_size(x.customer_sku_name),
+                     "Qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
+                     "Price": float(x.price), "Amount": x.amount,
                      "Remove": False})
     df = pd.DataFrame(rows)
     if not any_variety:
@@ -151,12 +159,14 @@ def _lines_table(m: Masters) -> None:
     key = f"ed_{st.session_state.get('editor_rev', 0)}"
     edited = st.data_editor(
         df, key=key, hide_index=True, width="stretch", num_rows="fixed",
-        disabled=["Parent SKU", "Customer SKU Name", "Spec", "Lot", "Amount"],
+        disabled=["Parent SKU", "Customer SKU Name", "Spec", "Lot", "Lot Size", "Amount"],
         column_config={
             "Customer SKU Name": st.column_config.TextColumn(width="large"),
             "Variety": st.column_config.SelectboxColumn(options=all_varieties),
             "Lot": st.column_config.TextColumn(help="Fixed by the SKU mapping"),
-            "Qty": st.column_config.NumberColumn(min_value=0.0, step=0.001, format="%g"),
+            "Lot Size": st.column_config.TextColumn(help="Pack size from the customer SKU name"),
+            "Qty": st.column_config.NumberColumn(min_value=0, step=1, format="%d",
+                                                 help="Whole numbers only"),
             "Price": st.column_config.NumberColumn("Price / lot", min_value=0.0, step=0.01, format="%.2f"),
             "Amount": st.column_config.NumberColumn(format="%.2f"),
             "Remove": st.column_config.CheckboxColumn("🗑", help="Tick to remove this item", width="small"),
@@ -209,8 +219,9 @@ def _fmt_date(iso: str) -> str:
 
 def _lines_frame(lines: list[IndentLine]) -> pd.DataFrame:
     df = pd.DataFrame([{"Parent SKU": x.parent_sku, "Customer SKU Name": x.customer_sku_name,
-                        "Variety": x.variety, "Lot": x.lot, "Qty": x.qty, "Price": x.price,
-                        "Amount": x.amount} for x in lines])
+                        "Variety": x.variety, "Lot": x.lot, "Lot Size": lot_size(x.customer_sku_name),
+                        "Qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
+                        "Price": x.price, "Amount": x.amount} for x in lines])
     if not df.empty and not df["Variety"].astype(bool).any():
         df = df.drop(columns=["Variety"])
     return df
@@ -271,7 +282,7 @@ def _review(m: Masters, user: User) -> None:
         f"<span><b>City</b>{hdr.city}</span><span><b>Customer</b>{hdr.customer}</span>"
         f"<span><b>Store</b>{hdr.store}</span></div>", unsafe_allow_html=True)
     st.dataframe(_lines_frame(lines), hide_index=True, width="stretch",
-                 column_config={"Qty": st.column_config.NumberColumn(format="%g"),
+                 column_config={"Qty": st.column_config.NumberColumn(format="%d"),
                                 "Price": st.column_config.NumberColumn(format="%.2f"),
                                 "Amount": st.column_config.NumberColumn(format="%.2f")})
     total = sum(x.amount for x in lines)

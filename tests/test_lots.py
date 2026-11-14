@@ -48,3 +48,23 @@ def test_detect_lot(name, lot):
 def test_first_unit_wins():
     assert detect_lot("Tray of 2 kg") == "Tray"
     assert detect_lot("2kg of fruit, tray") == "Kg"
+
+
+from core.lots import lot_size  # noqa: E402
+
+
+@pytest.mark.parametrize("name,size", [
+    ("2PC - Mini Avocado Imported", "2 Pcs"),
+    ("1PC - Bloom Grapefruit (250-300 g)", "1 Pcs"),
+    ("200gm - Litchi Imported (Longan)", "200 gm"),
+    ("1Kg - Bulk Daily Apple", "1 Kg"),
+    ("17.5Kg Box - Nz Apple Royal Gala Exf135c", "17.5 Kg Box"),
+    ("18KG Box", "18 Kg Box"),
+    ("200 - 250gm - BH- Premium Mini Orange", "200-250 gm"),
+    ("2 PC - BH-Royal Gala Apple - Imported", "2 Pcs"),
+    ("1-Pc (Std)", "1 Pcs"),
+    ("1Pack - Bulk Green Kiwi", ""),
+    ("Apple Royal Gala - PTP STD Lot", ""),
+])
+def test_lot_size(name, size):
+    assert lot_size(name) == size

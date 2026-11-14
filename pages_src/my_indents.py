@@ -6,7 +6,9 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-from core import indents
+from core import indents, masters
+from core.lots import lot_size
+from core.models import IndentLine, to_number
 from core.auth import User
 from core.schema import STATUS_FROZEN
 from core.sheets import SheetError
@@ -112,22 +114,12 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
         f"<span><b>Time</b>{h.expected_time}</span>"
         f"<span><b>Last saved</b>{fmt_ts(cur.submitted_at)} by {cur.submitted_by}</span></div>",
         unsafe_allow_html=True)
-    lines = pd.DataFrame([{"Parent SKU": x.parent_sku, "Customer SKU Name": x.customer_sku_name,
-                           "Variety": x.variety, "Lot": x.lot, "Qty": x.qty, "Price": x.price,
-                           "Amount": x.amount} for x in cur.lines])
-    if not lines["Variety"].astype(bool).any():
-        lines = lines.drop(columns=["Variety"])
-    st.dataframe(lines, hide_index=True, width="stretch",
-                 column_config={"Qty": st.column_config.NumberColumn(format="%g"),
-                                "Price": st.column_config.NumberColumn(format="%.2f"),
-                                "Amount": st.column_config.NumberColumn(format="%.2f")})
-    st.caption(f"Total amount ₹ {cur.total_amount:,.2f}")
-
     frozen = cur.status == STATUS_FROZEN
     created = indents.created_at(df, indent_id)
     st.session_state["mi_created_at"] = created
     open_ = indents.can_edit(created)
     deadline = indents.edit_deadline(created).strftime("%d %b %Y, %I:%M %p") if created else ""
+    _line_rows(cur, user, editable=open_ and not frozen)
     confirm = st.session_state.get("mi_confirm")
     if confirm and confirm[0] == indent_id:
         load_v = confirm[1]
@@ -244,4 +236,115 @@ def _po(cur, user: User) -> None:
         st.rerun()
     if c[1].button("Cancel", key=f"po_cancel_{cur.indent_id}"):
         s[f"po_rev_{cur.indent_id}"] = rev + 1
+        st.rerun()
+
+
+# ------------------------------------------------------------ per-line edit / delete
+
+_W = [1.0, 2.6, 0.9, 0.6, 0.9, 0.6, 0.8, 0.9, 0.5, 0.5]
+
+
+def _line_rows(cur, user: User, editable: bool) -> None:
+    has_variety = any(x.variety for x in cur.lines)
+    head = st.columns(_W)
+    labels = ["Parent SKU", "Customer SKU Name", "Variety" if has_variety else "", "Lot", "Lot Size",
+              "Qty", "Price", "Amount", "", ""]
+    for col, label in zip(head, labels):
+        col.markdown(f"<span class='mt-muted'>{label}</span>", unsafe_allow_html=True)
+    for i, x in enumerate(cur.lines):
+        c = st.columns(_W, vertical_alignment="center")
+        c[0].write(x.parent_sku)
+        c[1].write(x.customer_sku_name)
+        c[2].write(x.variety if has_variety else "")
+        c[3].write(x.lot)
+        c[4].write(lot_size(x.customer_sku_name) or "—")
+        c[5].markdown(f"<span class='num'>{int(x.qty) if float(x.qty).is_integer() else x.qty}</span>",
+                      unsafe_allow_html=True)
+        c[6].markdown(f"<span class='num'>{x.price:,.2f}</span>", unsafe_allow_html=True)
+        c[7].markdown(f"<span class='num'>{x.amount:,.2f}</span>", unsafe_allow_html=True)
+        if editable:
+            if c[8].button("✏️", key=f"le_{cur.indent_id}_{i}", help="Edit this item"):
+                st.session_state["mi_line"] = ("edit", cur.indent_id, cur.version, x.customer_sku_name)
+                st.rerun()
+            if c[9].button("🗑", key=f"ld_{cur.indent_id}_{i}", help="Delete this item"):
+                st.session_state["mi_line"] = ("delete", cur.indent_id, cur.version, x.customer_sku_name)
+                st.rerun()
+    st.caption(f"{len(cur.lines)} item(s) · Total amount ₹ {cur.total_amount:,.2f}"
+               + ("" if editable else " · read-only"))
+    action = st.session_state.get("mi_line")
+    if action and action[1] == cur.indent_id:
+        if action[2] != cur.version:  # someone saved in between
+            st.session_state.pop("mi_line", None)
+            st.warning("This indent changed since you clicked; please try again.")
+        elif action[0] == "edit":
+            _edit_line_dialog(cur, action[3], user)
+        else:
+            _delete_line_dialog(cur, action[3], user)
+
+
+def _save_lines(cur, new_lines: list[IndentLine], user: User, what: str) -> None:
+    try:
+        with st.spinner("Saving a new version…"):
+            v, _ = indents.submit_update(cur.indent_id, cur.version, cur.header, new_lines, user.email)
+    except indents.SheetError as e:
+        st.error(f"Not saved. {e}")
+        return
+    st.session_state.pop("mi_line", None)
+    common.flash("success", f"{what} {cur.indent_id} is now version {v}.")
+    st.rerun()
+
+
+@st.dialog("Edit item", dismissible=False)
+def _edit_line_dialog(cur, name: str, user: User) -> None:
+    line = next((x for x in cur.lines if x.customer_sku_name == name), None)
+    if line is None:
+        st.session_state.pop("mi_line", None)
+        st.rerun()
+    st.markdown(f"**{name}**  \n<span class='mt-muted'>{line.parent_sku} · lot {line.lot}"
+                f"{' · ' + lot_size(name) if lot_size(name) else ''}</span>", unsafe_allow_html=True)
+    try:
+        varieties = masters.load_masters().varieties_for(line.parent_sku)
+    except indents.SheetError:
+        varieties = []
+    variety = line.variety
+    if varieties:
+        opts = varieties if line.variety in varieties or not line.variety else varieties + [line.variety]
+        variety = st.selectbox("Variety", opts, index=opts.index(line.variety) if line.variety in opts else None)
+    c = st.columns(2)
+    qty = c[0].number_input("Qty", min_value=1, step=1, format="%d",
+                            value=int(line.qty) if float(line.qty).is_integer() and line.qty >= 1 else 1)
+    price = c[1].number_input("Price / lot", min_value=0.01, step=1.0, value=float(line.price) or 0.01)
+    new = IndentLine(parent_sku=line.parent_sku, customer_sku_name=name, variety=variety or "",
+                     lot=line.lot, qty=float(qty), price=float(price))
+    changes = []
+    if int(to_number(line.qty)) != int(qty):
+        changes.append(f"Qty: {line.qty:g} → {qty}")
+    if round(line.price, 2) != round(float(price), 2):
+        changes.append(f"Price: {line.price:,.2f} → {price:,.2f}")
+    if (variety or "") != line.variety:
+        changes.append(f"Variety: {line.variety or '—'} → {variety}")
+    st.markdown("**Changes:** " + ("; ".join(changes) if changes else "none yet")
+                + f"  \nAmount: ₹ {new.amount:,.2f}")
+    b = st.columns(2)
+    if b[0].button("✓ Save changes", type="primary", width="stretch",
+                   disabled=not changes or (bool(varieties) and not variety)):
+        lines = [new if x.customer_sku_name == name else x for x in cur.lines]
+        _save_lines(cur, lines, user, "Item updated:")
+    if b[1].button("Cancel", width="stretch"):
+        st.session_state.pop("mi_line", None)
+        st.rerun()
+
+
+@st.dialog("Delete item?", dismissible=False)
+def _delete_line_dialog(cur, name: str, user: User) -> None:
+    st.write(f"Delete **{name}** from **{cur.indent_id}**?")
+    st.caption("This saves a new version without this item. Earlier versions stay in the sheet.")
+    only_one = len(cur.lines) <= 1
+    if only_one:
+        st.warning("This is the only item. An indent needs at least one item, so it can't be deleted.")
+    b = st.columns(2)
+    if b[0].button("Yes, delete", type="primary", width="stretch", disabled=only_one):
+        _save_lines(cur, [x for x in cur.lines if x.customer_sku_name != name], user, "Item deleted:")
+    if b[1].button("Cancel", width="stretch"):
+        st.session_state.pop("mi_line", None)
         st.rerun()

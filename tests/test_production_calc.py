@@ -102,3 +102,24 @@ def test_without_spec_groups_by_parent_variety_lot():
     ])
     agg = aggregate(df, _masters(), with_spec=False)
     assert "Origin" not in agg.columns and agg.iloc[0]["Total Qty"] == 10
+
+
+def test_city_sku_report_and_dates():
+    from core.production_calc import city_sku_report, default_date, delivery_dates
+    df = _lines([
+        dict(BASE, indent_id="A", version="1", customer="Zepto", store="S1", parent_sku="Avocado",
+             customer_sku_name="2PC - Mini Avocado Imported", qty="30"),
+        dict(BASE, indent_id="B", version="1", customer="Zepto", store="S2", parent_sku="Avocado",
+             customer_sku_name="2PC - Mini Avocado Imported", qty="12", delivery_date="2026-11-16"),
+        dict(BASE, indent_id="B", version="1", customer="Zepto", store="S2", parent_sku="Litchi",
+             customer_sku_name="200gm - Litchi Imported (Longan)", qty="5", lot="gms",
+             delivery_date="2026-11-16"),
+    ])
+    rep = city_sku_report(df)
+    row = rep[rep["Customer SKU Name"] == "2PC - Mini Avocado Imported"].iloc[0]
+    assert (row["City"], row["Lot"], row["Lot Size"], row["Qty"], row["Stores"]) == ("Bangalore", "Pcs", "2 Pcs", 42, 2)
+    assert delivery_dates(df) == ["2026-11-15", "2026-11-16"]
+    assert default_date(["2026-11-15", "2026-11-16"], "2026-11-16") == "2026-11-16"
+    assert default_date(["2026-11-10"], "2026-11-16") == "2026-11-10"
+    agg = aggregate(df, _masters(), with_spec=False)
+    assert "Lot Size" in agg.columns

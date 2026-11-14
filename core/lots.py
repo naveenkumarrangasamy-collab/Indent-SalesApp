@@ -41,3 +41,32 @@ def detect_lot(sku_name: str | None) -> str | None:
     if not m:
         return None
     return _WORD_TO_LOT[m.group(1).lower()]
+
+
+# ---------------------------------------------------------------- lot size
+
+_UNIT_LABEL = {"kg": "Kg", "kgs": "Kg",
+               "gm": "gm", "gms": "gm", "gram": "gm", "grams": "gm",
+               "pc": "Pcs", "pcs": "Pcs", "piece": "Pcs", "pieces": "Pcs",
+               "box": "Box", "boxes": "Box", "tray": "Tray", "trays": "Tray"}
+_NUM = r"\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?"
+_SIZE = re.compile(
+    rf"(?<![A-Za-z\d.])({_NUM})\s*-?\s*(kgs?|gms?|grams?|pieces?|pcs?|boxes|box|trays?)(?![A-Za-z0-9])"
+    r"(?:\s*[-–]?\s*(box(?:es)?|trays?)(?![A-Za-z0-9]))?",
+    re.IGNORECASE)
+
+
+def lot_size(sku_name: str | None) -> str:
+    """The pack size written in the SKU name, e.g.
+    '2PC - Mini Avocado' -> '2 Pcs', '200gm - Litchi' -> '200 gm',
+    '1Kg - Bulk Daily Apple' -> '1 Kg', '17.5Kg Box - ...' -> '17.5 Kg Box',
+    '200-250gm - Mini Orange' -> '200-250 gm'. '' when no size is written."""
+    if not sku_name:
+        return ""
+    m = _SIZE.search(str(sku_name))
+    if not m:
+        return ""
+    num = re.sub(r"\s*-\s*", "-", m.group(1))
+    unit = _UNIT_LABEL[m.group(2).lower()]
+    box = m.group(3)
+    return f"{num} {unit}" + (f" {_UNIT_LABEL[box.lower()]}" if box else "")

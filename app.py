@@ -21,12 +21,18 @@ pages = {
                           icon="📋", url_path="indents"),
     "production": st.Page(lambda: production.render(user), title="Production sheet", icon="🏭",
                           url_path="production"),
+    "city_sku": st.Page(lambda: production.render_city_sku(user), title="City / SKU report", icon="📊",
+                        url_path="city-sku-report"),
 }
 if user.is_owner:
     pages["access"] = st.Page(lambda: access.render(user), title="Access", icon="🔑", url_path="access")
 common.PAGES.clear()
 common.PAGES.update(pages)
 
-nav = st.navigation(list(pages.values()))
+sections = {"Indents": [pages["indent"], pages["my_indents"]],
+            "Production": [pages["production"], pages["city_sku"]]}
+if user.is_owner:
+    sections["Admin"] = [pages["access"]]
+nav = st.navigation(sections)
 common.sidebar(user)
 nav.run()

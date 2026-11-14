@@ -65,6 +65,40 @@ def _index(options: list[str], value: str) -> int | None:
 TIME_SLOTS = [f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 30)]
 
 
+def parse_time(text: str) -> str | None:
+    """'6:45 pm', '18:45', '6.45PM', '645 pm', '7 am', '0730' -> 'HH:MM'; None if not a time."""
+    import re
+
+    t = str(text or "").strip().lower().replace(".", ":")
+    m = re.fullmatch(r"(\d{1,2})(?::?(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?", t)
+    if not m:
+        return None
+    h, mins, ampm = int(m.group(1)), int(m.group(2) or 0), (m.group(3) or "").replace(".", "")
+    if mins > 59:
+        return None
+    if ampm:
+        if not 1 <= h <= 12:
+            return None
+        h = (h % 12) + (12 if ampm == "pm" else 0)
+    elif h > 23:
+        return None
+    return f"{h:02d}:{mins:02d}"
+
+
+def _on_time(key: str) -> None:
+    raw = st.session_state.get(key)
+    if raw in (None, ""):
+        state.set_header_field("expected_time", "")
+        return
+    parsed = raw if raw in TIME_SLOTS else parse_time(raw)
+    if parsed is None:
+        common.flash("error", f"'{raw}' is not a time. Type it like 6:45 PM or 18:45, "
+                              "or pick a slot from the list.")
+    else:
+        state.set_header_field("expected_time", parsed)
+    _bump()
+
+
 def fmt_slot(hhmm: str) -> str:
     """'06:30' -> '06:30 AM'."""
     try:
@@ -90,8 +124,8 @@ def _drop_stale(m: Masters) -> None:
     if h.get("store") and h["store"] not in m.stores_for(h.get("city", ""), h.get("customer", "")):
         dropped.append(h["store"])
         h["store"] = ""
-    if h.get("expected_time") and h["expected_time"] not in TIME_SLOTS:
-        h["expected_time"] = ""
+    if h.get("expected_time") and parse_time(h["expected_time"]) != h["expected_time"]:
+        h["expected_time"] = ""  # not a valid HH:MM (typed custom times are kept)
     if dropped:
         if ind["lines"]:
             state.set_lines([], structural=True)
@@ -102,6 +136,7 @@ def _drop_stale(m: Masters) -> None:
 
 
 def render(m: Masters) -> None:
+    common.show_flash()
     _drop_stale(m)
     hdr = state.header()
     st.subheader("Delivery details")
@@ -145,8 +180,9 @@ def render(m: Masters) -> None:
     slots = TIME_SLOTS if hdr.expected_time in TIME_SLOTS or not hdr.expected_time \
         else TIME_SLOTS + [hdr.expected_time]
     c5.selectbox("Expected delivery time", slots, index=_index(slots, hdr.expected_time), key=k,
-                 format_func=fmt_slot, placeholder="Choose a 30-minute slot",
-                 on_change=_on_simple, args=(k, "expected_time"))
+                 format_func=fmt_slot, placeholder="Pick a slot or type e.g. 6:45 PM",
+                 accept_new_options=True, on_change=_on_time, args=(k,),
+                 help="Pick a 30-minute slot, or type any time (6:45 PM, 18:45) and press Enter")
 
     if hdr.city and hdr.customer:
         pending = []

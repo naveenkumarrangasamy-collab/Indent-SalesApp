@@ -30,7 +30,7 @@ TABS: dict[str, list[str]] = {
     # Output tabs (written by the app, append-only).
     INDENT_LINES: ["indent_id", "version", "status", "submitted_at", "submitted_by",
                    "delivery_date", "city", "customer", "store", "expected_time",
-                   "parent_sku", "customer_sku_name", "variety", "lot", "qty",
+                   "parent_sku", "customer_sku_name", "variety", "lot", "lot_size", "qty",
                    "price", "amount"],
     CHANGE_LOG: ["changed_at", "indent_id", "from_version", "to_version", "changed_by",
                  "change_type", "customer_sku_name", "field", "old_value", "new_value"],

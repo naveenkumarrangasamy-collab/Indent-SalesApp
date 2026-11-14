@@ -185,3 +185,27 @@ def test_summary_marks_editable(backend):
     indents.submit_new(H, [HASS], "s@x.com")
     s = indents.summary(indents.read_lines(fresh=True))
     assert bool(s.iloc[0]["can_edit"]) is True
+
+
+def test_qty_must_be_whole_number():
+    m = _masters()
+    errs = indents.validate(H, [IndentLine(**{**HASS.to_dict(), "qty": 2.5})], m)
+    assert any("whole number" in e for e in errs)
+
+
+def test_lot_size_written_to_sheet(backend):
+    indents.submit_new(H, [HASS], "s@x.com")
+    assert backend.read("Indent_Lines").iloc[0]["lot_size"] == "1 Pcs"
+
+
+def test_typed_delivery_times():
+    from pages_src.delivery import parse_time
+    assert parse_time("6:45 pm") == "18:45" and parse_time("0730") == "07:30"
+    assert parse_time("12 am") == "00:00" and parse_time("25:00") is None and parse_time("abc") is None
+
+
+def test_typed_time_survives_stale_check():
+    from pages_src.delivery import parse_time
+    for t in ("18:45", "07:10", "00:00"):
+        assert parse_time(t) == t  # what _drop_stale relies on to keep typed times
+    assert parse_time("11:01") == "11:01"
