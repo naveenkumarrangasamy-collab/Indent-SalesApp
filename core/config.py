@@ -112,6 +112,15 @@ def delivery_window() -> tuple[str, str]:
     return str(get("delivery_from", "10:00")), str(get("delivery_to", "20:00"))
 
 
+def po_drive_folder_id() -> str:
+    """Google Drive folder (in a Shared drive) where uploaded PO PDFs are kept.
+    Empty: only the file name is recorded."""
+    raw = str(get("po_drive_folder_id", "") or "").strip()
+    import re as _re
+    m = _re.search(r"/folders/([a-zA-Z0-9_-]+)", raw)
+    return m.group(1) if m else raw
+
+
 def show_spec() -> bool:
     """Origin / size are not used for now (set show_spec = true to bring them back)."""
     return bool(get("show_spec", False))
@@ -146,10 +155,20 @@ def pin_pepper() -> str:
 
 
 def master_cache_seconds() -> int:
+    """How long Google Sheet master data (SKUs, stores, varieties, access) is
+    kept before it is read again: `master_refresh_minutes` (default 5)."""
     try:
-        return max(10, int(get("master_cache_seconds", 60)))
+        return max(60, int(float(get("master_refresh_minutes", 5)) * 60))
     except (TypeError, ValueError):
-        return 60
+        return 300
+
+
+def session_days() -> int:
+    """How long a browser stays signed in (refresh / closing the tab keeps you in)."""
+    try:
+        return max(1, int(get("session_days", 7)))
+    except (TypeError, ValueError):
+        return 7
 
 
 def now_ist() -> datetime:

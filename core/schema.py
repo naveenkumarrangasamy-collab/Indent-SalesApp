@@ -35,7 +35,7 @@ TABS: dict[str, list[str]] = {
     CHANGE_LOG: ["changed_at", "indent_id", "from_version", "to_version", "changed_by",
                  "change_type", "customer_sku_name", "field", "old_value", "new_value"],
     PO_FREEZE: ["indent_id", "version", "po_file_name", "po_customer", "po_store",
-                "confirmed_by", "confirmed_at"],
+                "confirmed_by", "confirmed_at", "po_file_link"],
     DRAFTS: ["draft_id", "user_email", "updated_at", "payload_json"],
 }
 
@@ -47,6 +47,7 @@ LOTS = ["Kg", "Pcs", "Tray", "Box", "Pack"]  # "Pack" = gram packs (was "gms")
 
 STATUS_SUBMITTED = "Submitted"
 STATUS_FROZEN = "Frozen"
+STATUS_CANCELLED = "Cancelled"   # "deleted" indent: kept in the sheet, ignored elsewhere
 
 ROLE_OWNER = "owner"
 ROLE_SALES = "sales"

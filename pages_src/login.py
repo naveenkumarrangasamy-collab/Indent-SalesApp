@@ -57,6 +57,7 @@ def _do_login(email: str, pin: str) -> None:
             pass
         st.session_state["must_change_pin"] = True
     common.sign_in(user)
+    common.remember_login(user)
     if state.restore_from_sheet(user.email):
         common.flash("info", "Your unsaved indent draft was restored.")
     st.rerun()

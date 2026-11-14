@@ -10,7 +10,7 @@ from core import changelog, config, indents
 from core.auth import User
 from core.masters import Masters
 from core.lots import lot_size
-from core.models import IndentLine, clean_str, fmt_num, to_number
+from core.models import IndentLine, fmt_num, to_number
 from core.sheets import SheetError
 from pages_src import common, state
 
@@ -26,20 +26,28 @@ def _ak(name: str) -> str:
 
 
 def _on_parent() -> None:
+    """New parent: everything after it on this line starts empty again."""
     s = st.session_state
-    for n in ("sku", "variety"):
+    for n in ("sku", "variety", "qty", "price"):
         s.pop(_ak(n), None)
+    s.pop("add_errors", None)
 
 
 def _on_sku(m: Masters) -> None:
+    """New customer SKU name: clear variety, qty and price for this line."""
     s = st.session_state
+    for n in ("qty", "price"):
+        s.pop(_ak(n), None)
+    s.pop(_ak("variety"), None)
+    s.pop("add_errors", None)
     hdr = state.header()
     sku = s.get(_ak("sku"))
     parent = s.get(_ak("parent")) or ""
     varieties = m.varieties_for(parent)
     if varieties:
         dv = m.default_variety(hdr.city, hdr.customer, sku or "")
-        s[_ak("variety")] = dv if dv in varieties else None
+        if dv in varieties:
+            s[_ak("variety")] = dv
 
 
 def _add_line(m: Masters) -> None:
@@ -133,64 +141,75 @@ def _add_form(m: Masters) -> None:
 
 # ------------------------------------------------------------ lines table
 
+_ROW_W = [1.0, 2.6, 0.9, 0.6, 0.8, 0.6, 0.8, 0.9, 0.85, 0.95]
+
+
 def _lines_table(m: Masters) -> None:
-    hdr = state.header()
     lines = state.lines()
     if not lines:
         st.info("No items yet. Add the first item above.")
         return
-    any_variety = any(m.needs_variety(x.parent_sku) for x in lines)
-    all_varieties = sorted({v for x in lines for v in m.varieties_for(x.parent_sku)})
-    rows = []
-    for x in lines:
-        origin, size = m.spec(hdr.city, hdr.customer, x.customer_sku_name)
-        rows.append({"Parent SKU": x.parent_sku, "Customer SKU Name": x.customer_sku_name,
-                     "Spec": " · ".join(v for v in (origin, size) if v) or "—",
-                     "Variety": x.variety or None, "Lot": x.lot or None,
-                     "Lot Size": lot_size(x.customer_sku_name),
-                     "Qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
-                     "Price": float(x.price), "Amount": x.amount,
-                     "Remove": False})
-    df = pd.DataFrame(rows)
-    if not any_variety:
-        df = df.drop(columns=["Variety"])
-    if not config.show_spec():
-        df = df.drop(columns=["Spec"])
-    key = f"ed_{st.session_state.get('editor_rev', 0)}"
-    edited = st.data_editor(
-        df, key=key, hide_index=True, width="stretch", num_rows="fixed",
-        disabled=["Parent SKU", "Customer SKU Name", "Spec", "Lot", "Lot Size", "Amount"],
-        column_config={
-            "Customer SKU Name": st.column_config.TextColumn(width="large"),
-            "Variety": st.column_config.SelectboxColumn(options=all_varieties),
-            "Lot": st.column_config.TextColumn(help="Fixed by the SKU mapping"),
-            "Lot Size": st.column_config.TextColumn(help="Pack size from the customer SKU name"),
-            "Qty": st.column_config.NumberColumn(min_value=0, step=1, format="%d",
-                                                 help="Whole numbers only"),
-            "Price": st.column_config.NumberColumn("Price / lot", min_value=0.0, step=0.01, format="%.2f"),
-            "Amount": st.column_config.NumberColumn(format="%.2f"),
-            "Remove": st.column_config.CheckboxColumn("🗑", help="Tick to remove this item", width="small"),
-        })
+    has_variety = any(m.needs_variety(x.parent_sku) or x.variety for x in lines)
+    head = st.columns(_ROW_W)
+    for col, label in zip(head, ["Parent SKU", "Customer SKU Name", "Variety" if has_variety else "",
+                                 "Lot", "Lot Size", "Qty", "Price", "Amount", "", ""]):
+        col.markdown(f"<span class='mt-muted'>{label}</span>", unsafe_allow_html=True)
+    for i, x in enumerate(lines):
+        c = st.columns(_ROW_W, vertical_alignment="center")
+        c[0].write(x.parent_sku)
+        c[1].write(x.customer_sku_name)
+        if has_variety:
+            needs = m.needs_variety(x.parent_sku)
+            c[2].markdown(x.variety or ("<span style='color:#b42318'>choose</span>" if needs else "—"),
+                          unsafe_allow_html=True)
+        c[3].write(x.lot)
+        c[4].write(lot_size(x.customer_sku_name) or "—")
+        c[5].markdown(f"<span class='num'>{fmt_num(x.qty)}</span>", unsafe_allow_html=True)
+        c[6].markdown(f"<span class='num'>{x.price:,.2f}</span>", unsafe_allow_html=True)
+        c[7].markdown(f"<span class='num'>{x.amount:,.2f}</span>", unsafe_allow_html=True)
+        if c[8].button("Edit", icon=":material/edit:", key=f"it_e_{i}_{x.customer_sku_name}",
+                       width="stretch", help="Change qty, price or variety"):
+            st.session_state["pending_edit"] = x.customer_sku_name
+            st.rerun()
+        if c[9].button("Delete", icon=":material/delete:", key=f"it_d_{i}_{x.customer_sku_name}",
+                       width="stretch", help="Remove this item"):
+            st.session_state["pending_remove"] = [x.customer_sku_name]
+            st.rerun()
 
-    # Sync edits back into the working indent.
-    new_lines: list[IndentLine] = []
-    to_remove: list[str] = []
-    for x, (_, r) in zip(lines, edited.iterrows()):
-        if bool(r.get("Remove")):
-            to_remove.append(x.customer_sku_name)
-        variety = clean_str(r.get("Variety")) if "Variety" in edited.columns else x.variety
-        if not m.needs_variety(x.parent_sku):
-            variety = ""
-        new_lines.append(IndentLine(parent_sku=x.parent_sku, customer_sku_name=x.customer_sku_name,
-                                    variety=variety, lot=x.lot,
-                                    qty=to_number(r.get("Qty")), price=to_number(r.get("Price"))))
-    if to_remove:  # ask first; the tick is undone until confirmed
-        st.session_state["pending_remove"] = to_remove
-        state.bump_editor()
+
+@st.dialog("Edit item", dismissible=False)
+def _edit_item(m: Masters) -> None:
+    name = st.session_state.get("pending_edit")
+    lines = state.lines()
+    line = next((x for x in lines if x.customer_sku_name == name), None)
+    if line is None:
+        st.session_state.pop("pending_edit", None)
         st.rerun()
-    if [y.to_dict() for y in new_lines] != [y.to_dict() for y in lines]:
-        state.set_lines(new_lines, structural=False)
-        state.bump_editor()  # redraw so Amount and totals update
+    size = lot_size(name)
+    st.markdown(f"**{name}**  \n<span class='mt-muted'>{line.parent_sku} · lot {line.lot}"
+                f"{' · ' + size if size else ''}</span>", unsafe_allow_html=True)
+    varieties = m.varieties_for(line.parent_sku)
+    variety = ""
+    if varieties:
+        variety = st.selectbox("Variety", varieties,
+                               index=varieties.index(line.variety) if line.variety in varieties else None,
+                               placeholder="Choose")
+    c = st.columns(2)
+    qty = c[0].number_input("Qty", min_value=1, step=1, format="%d",
+                            value=max(1, int(line.qty)) if float(line.qty).is_integer() else 1)
+    price = c[1].number_input("Price / lot", min_value=0.01, step=1.0,
+                              value=float(line.price) if line.price > 0 else 1.0)
+    new = IndentLine(parent_sku=line.parent_sku, customer_sku_name=name, variety=variety or "",
+                     lot=line.lot, qty=float(qty), price=float(price))
+    st.markdown(f"Amount: **₹ {new.amount:,.2f}**")
+    b = st.columns(2)
+    if b[0].button("Save", icon=":material/check:", type="primary", width="stretch",
+                   disabled=bool(varieties) and not variety):
+        state.set_lines([new if x.customer_sku_name == name else x for x in lines], structural=True)
+        st.session_state.pop("pending_edit", None)
+        st.rerun()
+    if b[1].button("Cancel", width="stretch"):
+        st.session_state.pop("pending_edit", None)
         st.rerun()
 
 
@@ -234,7 +253,7 @@ def _confirm_remove() -> None:
     for n in names:
         st.markdown(f"- **{n}**")
     c = st.columns(2)
-    if c[0].button("Yes, remove", type="primary", width="stretch"):
+    if c[0].button("Yes, remove", icon=":material/delete:", type="primary", width="stretch"):
         keep = [x for x in state.lines() if x.customer_sku_name not in set(names)]
         state.set_lines(keep, structural=True)
         st.session_state.pop("pending_remove", None)
@@ -428,7 +447,9 @@ def render(m: Masters, user: User) -> None:
                 st.rerun()
 
     # Only one dialog at a time.
-    if s.get("pending_remove"):
+    if s.get("pending_edit"):
+        _edit_item(m)
+    elif s.get("pending_remove"):
         _confirm_remove()
     elif s.get("pending_action"):
         _confirm_action()

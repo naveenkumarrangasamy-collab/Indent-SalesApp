@@ -8,7 +8,7 @@ from fpdf.fonts import FontFace
 GREEN = (28, 107, 73)
 
 # Relative column widths; anything not listed gets 1.
-_WEIGHTS = {"Customer SKU Names": 4.2, "Customer SKU Name": 3.2, "Store": 2.2, "Parent SKU": 1.2,
+_WEIGHTS = {"Store Names": 3.0, "Customer SKU Names": 4.2, "Customer SKU Name": 3.2, "Store": 2.2, "Parent SKU": 1.2,
             "Customer": 1.1, "City": 1.3, "Spec-Size": 1.3, "Lot Size": 1.1, "Variety": 1.1,
             "Origin": 1.1, "Total Qty": 0.9, "Qty": 0.8, "Lines": 0.6, "Indents": 0.7, "Stores": 0.6,
             "Lot": 0.7}

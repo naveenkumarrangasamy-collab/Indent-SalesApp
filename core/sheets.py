@@ -236,7 +236,9 @@ class GoogleBackend(_Base):
 
         self._gspread = gspread
         creds = Credentials.from_service_account_info(
-            sa_info, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+            sa_info, scopes=["https://www.googleapis.com/auth/spreadsheets",
+                             "https://www.googleapis.com/auth/drive"])
+        self.creds = creds
         self.client = gspread.authorize(creds)
         self.sheet_id = sheet_id
         self.service_email = sa_info.get("client_email", "")
@@ -340,6 +342,30 @@ class GoogleBackend(_Base):
     def sheet_url(self) -> str:
         return f"https://docs.google.com/spreadsheets/d/{self.sheet_id}/edit"
 
+    def upload_pdf(self, name: str, data: bytes, folder_id: str) -> str:
+        """Upload a PDF into a Drive folder (must be in a Shared drive the
+        service account can edit). Returns the file's web link."""
+        import json
+        from google.auth.transport.requests import AuthorizedSession
+
+        sess = AuthorizedSession(self.creds)
+        meta = {"name": name, "parents": [folder_id], "mimeType": "application/pdf"}
+        files = {"metadata": ("metadata", json.dumps(meta), "application/json; charset=UTF-8"),
+                 "file": (name, data, "application/pdf")}
+        r = sess.post("https://www.googleapis.com/upload/drive/v3/files"
+                      "?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink",
+                      files=files, timeout=90)
+        if r.status_code >= 400:
+            reason = r.text[:300]
+            if "storageQuotaExceeded" in reason or "storage quota" in reason.lower():
+                raise SheetError("Drive refused the file: the PO folder must be in a Shared drive "
+                                 "(service accounts cannot store files in My Drive).")
+            if "accessNotConfigured" in reason or "has not been used" in reason:
+                raise SheetError("Enable the Google Drive API in the Google Cloud project to store PO files.")
+            raise SheetError(f"Drive upload failed ({r.status_code}): {reason}")
+        j = r.json()
+        return j.get("webViewLink") or f"https://drive.google.com/file/d/{j.get('id')}/view"
+
 
 # --------------------------------------------------------------------------
 # Local CSV files (development without Google credentials)
@@ -419,6 +445,13 @@ class LocalBackend(_Base):
 
     def sheet_url(self) -> str:
         return str(self.folder.resolve())
+
+    def upload_pdf(self, name: str, data: bytes, folder_id: str) -> str:
+        po = self.folder / "po_files"
+        po.mkdir(exist_ok=True)
+        safe = "".join(ch if ch.isalnum() or ch in "-_. " else "_" for ch in name)
+        (po / safe).write_bytes(data)
+        return str((po / safe).resolve())
 
 
 # --------------------------------------------------------------------------

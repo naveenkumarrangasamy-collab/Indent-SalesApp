@@ -25,6 +25,7 @@ _CSS = f"""
       font-weight:600; border:1px solid currentColor; }}
   .mt-badge.sub {{ color:{ACCENT}; }}
   .mt-badge.frz {{ color:#8a5a00; }}
+  .mt-badge.cnl {{ color:#b42318; }}
   .mt-muted {{ color: rgba(49,51,63,.6); font-size:.85rem; }}
 </style>
 """
@@ -51,7 +52,7 @@ def connection_banner() -> None:
 
 
 def badge(status: str) -> str:
-    cls = "frz" if status == "Frozen" else "sub"
+    cls = {"Frozen": "frz", "Cancelled": "cnl"}.get(status, "sub")
     return f'<span class="mt-badge {cls}">{status}</span>'
 
 
@@ -69,12 +70,73 @@ def show_flash() -> None:
 
 # ---------------------------------------------------------------- user
 
+COOKIE = "mt_indent_session"
+
+
+def _set_cookie(value: str, max_age: int) -> None:
+    """Set (or clear, with max_age=0) the sign-in cookie in this browser."""
+    import json
+    st.html(f"<script>document.cookie = {json.dumps(COOKIE + '=' + value)} + "
+            f"'; path=/; max-age={int(max_age)}; SameSite=Lax' + "
+            "(location.protocol === 'https:' ? '; Secure' : '');</script>",
+            unsafe_allow_javascript=True, width=1)
+
+
+def remember_login(user: auth.User) -> None:
+    """Called once after sign-in: keep the browser signed in."""
+    st.session_state["_set_cookie"] = True
+
+
+def flush_cookie() -> None:
+    """Write / clear the cookie on this run if asked (needs a rendered page)."""
+    s = st.session_state
+    if s.pop("_clear_cookie", False):
+        _set_cookie("", 0)
+    if s.pop("_set_cookie", False) and s.get("user"):
+        try:
+            token = auth.make_session_token(masters.load_masters().access, s["user"]["email"])
+        except SheetError:
+            return
+        _set_cookie(token, 86400 * config.session_days())
+
+
+def _cookie_token() -> str | None:
+    try:
+        return st.context.cookies.get(COOKIE)
+    except Exception:
+        return None
+
+
+def _from_cookie() -> auth.User | None:
+    token = _cookie_token()
+    if not token or st.session_state.get("_cookie_rejected"):
+        return None
+    try:
+        user = auth.user_from_session_token(masters.load_masters().access, token)
+    except SheetError:
+        return None
+    if user is None:
+        st.session_state["_cookie_rejected"] = True
+        st.session_state["_clear_cookie"] = True
+        return None
+    from pages_src import state
+    sign_in(user)
+    st.session_state["_set_cookie"] = True  # slide the expiry forward
+    if state.restore_from_sheet(user.email):
+        flash("info", "Welcome back. Your unsaved indent draft was restored.")
+    return user
+
+
 def current_user() -> auth.User | None:
     """The signed-in user, re-checked against the (cached) Access tab so a
-    revoked user is signed out within a minute."""
+    revoked user is signed out within a few minutes. After a refresh or a
+    closed tab the browser's sign-in cookie signs the user back in."""
     u = st.session_state.get("user")
     if not u:
-        return None
+        restored = _from_cookie()
+        if restored is None:
+            return None
+        u = st.session_state["user"]
     try:
         m = masters.load_masters()
     except SheetError:
@@ -99,6 +161,8 @@ def sign_out(message: str | None = None) -> None:
         pass
     for k in list(st.session_state.keys()):
         del st.session_state[k]
+    st.session_state["_clear_cookie"] = True       # forget this browser
+    st.session_state["_cookie_rejected"] = True    # don't sign straight back in
     if message:
         flash("warning", message)
 
@@ -146,7 +210,8 @@ def sidebar(user: auth.User) -> None:
         err = st.session_state.get("draft_error")
         if err:
             st.caption(f"⚠️ Draft not saved to the sheet yet: {err}")
-        st.caption(f"Master data refreshes every {config.master_cache_seconds()} s")
+        st.caption(f"Google Sheet data refreshes every {config.master_cache_seconds() // 60} min "
+                   "(or now with ↻ Refresh data)")
 
 
 def _change_pin(user: auth.User, cur: str, new: str, new2: str) -> None:
@@ -170,4 +235,5 @@ def _change_pin(user: auth.User, cur: str, new: str, new2: str) -> None:
         return
     masters.clear_cache()
     st.session_state.pop("must_change_pin", None)
+    st.session_state["_set_cookie"] = True  # old sign-in tokens end with the old PIN
     st.success("PIN updated.")

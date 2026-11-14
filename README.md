@@ -12,12 +12,18 @@ Built from `MT_INDENT_BUILD_SPEC.md`, with one change: users sign in with their 
 | Indent | everyone | Step 1 delivery details, step 2 items. Draft autosaves to the `Drafts` tab and is restored at the next sign-in. |
 | My indents (All indents for the owner) | everyone | List, open, correct (new version), last 10 versions with Load, change log, PO upload and freeze. |
 | City / SKU report | everyone | Total qty per City → Customer → SKU with lot, lot size and Spec-Size; PDF and CSV. |
-| Production sheet | everyone | Totals by Parent SKU → Variety → Lot → Lot size → Spec-Size for a delivery date, city and customer; PDF and CSV. Sales see their own indents; the owner sees all. |
+| Production sheet | everyone | One row per city + customer SKU name, adding up all stores in the filter (delivery date, city, customer), with lot, lot size, Spec-Size and store names; PDF and CSV. Sales see their own indents; the owner sees all. |
 | Access | owner | Add users with an initial PIN, reset PINs, revoke/restore, change role, create missing tabs, SKU-mapping source and master-data checks. |
 
 Every user can change their own PIN from the sidebar.
 
 ### Rules on the Indent screens
+
+- **Staying signed in**: after signing in, the browser keeps a signed cookie for 7 days (`session_days`), so a refresh or closing and reopening the tab returns to the same page without the PIN. **Sign out**, a PIN change/reset or revoking access ends it.
+- **Google Sheet data** (SKUs, stores, varieties, access) is re-read every **5 minutes** (`master_refresh_minutes`), or at once with ↻ Refresh data.
+- **Edit / Delete everywhere**: items on the Indent page, items in All indents, and whole indents (home screen and All indents). Deleting a whole indent marks it **Cancelled** (a new version): it leaves production, frees the store/date, and its history stays in the sheet.
+- **Add item**: choosing a different parent SKU clears the SKU, variety, qty and price of that line; choosing a different SKU clears variety, qty and price.
+- **Upload PO** (home screen or All indents): PDF only, asks "Is this PO for customer X and store Y?", then freezes the indent. To keep the PDF itself, set `po_drive_folder_id` to a folder in a **Shared drive** shared with the service account as Content manager, and enable the Google Drive API; the link is saved in PO_Freeze. Without it only the file name is saved.
 
 - **One indent per store per delivery date.** Choosing a store and date that already have an indent shows it, blocks Continue and offers **Edit IND-…** instead; a correction cannot be moved onto another indent's store and date either.
 - **Delivery date** must be after today (corrections: after the day the indent was created).

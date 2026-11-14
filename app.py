@@ -8,6 +8,7 @@ from pages_src import access, common, indent, login, my_indents, production  # n
 common.inject_css()
 common.connection_banner()
 user = common.current_user()
+common.flush_cookie()
 
 if user is None:
     st.navigation([st.Page(login.render, title="Sign in", icon="🔐", url_path="signin", default=True)],

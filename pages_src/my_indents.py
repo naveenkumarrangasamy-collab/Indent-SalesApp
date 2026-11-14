@@ -12,7 +12,7 @@ from core.models import IndentLine, to_number
 from core.auth import User
 from core.schema import STATUS_FROZEN
 from core.sheets import SheetError
-from pages_src import common, state
+from pages_src import common, indent_actions, state
 
 MAX_VERSIONS_SHOWN = 10
 
@@ -61,7 +61,7 @@ def render(user: User) -> None:
 
     f = st.columns([2, 1, 1, 1])
     q = f[0].text_input("Search", placeholder="Indent id, store, customer…", label_visibility="collapsed")
-    status = f[1].selectbox("Status", ["All", "Submitted", "Frozen"], label_visibility="collapsed")
+    status = f[1].selectbox("Status", ["All", "Submitted", "Frozen", "Cancelled"], label_visibility="collapsed")
     cities = ["All cities"] + sorted(summ["city"].unique())
     city = f[2].selectbox("City", cities, label_visibility="collapsed")
     dates = ["All dates"] + sorted(summ["delivery_date"].unique(), reverse=True)
@@ -114,12 +114,14 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
         f"<span><b>Time</b>{h.expected_time}</span>"
         f"<span><b>Last saved</b>{fmt_ts(cur.submitted_at)} by {cur.submitted_by}</span></div>",
         unsafe_allow_html=True)
-    frozen = cur.status == STATUS_FROZEN
+    cancelled = cur.status == "Cancelled"
+    frozen = cur.status == STATUS_FROZEN or cancelled
     created = indents.created_at(df, indent_id)
     st.session_state["mi_created_at"] = created
     open_ = indents.can_edit(created)
     deadline = indents.edit_deadline(created).strftime("%d %b %Y, %I:%M %p") if created else ""
-    why = ("Frozen with a PO" if frozen else f"Edit window closed at {deadline}") if (frozen or not open_) else ""
+    why = (("Deleted" if cancelled else "Frozen with a PO") if frozen
+           else f"Edit window closed at {deadline}") if (frozen or not open_) else ""
     _line_rows(cur, user, editable=open_ and not frozen, why=why)
     confirm = st.session_state.get("mi_confirm")
     if confirm and confirm[0] == indent_id:
@@ -132,18 +134,31 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
         if c[1].button("Keep my work"):
             st.session_state.pop("mi_confirm", None)
             st.rerun()
-    elif frozen:
-        st.info("This indent is frozen with a PO and is read-only.")
-    elif not open_:
-        st.info(f"The edit window closed at {deadline}. This indent can no longer be changed.")
+    elif cancelled:
+        st.info("This indent was deleted (Cancelled). It is kept here for history only.")
     else:
-        c = st.columns([1, 3])
-        if c[0].button("Edit whole indent", icon=":material/edit_note:", type="primary",
-                       help="Open the indent on the Indent page to change delivery details or add items"):
+        c = st.columns([1.2, 1, 1, 2.6])
+        can = open_ and not frozen
+        if c[0].button("Edit whole indent", icon=":material/edit_note:", type="primary", disabled=not can,
+                       help="Open the indent on the Indent page to change delivery details or add items"
+                       if can else why):
             _request_open(cur)
-        c[1].caption(f"Editable until **{deadline}**.")
+        if c[1].button("Delete indent", icon=":material/delete:", disabled=not can,
+                       help="Delete this indent (asks first)" if can else why):
+            indent_actions.ask("delete", indent_id)
+        if c[2].button("Upload PO", icon=":material/upload_file:", disabled=frozen,
+                       help="Upload the customer's PO (PDF) and freeze this indent" if not frozen
+                       else "PO already uploaded"):
+            indent_actions.ask("po", indent_id)
+        if frozen:
+            c[3].caption("Frozen with a PO: read-only.")
+        elif not open_:
+            c[3].caption(f"Edit window closed at {deadline}. A PO can still be uploaded.")
+        else:
+            c[3].caption(f"Editable until **{deadline}**.")
 
-    tabs = st.tabs(["Versions", "Change log", "PO & freeze"])
+    indent_actions.show_dialog(user)
+    tabs = st.tabs(["Versions", "Change log", "PO"])
     with tabs[0]:
         _versions(df, cur, frozen or not open_)
     with tabs[1]:
@@ -194,52 +209,21 @@ def _change_log(indent_id: str) -> None:
 
 
 def _po(cur, user: User) -> None:
-    s = st.session_state
-    if cur.status == STATUS_FROZEN:
-        try:
-            po = indents.read_po_freeze()
-            po = po[po["indent_id"] == cur.indent_id]
-        except SheetError:
-            po = pd.DataFrame()
-        if not po.empty:
-            r = po.iloc[-1]
-            st.success(f"Frozen with PO **{r['po_file_name']}** for {r['po_customer']} / {r['po_store']}, "
-                       f"confirmed by {r['confirmed_by']} on {fmt_ts(r['confirmed_at'])}.")
-        else:
-            st.success("Frozen with a PO.")
+    try:
+        po = indents.read_po_freeze()
+        po = po[po["indent_id"] == cur.indent_id]
+    except SheetError:
+        po = pd.DataFrame()
+    if po.empty:
+        st.caption("No PO yet. Use **Upload PO** above (or on the home screen) to add the customer's "
+                   "PO as a PDF; that freezes the indent.")
         return
-
-    ind = state.get()
-    if ind["mode"] == "edit" and ind["indent_id"] == cur.indent_id and state.changed_vs_base():
-        st.warning("You have unsaved changes to this indent on the Indent page. "
-                   "Update or discard them before uploading the PO.")
-        return
-
-    rev = s.get(f"po_rev_{cur.indent_id}", 0)
-    up = st.file_uploader("Upload the customer PO to freeze this indent",
-                          type=["pdf", "png", "jpg", "jpeg", "xlsx", "xls", "csv"],
-                          key=f"po_{cur.indent_id}_{rev}")
-    if up is None:
-        st.caption("After the PO is confirmed, the indent becomes read-only. "
-                   "Only the PO file name is stored.")
-        return
-    st.warning(f"Is the selected PO (**{up.name}**) for customer **{cur.header.customer}** "
-               f"and store **{cur.header.store}**?")
-    c = st.columns([1, 1, 3])
-    if c[0].button("Confirm", type="primary", key=f"po_ok_{cur.indent_id}"):
-        with st.spinner("Freezing…"):
-            try:
-                v = indents.freeze(cur.indent_id, cur.version, up.name, user.email)
-            except SheetError as e:
-                st.error(f"Not frozen. {e}")
-                return
-        if ind["mode"] == "edit" and ind["indent_id"] == cur.indent_id:
-            state.start_new()
-        common.flash("success", f"{cur.indent_id} is frozen with PO {up.name} (version {v}).")
-        st.rerun()
-    if c[1].button("Cancel", key=f"po_cancel_{cur.indent_id}"):
-        s[f"po_rev_{cur.indent_id}"] = rev + 1
-        st.rerun()
+    r = po.iloc[-1]
+    link = str(r.get("po_file_link", "") or "")
+    st.success(f"Frozen with PO **{r['po_file_name']}** for {r['po_customer']} / {r['po_store']}, "
+               f"confirmed by {r['confirmed_by']} on {fmt_ts(r['confirmed_at'])}.")
+    if link.startswith("http"):
+        st.link_button("Open PO file", link, icon=":material/picture_as_pdf:")
 
 
 # ------------------------------------------------------------ per-line edit / delete
@@ -268,11 +252,13 @@ def _line_rows(cur, user: User, editable: bool, why: str = "") -> None:
         if c[8].button("Edit", icon=":material/edit:", key=f"le_{cur.indent_id}_{i}",
                        disabled=not editable, width="stretch",
                        help="Edit qty, price or variety of this item" if editable else why):
+            st.session_state.pop(indent_actions.KEY, None)
             st.session_state["mi_line"] = ("edit", cur.indent_id, cur.version, x.customer_sku_name)
             st.rerun()
         if c[9].button("Delete", icon=":material/delete:", key=f"ld_{cur.indent_id}_{i}",
                        disabled=not editable, width="stretch",
                        help="Remove this item from the indent" if editable else why):
+            st.session_state.pop(indent_actions.KEY, None)
             st.session_state["mi_line"] = ("delete", cur.indent_id, cur.version, x.customer_sku_name)
             st.rerun()
     st.caption(f"{len(cur.lines)} item(s) · Total amount ₹ {cur.total_amount:,.2f}"

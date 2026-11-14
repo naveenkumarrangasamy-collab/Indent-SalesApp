@@ -220,3 +220,19 @@ def test_variety_tab_and_sheet_only_customers():
     assert m.cities() == ["PTP Bangalore"]
     assert m.customers("PTP Bangalore") == ["Zepto", "Zomato", "Swiggy"]  # sheet only, sheet order
     assert m.customers("Nowhere") == ["Swiggy", "Zomato", "Zepto", "Firstclub", "Namdhari"]
+
+
+def test_session_token_survives_refresh_but_not_pin_change(monkeypatch):
+    monkeypatch.setattr(auth.config, "pin_pepper", lambda: "p")
+    h1 = auth.hash_pin("1111", pepper="p")
+    acc = _access([["s@x.com", "S", "sales", "active", h1, "", ""]])
+    tok = auth.make_session_token(acc, "S@x.com")
+    assert auth.user_from_session_token(acc, tok).email == "s@x.com"
+    assert auth.user_from_session_token(acc, tok[:-2] + "xx") is None          # tampered
+    acc2 = _access([["s@x.com", "S", "sales", "active", auth.hash_pin("2222", pepper="p"), "", ""]])
+    assert auth.user_from_session_token(acc2, tok) is None                      # PIN changed
+    revoked = _access([["s@x.com", "S", "sales", "revoked", h1, "", ""]])
+    assert auth.user_from_session_token(revoked, tok) is None                   # access removed
+    old = auth.make_session_token(acc, "s@x.com", days=-1)
+    assert auth.user_from_session_token(acc, old) is None                       # expired
+    assert auth.user_from_session_token(acc, "garbage") is None

@@ -1,7 +1,7 @@
 """Master data: SKU map, store map, varieties (and the Access tab).
 
 `load_masters()` reads all four master tabs in one Sheets call and caches the
-result for `master_cache_seconds` (default 60 s). The query helpers below are
+result for `master_refresh_minutes` (default 5 min). The query helpers below are
 pure functions over the DataFrames so they are easy to test.
 """
 from __future__ import annotations

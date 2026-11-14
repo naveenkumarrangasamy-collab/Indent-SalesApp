@@ -147,7 +147,7 @@ def _setup(m: masters.Masters | None, me: User) -> None:
         st.markdown("**SKU mapping**")
         st.markdown(f"Source: **{m.sku_source}**. {m.sku['Customer SKU Name'].nunique()} SKU names, "
                     f"{len(m.varieties)} varieties. Changes in the sheet show within "
-                    f"{config.master_cache_seconds()} s, or at once with ↻ Refresh data.")
+                    f"{config.master_cache_seconds() // 60} min, or at once with ↻ Refresh data.")
         if m.sku_source.startswith("live"):
             st.caption(f"SKU names, parents and Apple varieties come from '{importer.ALL_CUX_CITY}'; "
                        f"origin and size from '{importer.MAPPING_WHOLE}'. Optional columns you can add: "

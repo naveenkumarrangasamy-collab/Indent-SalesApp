@@ -86,7 +86,7 @@ def _filtered(user: User, prefix: str):
 def render(user: User) -> None:
     common.show_flash()
     st.markdown("### Production sheet")
-    st.caption("What to produce: Parent SKU → Variety → Lot → Lot size.")
+    st.caption("What to produce: one row per customer SKU name, adding up all stores in the filter.")
     res = _filtered(user, "ps")
     if res is None:
         return
@@ -101,7 +101,8 @@ def render(user: User) -> None:
         agg = agg.drop(columns=["Variety"])
     st.dataframe(agg, hide_index=True, width="stretch",
                  column_config={"Total Qty": st.column_config.NumberColumn(format="%g"),
-                                "Customer SKU Names": st.column_config.TextColumn(width="large")})
+                                "Customer SKU Name": st.column_config.TextColumn(width="large"),
+                                "Store Names": st.column_config.TextColumn(width="large")})
     _downloads("Production sheet", agg, f"production_{label}", "ps", lines)
     with st.expander("Indents included"):
         inc = summ[summ["indent_id"].isin(set(lines["indent_id"]))]

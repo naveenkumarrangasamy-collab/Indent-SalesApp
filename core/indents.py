@@ -20,7 +20,7 @@ from core import changelog, config
 from core.lots import lot_size, normalize_lot
 from core.masters import Masters
 from core.models import IndentHeader, IndentLine, IndentSnapshot, fmt_num, to_number
-from core.schema import (CHANGE_LOG, INDENT_LINES, LOTS, PO_FREEZE,
+from core.schema import (CHANGE_LOG, INDENT_LINES, LOTS, PO_FREEZE, STATUS_CANCELLED,
                          STATUS_FROZEN, STATUS_SUBMITTED)
 from core.sheets import SheetError, get_backend
 
@@ -143,12 +143,16 @@ def prepare(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def current_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """Only the rows of the current (highest) version of each indent."""
+def current_rows(df: pd.DataFrame, include_cancelled: bool = False) -> pd.DataFrame:
+    """Only the rows of the current (highest) version of each indent.
+    Cancelled (deleted) indents are left out unless asked for."""
     if df.empty:
         return df
     top = df.groupby("indent_id")["version"].transform("max")
-    return df[df["version"] == top]
+    cur = df[df["version"] == top]
+    if not include_cancelled:
+        cur = cur[cur["status"] != STATUS_CANCELLED]
+    return cur
 
 
 def summary(df: pd.DataFrame) -> pd.DataFrame:
@@ -161,7 +165,7 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
     first = (df.sort_values(["indent_id", "version", "_row"])
                .groupby("indent_id").first()[["submitted_by", "submitted_at"]]
                .rename(columns={"submitted_by": "created_by", "submitted_at": "created_at"}))
-    cur = current_rows(df)
+    cur = current_rows(df, include_cancelled=True)
     agg = (cur.sort_values("_row").groupby("indent_id")
               .agg(version=("version", "first"), status=("status", "first"),
                    delivery_date=("delivery_date", "first"), city=("city", "first"),
@@ -172,7 +176,8 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
                    last_edited_by=("submitted_by", "first")))
     out = agg.join(first).reset_index()
     out["total_amount"] = out["total_amount"].round(2)
-    out["can_edit"] = out["created_at"].map(can_edit) & (out["status"] != STATUS_FROZEN)
+    out["can_edit"] = (out["created_at"].map(can_edit)
+                       & ~out["status"].isin([STATUS_FROZEN, STATUS_CANCELLED]))
     return out.sort_values("last_edited_at", ascending=False)[cols].reset_index(drop=True)
 
 
@@ -325,6 +330,8 @@ def _check_editable(cur: IndentSnapshot | None, indent_id: str, base_version: in
         raise SheetError(f"Indent {indent_id} was not found in the sheet.")
     if cur.status == STATUS_FROZEN:
         raise FrozenError(f"{indent_id} is frozen with a PO and can no longer be changed.")
+    if cur.status == STATUS_CANCELLED:
+        raise FrozenError(f"{indent_id} was deleted and can no longer be changed.")
     if cur.version != int(base_version):
         raise ConflictError(f"{indent_id} was changed by {cur.submitted_by} at {cur.submitted_at} "
                             f"(now version {cur.version}). Open it again from My indents and "
@@ -369,7 +376,8 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
     return new_v, log_ok
 
 
-def freeze(indent_id: str, base_version: int, po_file_name: str, user: str) -> int:
+def freeze(indent_id: str, base_version: int, po_file_name: str, user: str,
+           po_file_link: str = "") -> int:
     backend = get_backend()
     df = prepare(backend.read(INDENT_LINES))
     cur = snapshot(df, indent_id)
@@ -383,7 +391,7 @@ def freeze(indent_id: str, base_version: int, po_file_name: str, user: str) -> i
     backend.append_dicts(PO_FREEZE, [{
         "indent_id": indent_id, "version": new_v, "po_file_name": po_file_name,
         "po_customer": cur.header.customer, "po_store": cur.header.store,
-        "confirmed_by": user, "confirmed_at": stamp}])
+        "confirmed_by": user, "confirmed_at": stamp, "po_file_link": po_file_link}])
     try:
         backend.append_dicts(CHANGE_LOG, changelog.to_rows(
             [{"change_type": "header_changed", "customer_sku_name": "", "field": "status",
@@ -399,3 +407,33 @@ def freeze(indent_id: str, base_version: int, po_file_name: str, user: str) -> i
 __all__ = ["find_duplicate", "DuplicateError", "edit_deadline", "can_edit", "min_delivery_date", "created_at", "CutoffError", "read_lines", "current_rows", "summary", "versions", "snapshot", "validate",
            "submit_new", "submit_update", "freeze", "next_indent_id", "build_rows",
            "ConflictError", "FrozenError", "NothingChangedError", "fmt_num"]
+
+
+def cancel(indent_id: str, base_version: int, user: str) -> int:
+    """'Delete' an indent: append a copy of the current version with status
+    Cancelled. It disappears from production, the store/date becomes free,
+    and every earlier version stays in the sheet."""
+    backend = get_backend()
+    df = prepare(backend.read(INDENT_LINES))
+    cur = snapshot(df, indent_id)
+    _check_editable(cur, indent_id, base_version)
+    created = created_at(df, indent_id)
+    if not can_edit(created):
+        raise CutoffError(f"{indent_id} can no longer be deleted: the edit window closed at "
+                          f"{edit_deadline(created):%d %b %Y, %I:%M %p}.")
+    new_v = cur.version + 1
+    stamp = config.now_iso()
+    rows = build_rows(indent_id, new_v, STATUS_CANCELLED, stamp, user, cur.header, cur.lines)
+    if not _append_verified(backend, rows, indent_id, new_v, stamp, user):
+        clear_cache()
+        raise ConflictError(f"Someone else saved {indent_id} at the same moment. Please try again.")
+    try:
+        backend.append_dicts(CHANGE_LOG, changelog.to_rows(
+            [{"change_type": "header_changed", "customer_sku_name": "", "field": "status",
+              "old_value": cur.status, "new_value": STATUS_CANCELLED}],
+            indent_id=indent_id, from_version=cur.version, to_version=new_v,
+            changed_by=user, changed_at=stamp))
+    except SheetError:
+        pass
+    clear_cache()
+    return new_v

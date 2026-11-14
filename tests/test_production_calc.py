@@ -34,22 +34,22 @@ def _lines(rows):
 BASE = dict(status="Submitted", delivery_date="2026-11-15", city="Bangalore", lot="Pcs", price="100")
 
 
-def test_aggregate_groups_by_parent_spec_lot():
+def test_aggregate_clubs_same_sku_across_stores():
     df = _lines([
-        dict(BASE, indent_id="A", version="1", customer="Zepto", parent_sku="Avocado",
+        dict(BASE, indent_id="A", version="1", customer="Zepto", store="S1", parent_sku="Avocado",
              customer_sku_name="1PC - Hass Avocado Imported", qty="30"),
-        dict(BASE, indent_id="B", version="1", customer="Swiggy", parent_sku="Avocado",
-             customer_sku_name="1PC - Nectar Avocado", qty="12"),
-        dict(BASE, indent_id="B", version="1", customer="Swiggy", parent_sku="Avocado",
-             customer_sku_name="1PC - Nectar Avocado", qty="0", lot="Box"),
+        dict(BASE, indent_id="B", version="1", customer="Zepto", store="S2", parent_sku="Avocado",
+             customer_sku_name="1PC - Hass Avocado Imported", qty="12"),
+        dict(BASE, indent_id="B", version="1", customer="Swiggy", store="S3", parent_sku="Avocado",
+             customer_sku_name="1PC - Nectar Avocado", qty="5"),
     ])
     agg = aggregate(df, _masters(), with_spec=True)
-    pcs = agg[(agg["Lot"] == "Pcs")].iloc[0]
-    assert pcs["Origin"] == "Tanzania" and pcs["Spec-Size"] == "20C, 22C"
-    assert pcs["Total Qty"] == 42
-    assert pcs["Indents"] == 2
-    assert pcs["Customer SKU Names"] == "1PC - Hass Avocado Imported, 1PC - Nectar Avocado"
-    assert set(agg["Lot"]) == {"Pcs", "Box"}
+    hass = agg[agg["Customer SKU Name"] == "1PC - Hass Avocado Imported"]
+    assert len(hass) == 1                                   # two stores -> one row
+    r = hass.iloc[0]
+    assert (r["Total Qty"], r["Stores"], r["Indents"], r["Store Names"]) == (42, 2, 2, "S1, S2")
+    assert r["Origin"] == "Tanzania" and r["Spec-Size"] == "20C, 22C" and r["City"] == "Bangalore"
+    assert len(agg) == 2
 
 
 def test_single_row_without_active_and_missing_active():

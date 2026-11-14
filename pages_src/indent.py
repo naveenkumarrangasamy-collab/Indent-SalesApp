@@ -8,7 +8,7 @@ from datetime import date
 from core import config, indents, masters
 from core.auth import User
 from core.sheets import SheetError
-from pages_src import common, delivery, items, state
+from pages_src import common, delivery, indent_actions, items, state
 
 
 @st.fragment(run_every=state.THROTTLE_SECONDS)
@@ -65,12 +65,15 @@ def _placed(user: User) -> None:
         ["delivery_date", "customer", "store"])
     if up.empty:
         return
+    up = up[up["status"] != "Cancelled"]
+    if up.empty:
+        return
     ind = state.get()
     with st.expander(f"Indents placed · {len(up)} upcoming", expanded=True, icon=":material/inventory_2:"):
-        w = [1.1, 1.0, 2.2, 1.9, 0.6, 1.0, 0.9, 0.9]
+        w = [1.0, 0.9, 2.0, 1.8, 0.5, 0.9, 0.8, 0.8, 0.9, 1.05]
         head = st.columns(w)
         for col, label in zip(head, ["Delivery", "Customer", "Store", "Indent", "Items", "Amount",
-                                     "Status", ""]):
+                                     "Status", "", "", ""]):
             col.markdown(f"<span class='mt-muted'>{label}</span>", unsafe_allow_html=True)
         for r in up.head(30).itertuples():
             c = st.columns(w, vertical_alignment="center")
@@ -83,19 +86,31 @@ def _placed(user: User) -> None:
             c[6].markdown(common.badge(r.status), unsafe_allow_html=True)
             editing = ind["mode"] == "edit" and ind["indent_id"] == r.indent_id
             ok = bool(r.can_edit)
-            why = "Frozen with a PO" if r.status == "Frozen" else "Edit window closed"
+            frozen = r.status == "Frozen"
+            why = "Frozen with a PO" if frozen else "Edit window closed"
             if c[7].button("Editing" if editing else "Edit", icon=":material/edit:",
                            key=f"home_{r.indent_id}", disabled=editing or not ok, width="stretch",
-                           help=None if ok else why):
+                           help="Open this indent to change it" if ok else why):
                 if state.has_unsaved_work():
                     st.session_state["home_open"] = r.indent_id
                 else:
                     _open(r.indent_id)
                 st.rerun()
+            if c[8].button("Delete", icon=":material/delete:", key=f"homedel_{r.indent_id}",
+                           disabled=not ok, width="stretch",
+                           help="Delete this indent (asks first)" if ok else why):
+                indent_actions.ask("delete", r.indent_id)
+            if c[9].button("PO" if not frozen else "PO done", icon=":material/upload_file:",
+                           key=f"homepo_{r.indent_id}", disabled=frozen, width="stretch",
+                           help="Upload the customer's PO (PDF) and freeze this indent"
+                           if not frozen else "PO already uploaded"):
+                indent_actions.ask("po", r.indent_id)
         if len(up) > 30:
             st.caption(f"Showing 30 of {len(up)}. See All indents for the rest.")
     if st.session_state.get("home_open"):
         _confirm_open(st.session_state["home_open"])
+    else:
+        indent_actions.show_dialog(user)
 
 
 def render(user: User) -> None:

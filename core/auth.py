@@ -185,6 +185,42 @@ def authenticate(access: pd.DataFrame, email: str, pin: str) -> LoginResult:
     return LoginResult(user, used_initial_pin=initial)
 
 
+# ---------------------------------------------------------------- sessions
+
+def _session_sig(email: str, expires: int, pin_hash: str) -> str:
+    key = ("session:" + config.pin_pepper()).encode()
+    msg = f"{email}|{expires}|{pin_hash[-16:]}".encode()
+    return base64.urlsafe_b64encode(hmac.new(key, msg, hashlib.sha256).digest()).decode().rstrip("=")
+
+
+def make_session_token(access: pd.DataFrame, email: str, days: int | None = None) -> str:
+    """Token kept in a browser cookie so a refresh does not sign the user out.
+    It is tied to the user's current PIN: changing or resetting the PIN ends it."""
+    email = norm_email(email)
+    row = access_row(access, email)
+    pin_hash = str(row.get("PIN_Hash", "")) if row is not None else ""
+    expires = int(time.time()) + 86400 * (days or config.session_days())
+    raw = f"{email}|{expires}|{_session_sig(email, expires, pin_hash)}"
+    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def user_from_session_token(access: pd.DataFrame, token: str) -> User | None:
+    """The active user for a valid, unexpired token; None otherwise."""
+    try:
+        raw = base64.urlsafe_b64decode(str(token) + "=" * (-len(str(token)) % 4)).decode()
+        email, expires_s, sig = raw.split("|")
+        expires = int(expires_s)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if expires < time.time():
+        return None
+    row = access_row(access, email)
+    pin_hash = str(row.get("PIN_Hash", "")) if row is not None else ""
+    if not hmac.compare_digest(sig, _session_sig(email, expires, pin_hash)):
+        return None
+    return resolve_user(access, email)
+
+
 # ---------------------------------------------------------------- writes
 
 def upsert_access(email: str, *, by: str, name: str | None = None, role: str | None = None,
