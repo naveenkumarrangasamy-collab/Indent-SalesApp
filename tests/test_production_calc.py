@@ -43,9 +43,9 @@ def test_aggregate_groups_by_parent_spec_lot():
         dict(BASE, indent_id="B", version="1", customer="Swiggy", parent_sku="Avocado",
              customer_sku_name="1PC - Nectar Avocado", qty="0", lot="Box"),
     ])
-    agg = aggregate(df, _masters())
+    agg = aggregate(df, _masters(), with_spec=True)
     pcs = agg[(agg["Lot"] == "Pcs")].iloc[0]
-    assert pcs["Origin"] == "Tanzania" and pcs["Size"] == "20C, 22C"
+    assert pcs["Origin"] == "Tanzania" and pcs["Spec-Size"] == "20C, 22C"
     assert pcs["Total Qty"] == 42
     assert pcs["Indents"] == 2
     assert pcs["Customer SKU Names"] == "1PC - Hass Avocado Imported, 1PC - Nectar Avocado"
@@ -59,7 +59,7 @@ def test_single_row_without_active_and_missing_active():
         dict(BASE, indent_id="A", version="1", customer="Zepto", parent_sku="Mandarin",
              customer_sku_name="3PC - Baby Orange Imported", qty="7"),
     ])
-    agg = aggregate(df, _masters()).set_index("Parent SKU")
+    agg = aggregate(df, _masters(), with_spec=True).set_index("Parent SKU")
     assert agg.loc["Kiwi", "Origin"] == NO_ORIGIN  # single row, no origin text
     assert agg.loc["Mandarin", "Origin"] == NO_ORIGIN  # two origins, none Active
 
@@ -123,3 +123,28 @@ def test_city_sku_report_and_dates():
     assert default_date(["2026-11-10"], "2026-11-16") == "2026-11-10"
     agg = aggregate(df, _masters(), with_spec=False)
     assert "Lot Size" in agg.columns
+
+
+
+def test_spec_size_column_without_origin():
+    df = _lines([
+        dict(BASE, indent_id="A", version="1", customer="Zepto", parent_sku="Avocado",
+             customer_sku_name="1PC - Hass Avocado Imported", qty="30"),
+        dict(BASE, indent_id="A", version="1", customer="Zepto", parent_sku="Kiwi",
+             customer_sku_name="2PC - Green Kiwi", qty="5"),
+    ])
+    agg = aggregate(df, _masters()).set_index("Parent SKU")
+    assert "Origin" not in agg.columns
+    assert agg.loc["Avocado", "Spec-Size"] == "20C, 22C"   # Active (Tanzania) row
+    assert agg.loc["Kiwi", "Spec-Size"] == ""              # not in Mapping Whole
+    m = _masters()
+    assert m.spec_size("Bangalore", "Zepto", "3PC - Baby Orange Imported") == ""  # 2 origins, sizes differ, none active
+
+
+def test_pdf_report():
+    from core.pdf_report import table_pdf
+    df = _lines([dict(BASE, indent_id="A", version="1", customer="Zepto", parent_sku="Avocado",
+                      customer_sku_name="1PC - Hass Avocado Imported", qty="30")])
+    pdf = table_pdf("Production sheet", ["Delivery: Mon, 16 Nov 2026 → test ₹"], aggregate(df, _masters()))
+    assert pdf[:5] == b"%PDF-" and len(pdf) > 1000
+    assert table_pdf("Empty", [], aggregate(_lines([]), _masters()))[:5] == b"%PDF-"

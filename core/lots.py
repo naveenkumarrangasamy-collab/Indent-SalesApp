@@ -11,7 +11,8 @@ import re
 # Longer spellings first so "gms" is not read as "gm" + "s".
 _UNIT_TO_LOT = [
     (("kgs", "kg"), "Kg"),
-    (("grams", "gram", "gms", "gm"), "gms"),
+    (("grams", "gram", "gms", "gm"), "Pack"),      # gram packs are shown as Pack
+    (("packs", "pack"), "Pack"),
     (("pieces", "piece", "pcs", "pc"), "Pcs"),
     (("boxes", "box"), "Box"),
     (("trays", "tray"), "Tray"),
@@ -30,7 +31,7 @@ _PACKED = re.compile(r"\d(?:[\d.,]*)\s*(?:kgs?|gms?|grams?)\s*[-–]?\s*(box(?:e
 
 
 def detect_lot(sku_name: str | None) -> str | None:
-    """Return 'Kg', 'gms', 'Pcs', 'Box' or 'Tray', or None if no unit word."""
+    """Return 'Kg', 'Pack' (gm / pack), 'Pcs', 'Box' or 'Tray', or None if no unit word."""
     if not sku_name:
         return None
     packed = _PACKED.search(str(sku_name))
@@ -48,10 +49,11 @@ def detect_lot(sku_name: str | None) -> str | None:
 _UNIT_LABEL = {"kg": "Kg", "kgs": "Kg",
                "gm": "gm", "gms": "gm", "gram": "gm", "grams": "gm",
                "pc": "Pcs", "pcs": "Pcs", "piece": "Pcs", "pieces": "Pcs",
-               "box": "Box", "boxes": "Box", "tray": "Tray", "trays": "Tray"}
+               "box": "Box", "boxes": "Box", "tray": "Tray", "trays": "Tray",
+               "pack": "Pack", "packs": "Pack"}
 _NUM = r"\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?"
 _SIZE = re.compile(
-    rf"(?<![A-Za-z\d.])({_NUM})\s*-?\s*(kgs?|gms?|grams?|pieces?|pcs?|boxes|box|trays?)(?![A-Za-z0-9])"
+    rf"(?<![A-Za-z\d.])({_NUM})\s*-?\s*(kgs?|gms?|grams?|pieces?|pcs?|boxes|box|trays?|packs?)(?![A-Za-z0-9])"
     r"(?:\s*[-–]?\s*(box(?:es)?|trays?)(?![A-Za-z0-9]))?",
     re.IGNORECASE)
 
@@ -70,3 +72,12 @@ def lot_size(sku_name: str | None) -> str:
     unit = _UNIT_LABEL[m.group(2).lower()]
     box = m.group(3)
     return f"{num} {unit}" + (f" {_UNIT_LABEL[box.lower()]}" if box else "")
+
+
+def normalize_lot(value: str | None) -> str:
+    """Lot as stored -> current lot name ('gms' saved earlier -> 'Pack')."""
+    from core.schema import LOTS
+    v = str(value or "").strip()
+    if v in LOTS:
+        return v
+    return detect_lot(v) or v

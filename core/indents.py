@@ -17,7 +17,7 @@ import pandas as pd
 import streamlit as st
 
 from core import changelog, config
-from core.lots import lot_size
+from core.lots import lot_size, normalize_lot
 from core.masters import Masters
 from core.models import IndentHeader, IndentLine, IndentSnapshot, fmt_num, to_number
 from core.schema import (CHANGE_LOG, INDENT_LINES, LOTS, PO_FREEZE,
@@ -39,6 +39,37 @@ class NothingChangedError(SheetError):
 
 class CutoffError(SheetError):
     """The edit window of the indent has closed."""
+
+
+class DuplicateError(SheetError):
+    """An indent already exists for this store and delivery date."""
+
+    def __init__(self, msg: str, indent_id: str):
+        super().__init__(msg)
+        self.indent_id = indent_id
+
+
+def _norm(v) -> str:
+    return " ".join(str(v or "").split()).casefold()
+
+
+def find_duplicate(df: pd.DataFrame, header: IndentHeader, exclude_id: str = "") -> str | None:
+    """The indent already placed for the same store (city + customer + store)
+    and delivery date, if any. Only current versions count."""
+    if df is None or df.empty or not (header.delivery_date and header.store):
+        return None
+    cur = current_rows(df)
+    m = cur[(cur["delivery_date"].astype(str) == header.delivery_date)
+            & (cur["store"].map(_norm) == _norm(header.store))
+            & (cur["customer"].map(_norm) == _norm(header.customer))
+            & (cur["city"].map(_norm) == _norm(header.city))
+            & (cur["indent_id"] != exclude_id)]
+    return None if m.empty else str(m["indent_id"].iloc[0])
+
+
+def duplicate_message(indent_id: str, header: IndentHeader) -> str:
+    return (f"An indent for {header.store} on {header.delivery_date} is already placed "
+            f"({indent_id}). Only one indent per store per delivery date: edit that one instead.")
 
 
 # ----------------------------------------------------------- time rules
@@ -108,6 +139,7 @@ def prepare(df: pd.DataFrame) -> pd.DataFrame:
     df["version"] = pd.to_numeric(df["version"], errors="coerce").fillna(0).astype(int)
     for c in ("qty", "price", "amount"):
         df[c] = df[c].map(to_number)
+    df["lot"] = df["lot"].map(normalize_lot)  # rows saved as "gms" read as "Pack"
     return df
 
 
@@ -186,6 +218,9 @@ def validate(header: IndentHeader, lines: list[IndentLine], m: Masters,
         errors.append("Delivery details missing: " + ", ".join(missing) + ".")
     if min_date and header.delivery_date and header.delivery_date < min_date.isoformat():
         errors.append(f"Delivery date must be on or after {min_date:%d %b %Y}.")
+    start, end = config.delivery_window()
+    if header.expected_time and not start <= header.expected_time <= end:
+        errors.append(f"Expected delivery time must be between {start} and {end}.")
     if header.city and header.customer and header.store:
         if header.store not in m.stores_for(header.city, header.customer):
             errors.append(f"Store '{header.store}' is not mapped to {header.customer} in {header.city}.")
@@ -270,6 +305,9 @@ def submit_new(header: IndentHeader, lines: list[IndentLine], user: str) -> str:
     backend = get_backend()
     for _ in range(3):
         df = prepare(backend.read(INDENT_LINES))
+        dup = find_duplicate(df, header)
+        if dup:
+            raise DuplicateError(duplicate_message(dup, header), dup)
         now = config.now_ist()
         indent_id = next_indent_id(df["indent_id"], header.city, now.date())
         stamp = now.isoformat()
@@ -307,6 +345,9 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
                           f"{edit_deadline(created):%d %b %Y, %I:%M %p}.")
     if header.delivery_date < min_delivery_date(created).isoformat():
         raise SheetError(f"The delivery date must be on or after {min_delivery_date(created):%d %b %Y}.")
+    dup = find_duplicate(df, header, exclude_id=indent_id)
+    if dup:
+        raise DuplicateError(duplicate_message(dup, header), dup)
     changes = changelog.diff(cur.header, cur.lines, header, lines)
     if not changes:
         raise NothingChangedError("Nothing changed compared with the saved version.")
@@ -355,6 +396,6 @@ def freeze(indent_id: str, base_version: int, po_file_name: str, user: str) -> i
     return new_v
 
 
-__all__ = ["edit_deadline", "can_edit", "min_delivery_date", "created_at", "CutoffError", "read_lines", "current_rows", "summary", "versions", "snapshot", "validate",
+__all__ = ["find_duplicate", "DuplicateError", "edit_deadline", "can_edit", "min_delivery_date", "created_at", "CutoffError", "read_lines", "current_rows", "summary", "versions", "snapshot", "validate",
            "submit_new", "submit_update", "freeze", "next_indent_id", "build_rows",
            "ConflictError", "FrozenError", "NothingChangedError", "fmt_num"]

@@ -97,6 +97,21 @@ def secret_names() -> list[str]:
     return sorted(_secrets().keys())
 
 
+DEFAULT_APPLE_VARIETIES = ["Gala", "Granny Smith", "Queen", "RD", "Pink Lady", "Crispy Pink",
+                           "Braeburn", "Sonya", "Fuji", "Jazz"]
+
+
+def variety_parents() -> list[str]:
+    """Only these parent SKUs ask for a variety (default: Apple)."""
+    v = get("variety_parents", ["Apple"])
+    return [str(x) for x in (v if isinstance(v, (list, tuple)) else [v])]
+
+
+def delivery_window() -> tuple[str, str]:
+    """Earliest and latest expected delivery time (HH:MM), default 10 AM-8 PM."""
+    return str(get("delivery_from", "10:00")), str(get("delivery_to", "20:00"))
+
+
 def show_spec() -> bool:
     """Origin / size are not used for now (set show_spec = true to bring them back)."""
     return bool(get("show_spec", False))

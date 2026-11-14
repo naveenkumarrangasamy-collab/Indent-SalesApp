@@ -8,6 +8,7 @@ import streamlit as st
 
 from core import config, indents, masters
 from core.auth import User
+from core.pdf_report import table_pdf
 from core.production_calc import (aggregate, city_sku_report, default_date,
                                   delivery_dates, filter_lines)
 from core.sheets import SheetError
@@ -69,6 +70,8 @@ def _filtered(user: User, prefix: str):
     label = "_".join(x for x in ("all-dates" if d == ALL_DATES else d,
                                  "" if city == "All cities" else city,
                                  "" if cust == "All customers" else cust) if x)
+    st.session_state[f"{prefix}_desc"] = (f"Delivery: {_fmt_date(d)}   City: {city}   Customer: {cust}   "
+                                         f"Scope: {scope}")
     if lines.empty:
         st.info("No indents for these filters.")
         return None
@@ -94,11 +97,12 @@ def render(user: User) -> None:
         common.sheet_error(e)
         return
     agg = aggregate(lines, m, with_spec=config.show_spec())
+    if not agg["Variety"].astype(bool).any():
+        agg = agg.drop(columns=["Variety"])
     st.dataframe(agg, hide_index=True, width="stretch",
                  column_config={"Total Qty": st.column_config.NumberColumn(format="%g"),
                                 "Customer SKU Names": st.column_config.TextColumn(width="large")})
-    st.download_button("⬇ Download CSV", agg.to_csv(index=False).encode("utf-8"),
-                       file_name=f"production_{label}.csv", mime="text/csv")
+    _downloads("Production sheet", agg, f"production_{label}", "ps", lines)
     with st.expander("Indents included"):
         inc = summ[summ["indent_id"].isin(set(lines["indent_id"]))]
         st.dataframe(pd.DataFrame({
@@ -116,7 +120,11 @@ def render_city_sku(user: User) -> None:
     if res is None:
         return
     lines, _, label = res
-    rep = city_sku_report(lines)
+    try:
+        m = masters.load_masters()
+    except SheetError:
+        m = None
+    rep = city_sku_report(lines, m)
     for city, part in rep.groupby("City", sort=False):
         by_lot = part.groupby("Lot")["Qty"].sum()
         st.markdown(f"**{city}** · {len(part)} SKUs · "
@@ -125,5 +133,22 @@ def render_city_sku(user: User) -> None:
     st.dataframe(show, hide_index=True, width="stretch",
                  column_config={"Qty": st.column_config.NumberColumn(format="%g"),
                                 "Customer SKU Name": st.column_config.TextColumn(width="large")})
-    st.download_button("⬇ Download CSV", rep.to_csv(index=False).encode("utf-8"),
-                       file_name=f"city_sku_{label}.csv", mime="text/csv")
+    _downloads("City / SKU report", show, f"city_sku_{label}", "cs", lines)
+
+
+def _downloads(title: str, table: pd.DataFrame, fname: str, prefix: str, lines: pd.DataFrame) -> None:
+    """CSV and PDF of the report on screen."""
+    now = config.now_ist().strftime("%d %b %Y, %I:%M %p")
+    sub = [st.session_state.get(f"{prefix}_desc", ""),
+           f"{lines['indent_id'].nunique()} indents, {lines['store'].nunique()} stores, "
+           f"{len(lines)} lines.   Generated {now} IST."]
+    c = st.columns([1, 1, 4])
+    c[0].download_button("CSV", table.to_csv(index=False).encode("utf-8"), file_name=f"{fname}.csv",
+                         mime="text/csv", icon=":material/download:", width="stretch")
+    try:
+        pdf = table_pdf(title, sub, table, footer=f"MT Indent - {title}")
+    except Exception as e:  # never block the CSV because of the PDF
+        c[2].caption(f"PDF could not be made: {e}")
+        return
+    c[1].download_button("PDF", pdf, file_name=f"{fname}.pdf", mime="application/pdf",
+                         icon=":material/picture_as_pdf:", width="stretch")

@@ -100,7 +100,20 @@ class Masters:
         r = rows.iloc[0]
         return r.get("Spec-Origin", ""), r.get("Spec-Size", "")
 
+    def spec_size(self, city: str, customer: str, sku_name: str) -> str:
+        """Spec-Size from Mapping Whole: the Active origin's size; when no row
+        is Active but every origin has the same size, that size."""
+        size = self.spec(city, customer, sku_name)[1]
+        if size:
+            return size
+        df = self._sku_for(city, customer)
+        df = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
+        sizes = {str(v).strip() for v in df["Spec-Size"] if str(v).strip()}
+        return sizes.pop() if len(sizes) == 1 else ""
+
     def default_variety(self, city: str, customer: str, sku_name: str) -> str:
+        if not self.varieties_for(self.parent_of(city, customer, sku_name)):
+            return ""
         df = self._sku_for(city, customer)
         df = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
         vals = [v for v in df.get("Variety", pd.Series(dtype=str)) if v]
@@ -118,9 +131,17 @@ class Masters:
         return detect_lot(sku_name) or ""
 
     def varieties_for(self, parent: str) -> list[str]:
+        """Varieties only for the variety parents (Apple); none for anything else.
+        Apple uses the sheet's list ('Apple Varity' tab etc.), or the default list
+        when the sheet has none."""
+        if _key(parent) not in {_key(p) for p in config.variety_parents()}:
+            return []
         df = self.varieties
         df = df[df["Parent SKU"].map(_key) == _key(parent)]
-        return _unique_in_order(df["Variety"])
+        found = _unique_in_order(df["Variety"])
+        if not found and _key(parent) == "apple":
+            found = list(config.DEFAULT_APPLE_VARIETIES)
+        return found
 
     def needs_variety(self, parent: str) -> bool:
         return bool(self.varieties_for(parent))

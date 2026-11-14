@@ -119,7 +119,8 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
     st.session_state["mi_created_at"] = created
     open_ = indents.can_edit(created)
     deadline = indents.edit_deadline(created).strftime("%d %b %Y, %I:%M %p") if created else ""
-    _line_rows(cur, user, editable=open_ and not frozen)
+    why = ("Frozen with a PO" if frozen else f"Edit window closed at {deadline}") if (frozen or not open_) else ""
+    _line_rows(cur, user, editable=open_ and not frozen, why=why)
     confirm = st.session_state.get("mi_confirm")
     if confirm and confirm[0] == indent_id:
         load_v = confirm[1]
@@ -137,7 +138,8 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
         st.info(f"The edit window closed at {deadline}. This indent can no longer be changed.")
     else:
         c = st.columns([1, 3])
-        if c[0].button("✏️ Correct this indent", type="primary"):
+        if c[0].button("Edit whole indent", icon=":material/edit_note:", type="primary",
+                       help="Open the indent on the Indent page to change delivery details or add items"):
             _request_open(cur)
         c[1].caption(f"Editable until **{deadline}**.")
 
@@ -165,7 +167,8 @@ def _versions(df: pd.DataFrame, cur, frozen: bool) -> None:
         c[3].write(v["submitted_by"])
         c[4].write(str(v["lines"]))
         c[5].write(f"{v['amount']:,.2f}")
-        if c[6].button("Load", key=f"load_{cur.indent_id}_{v['version']}", disabled=frozen,
+        if c[6].button("Load", icon=":material/history:", key=f"load_{cur.indent_id}_{v['version']}",
+                       disabled=frozen,
                        help="Copy this version into the form. It is saved only when you press Update."):
             _request_open(cur, indents.snapshot(df, cur.indent_id, int(v["version"])))
     if total > MAX_VERSIONS_SHOWN:
@@ -241,10 +244,10 @@ def _po(cur, user: User) -> None:
 
 # ------------------------------------------------------------ per-line edit / delete
 
-_W = [1.0, 2.6, 0.9, 0.6, 0.9, 0.6, 0.8, 0.9, 0.5, 0.5]
+_W = [1.0, 2.5, 0.9, 0.6, 0.9, 0.6, 0.8, 0.9, 0.85, 0.95]
 
 
-def _line_rows(cur, user: User, editable: bool) -> None:
+def _line_rows(cur, user: User, editable: bool, why: str = "") -> None:
     has_variety = any(x.variety for x in cur.lines)
     head = st.columns(_W)
     labels = ["Parent SKU", "Customer SKU Name", "Variety" if has_variety else "", "Lot", "Lot Size",
@@ -262,13 +265,16 @@ def _line_rows(cur, user: User, editable: bool) -> None:
                       unsafe_allow_html=True)
         c[6].markdown(f"<span class='num'>{x.price:,.2f}</span>", unsafe_allow_html=True)
         c[7].markdown(f"<span class='num'>{x.amount:,.2f}</span>", unsafe_allow_html=True)
-        if editable:
-            if c[8].button("✏️", key=f"le_{cur.indent_id}_{i}", help="Edit this item"):
-                st.session_state["mi_line"] = ("edit", cur.indent_id, cur.version, x.customer_sku_name)
-                st.rerun()
-            if c[9].button("🗑", key=f"ld_{cur.indent_id}_{i}", help="Delete this item"):
-                st.session_state["mi_line"] = ("delete", cur.indent_id, cur.version, x.customer_sku_name)
-                st.rerun()
+        if c[8].button("Edit", icon=":material/edit:", key=f"le_{cur.indent_id}_{i}",
+                       disabled=not editable, width="stretch",
+                       help="Edit qty, price or variety of this item" if editable else why):
+            st.session_state["mi_line"] = ("edit", cur.indent_id, cur.version, x.customer_sku_name)
+            st.rerun()
+        if c[9].button("Delete", icon=":material/delete:", key=f"ld_{cur.indent_id}_{i}",
+                       disabled=not editable, width="stretch",
+                       help="Remove this item from the indent" if editable else why):
+            st.session_state["mi_line"] = ("delete", cur.indent_id, cur.version, x.customer_sku_name)
+            st.rerun()
     st.caption(f"{len(cur.lines)} item(s) · Total amount ₹ {cur.total_amount:,.2f}"
                + ("" if editable else " · read-only"))
     action = st.session_state.get("mi_line")

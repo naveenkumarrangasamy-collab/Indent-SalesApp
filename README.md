@@ -11,22 +11,25 @@ Built from `MT_INDENT_BUILD_SPEC.md`, with one change: users sign in with their 
 | Sign in | everyone | Email + PIN. Users who are not in `Access` or are revoked are blocked. 5 wrong PINs lock the email for 15 min. |
 | Indent | everyone | Step 1 delivery details, step 2 items. Draft autosaves to the `Drafts` tab and is restored at the next sign-in. |
 | My indents (All indents for the owner) | everyone | List, open, correct (new version), last 10 versions with Load, change log, PO upload and freeze. |
-| City / SKU report | everyone | Total qty per City → Customer → SKU with lot and lot size, CSV download. |
-| Production sheet | everyone | Totals by Parent SKU → Variety → Spec (active origin, size) → Lot for a delivery date and city, with CSV download. Sales see their own indents; the owner sees all. |
+| City / SKU report | everyone | Total qty per City → Customer → SKU with lot, lot size and Spec-Size; PDF and CSV. |
+| Production sheet | everyone | Totals by Parent SKU → Variety → Lot → Lot size → Spec-Size for a delivery date, city and customer; PDF and CSV. Sales see their own indents; the owner sees all. |
 | Access | owner | Add users with an initial PIN, reset PINs, revoke/restore, change role, create missing tabs, SKU-mapping source and master-data checks. |
 
 Every user can change their own PIN from the sidebar.
 
 ### Rules on the Indent screens
 
+- **One indent per store per delivery date.** Choosing a store and date that already have an indent shows it, blocks Continue and offers **Edit IND-…** instead; a correction cannot be moved onto another indent's store and date either.
 - **Delivery date** must be after today (corrections: after the day the indent was created).
-- **Expected delivery time**: pick a 30-minute slot, or type any time (6:45 PM, 18:45) and press Enter.
-- **Qty** is a whole number only. **Lot** (Kg, Pcs, gms, Box, Tray) and **Lot size** (e.g. "2 Pcs", "200 gm", "17.5 Kg Box") come from the customer SKU name and cannot be edited; Lot size is also saved in Indent_Lines.
-- **All indents**: each item has ✏️ Edit (qty, price, variety) and 🗑 Delete, both with a confirmation; each saves a new version and a Change_Log entry (within the edit window).
+- **Expected delivery time**: 10:00 AM to 8:00 PM. Pick a 30-minute slot, or type a time in that range (6:45 PM, 18:45) and press Enter. Change with `delivery_from` / `delivery_to` in the secrets.
+- **Qty** is a whole number only. **Lot** (Kg, Pcs, Pack for gm packs, Box, Tray) and **Lot size** (e.g. "2 Pcs", "200 gm", "17.5 Kg Box") come from the customer SKU name and cannot be edited; Lot size is also saved in Indent_Lines.
+- **Variety** is asked only for **Apple** (`variety_parents` in the secrets). The list comes from the *Apple Varity* tab; while that tab is empty, the standard list is used (Gala, Granny Smith, Queen, RD, Pink Lady, Crispy Pink, Braeburn, Sonya, Fuji, Jazz).
+- **Home screen** (Indent page) lists the indents already placed from today on: delivery date, customer, store, indent, items, amount, status, with **Edit**.
+- **All indents**: each item has **Edit** (qty, price, variety) and **Delete** buttons, both with a confirmation; each saves a new version and a Change_Log entry (within the edit window).
 - **Submit / Update** opens a review box with everything entered (and, for corrections, the list of changes); nothing is saved until **Confirm**.
 - **Removing an item, clearing the form or discarding changes** asks for confirmation first.
 - **Edit window**: an indent can be corrected until **12:00 PM IST the day after it was created** (created 14 Nov 6:20 PM → editable until 15 Nov 12:00 PM). After that, Correct/Load/Update are disabled and the save is refused. Change with `edit_cutoff_days` / `edit_cutoff_hour` in the secrets.
-- **Spec** (origin / size) is switched off for now: not shown, and the production sheet groups by Parent SKU → Variety → Lot. Set `show_spec = true` in the secrets to bring it back.
+- **Spec-Size** (from *Mapping Whole*, the active origin's size) is a column on both production reports. Origin itself stays hidden. Set `show_spec = true` in the secrets to bring it back.
 - If the app is **not connected to the Google Sheet** (secrets missing or wrong), every page shows a red banner with the exact reason.
 
 ### Where to see all indents and their edit history

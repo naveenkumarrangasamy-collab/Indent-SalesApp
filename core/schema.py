@@ -43,7 +43,7 @@ MASTER_TABS = [SKU_MAP, STORE_MAP, VARIETIES, ACCESS]
 OUTPUT_TABS = [INDENT_LINES, CHANGE_LOG, PO_FREEZE, DRAFTS]
 
 DEFAULT_CUSTOMERS = ["Swiggy", "Zomato", "Zepto", "Firstclub", "Namdhari"]
-LOTS = ["Kg", "Pcs", "Tray", "Box", "gms"]
+LOTS = ["Kg", "Pcs", "Tray", "Box", "Pack"]  # "Pack" = gram packs (was "gms")
 
 STATUS_SUBMITTED = "Submitted"
 STATUS_FROZEN = "Frozen"

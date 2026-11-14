@@ -5,7 +5,9 @@ from datetime import date, time
 
 import streamlit as st
 
+from core import config, indents
 from core.masters import Masters
+from core.sheets import SheetError
 from pages_src import common, state
 
 
@@ -62,7 +64,18 @@ def _index(options: list[str], value: str) -> int | None:
     return options.index(value) if value in options else None
 
 
-TIME_SLOTS = [f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 30)]
+def _slots() -> list[str]:
+    start, end = config.delivery_window()
+    out = []
+    for h in range(24):
+        for mm in (0, 30):
+            t = f"{h:02d}:{mm:02d}"
+            if start <= t <= end:
+                out.append(t)
+    return out
+
+
+TIME_SLOTS = _slots()  # 10:00 AM ... 8:00 PM in 30-minute steps
 
 
 def parse_time(text: str) -> str | None:
@@ -91,9 +104,13 @@ def _on_time(key: str) -> None:
         state.set_header_field("expected_time", "")
         return
     parsed = raw if raw in TIME_SLOTS else parse_time(raw)
+    start, end = config.delivery_window()
     if parsed is None:
         common.flash("error", f"'{raw}' is not a time. Type it like 6:45 PM or 18:45, "
                               "or pick a slot from the list.")
+    elif not start <= parsed <= end:
+        common.flash("error", f"{fmt_slot(parsed)} is outside delivery hours "
+                              f"({fmt_slot(start)} to {fmt_slot(end)}).")
     else:
         state.set_header_field("expected_time", parsed)
     _bump()
@@ -124,8 +141,10 @@ def _drop_stale(m: Masters) -> None:
     if h.get("store") and h["store"] not in m.stores_for(h.get("city", ""), h.get("customer", "")):
         dropped.append(h["store"])
         h["store"] = ""
-    if h.get("expected_time") and parse_time(h["expected_time"]) != h["expected_time"]:
-        h["expected_time"] = ""  # not a valid HH:MM (typed custom times are kept)
+    start, end = config.delivery_window()
+    t = h.get("expected_time")
+    if t and (parse_time(t) != t or not start <= t <= end):
+        h["expected_time"] = ""  # invalid or outside delivery hours (typed in-range times are kept)
     if dropped:
         if ind["lines"]:
             state.set_lines([], structural=True)
@@ -133,6 +152,39 @@ def _drop_stale(m: Masters) -> None:
         _bump()
         st.info("Your saved draft used " + ", ".join(dropped)
                 + ", which is no longer in the Google Sheet, so it was cleared. Please choose again.")
+
+
+def _open_existing(indent_id: str) -> None:
+    df = indents.read_lines(fresh=True)
+    cur = indents.snapshot(df, indent_id)
+    if cur is None:
+        return
+    state.open_for_edit(cur, None, created_at=indents.created_at(df, indent_id))
+    common.flash("info", f"{indent_id} opened for editing. Change what you need, then press Update indent.")
+
+
+def _duplicate_notice(hdr) -> bool:
+    """Warn (and return True) when this store already has an indent that day."""
+    if not (hdr.delivery_date and hdr.store):
+        return False
+    try:
+        df = indents.read_lines()
+    except SheetError:
+        return False
+    ind = state.get()
+    dup = indents.find_duplicate(df, hdr, exclude_id=ind["indent_id"] if ind["mode"] == "edit" else "")
+    if not dup:
+        return False
+    cur = indents.snapshot(df, dup)
+    created = indents.created_at(df, dup)
+    st.warning(indents.duplicate_message(dup, hdr))
+    if cur is not None and cur.status != "Frozen" and indents.can_edit(created):
+        st.button(f"Edit {dup}", icon=":material/edit:", on_click=_open_existing, args=(dup,),
+                  type="primary",
+                  help="Opens the existing indent; anything entered here for a new indent is replaced.")
+    else:
+        st.caption(f"{dup} can no longer be edited (frozen with a PO or past its edit window).")
+    return True
 
 
 def render(m: Masters) -> None:
@@ -182,7 +234,8 @@ def render(m: Masters) -> None:
     c5.selectbox("Expected delivery time", slots, index=_index(slots, hdr.expected_time), key=k,
                  format_func=fmt_slot, placeholder="Pick a slot or type e.g. 6:45 PM",
                  accept_new_options=True, on_change=_on_time, args=(k,),
-                 help="Pick a 30-minute slot, or type any time (6:45 PM, 18:45) and press Enter")
+                 help="Between 10:00 AM and 8:00 PM. Pick a 30-minute slot, or type a time "
+                      "(6:45 PM, 18:45) and press Enter")
 
     if hdr.city and hdr.customer:
         pending = []
@@ -197,6 +250,8 @@ def render(m: Masters) -> None:
     missing = hdr.missing()
     if hdr.delivery_date and hdr.delivery_date < min_d.isoformat():
         missing = missing + [f"a delivery date from {min_d:%d %b %Y}"]
+    if _duplicate_notice(hdr):
+        missing = missing + ["a store / date without an indent"]
     if st.button("Continue →", type="primary", disabled=bool(missing)):
         state.set_step("items")
         st.rerun()

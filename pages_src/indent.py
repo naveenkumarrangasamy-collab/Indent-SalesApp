@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core import masters
+from datetime import date
+
+from core import config, indents, masters
 from core.auth import User
 from core.sheets import SheetError
 from pages_src import common, delivery, items, state
@@ -21,8 +23,84 @@ def _autosave_tick() -> None:
         st.caption(f"Autosaved {saved[11:19]}")
 
 
+def _fmt_d(iso: str) -> str:
+    try:
+        return date.fromisoformat(iso).strftime("%a, %d %b")
+    except ValueError:
+        return iso
+
+
+def _open(indent_id: str) -> None:
+    df = indents.read_lines(fresh=True)
+    cur = indents.snapshot(df, indent_id)
+    if cur is not None:
+        state.open_for_edit(cur, None, created_at=indents.created_at(df, indent_id))
+        common.flash("info", f"{indent_id} opened for editing. Change what you need, then press Update indent.")
+
+
+@st.dialog("Replace the form?", dismissible=False)
+def _confirm_open(indent_id: str) -> None:
+    st.write(f"You have unsaved entries on this page. Opening **{indent_id}** will replace them.")
+    c = st.columns(2)
+    if c[0].button("Open " + indent_id, type="primary", width="stretch"):
+        st.session_state.pop("home_open", None)
+        _open(indent_id)
+        st.rerun()
+    if c[1].button("Cancel", width="stretch"):
+        st.session_state.pop("home_open", None)
+        st.rerun()
+
+
+def _placed(user: User) -> None:
+    """Home screen: indents already placed for today onwards (customer, store, date)."""
+    try:
+        df = indents.read_lines()
+    except SheetError:
+        return
+    summ = indents.summary(df)
+    if not user.is_owner:
+        summ = summ[summ["created_by"].str.lower() == user.email]
+    today = config.now_ist().date().isoformat()
+    up = summ[summ["delivery_date"].astype(str) >= today].sort_values(
+        ["delivery_date", "customer", "store"])
+    if up.empty:
+        return
+    ind = state.get()
+    with st.expander(f"Indents placed · {len(up)} upcoming", expanded=True, icon=":material/inventory_2:"):
+        w = [1.1, 1.0, 2.2, 1.9, 0.6, 1.0, 0.9, 0.9]
+        head = st.columns(w)
+        for col, label in zip(head, ["Delivery", "Customer", "Store", "Indent", "Items", "Amount",
+                                     "Status", ""]):
+            col.markdown(f"<span class='mt-muted'>{label}</span>", unsafe_allow_html=True)
+        for r in up.head(30).itertuples():
+            c = st.columns(w, vertical_alignment="center")
+            c[0].write(_fmt_d(r.delivery_date))
+            c[1].write(r.customer)
+            c[2].write(r.store)
+            c[3].write(r.indent_id)
+            c[4].write(str(r.lines))
+            c[5].markdown(f"<span class='num'>₹ {r.total_amount:,.0f}</span>", unsafe_allow_html=True)
+            c[6].markdown(common.badge(r.status), unsafe_allow_html=True)
+            editing = ind["mode"] == "edit" and ind["indent_id"] == r.indent_id
+            ok = bool(r.can_edit)
+            why = "Frozen with a PO" if r.status == "Frozen" else "Edit window closed"
+            if c[7].button("Editing" if editing else "Edit", icon=":material/edit:",
+                           key=f"home_{r.indent_id}", disabled=editing or not ok, width="stretch",
+                           help=None if ok else why):
+                if state.has_unsaved_work():
+                    st.session_state["home_open"] = r.indent_id
+                else:
+                    _open(r.indent_id)
+                st.rerun()
+        if len(up) > 30:
+            st.caption(f"Showing 30 of {len(up)}. See All indents for the rest.")
+    if st.session_state.get("home_open"):
+        _confirm_open(st.session_state["home_open"])
+
+
 def render(user: User) -> None:
     common.show_flash()
+    _placed(user)
     try:
         m = masters.load_masters()
     except SheetError as e:

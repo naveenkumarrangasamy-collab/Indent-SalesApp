@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from core import config
 
 TOMORROW = (config.now_ist().date() + timedelta(days=1)).isoformat()
-H = IndentHeader(TOMORROW, "Bangalore", "Zepto", "Store A", "07:00")
+H = IndentHeader(TOMORROW, "Bangalore", "Zepto", "Store A", "10:30")
 HASS = IndentLine("Avocado", "1PC - Hass Avocado Imported", "", "Pcs", 30, 120)
 BLUE = IndentLine("Blueberry", "1PC - Blueberry Imported", "", "Pcs", 10, 300)
 
@@ -34,7 +34,10 @@ def test_submit_writes_version_1(backend):
     assert len(df) == 2 and set(df["version"]) == {1} and set(df["status"]) == {"Submitted"}
     assert df["amount"].tolist() == [3600, 3000]
     assert df["submitted_at"].iloc[0].endswith("+05:30")
-    assert indents.submit_new(H, [HASS], "s@x.com").endswith("-0002")
+    with pytest.raises(indents.DuplicateError):  # same store + date
+        indents.submit_new(H, [HASS], "s@x.com")
+    other_store = IndentHeader(**{**H.to_dict(), "store": "Store B"})
+    assert indents.submit_new(other_store, [HASS], "s@x.com").endswith("-0002")
 
 
 def test_update_appends_version_and_change_log(backend):
@@ -90,8 +93,8 @@ def test_lost_race_removes_own_rows_and_retries(backend, monkeypatch):
     def racing_append(tab, dicts):
         if tab == INDENT_LINES and not state["done"]:
             state["done"] = True
-            other = [dict(d, submitted_by="other@x.com", submitted_at="2026-11-14T10:00:00+05:30")
-                     for d in dicts]
+            other = [dict(d, submitted_by="other@x.com", submitted_at="2026-11-14T10:00:00+05:30",
+                          store="Store Z") for d in dicts]
             real_append(tab, other)
         return real_append(tab, dicts)
 
@@ -209,3 +212,43 @@ def test_typed_time_survives_stale_check():
     for t in ("18:45", "07:10", "00:00"):
         assert parse_time(t) == t  # what _drop_stale relies on to keep typed times
     assert parse_time("11:01") == "11:01"
+
+
+def test_one_indent_per_store_per_date_and_update_cannot_collide(backend):
+    a = indents.submit_new(H, [HASS], "s@x.com")
+    b_hdr = IndentHeader(**{**H.to_dict(), "store": "Store B"})
+    b = indents.submit_new(b_hdr, [HASS], "s@x.com")
+    # moving B onto A's store and date is refused; A itself can still be edited
+    with pytest.raises(indents.DuplicateError) as e:
+        indents.submit_update(b, 1, H, [HASS], "s@x.com")
+    assert e.value.indent_id == a
+    v, _ = indents.submit_update(a, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 31})], "s@x.com")
+    assert v == 2
+    df = indents.read_lines(fresh=True)
+    assert indents.find_duplicate(df, H) == a
+    assert indents.find_duplicate(df, H, exclude_id=a) is None
+    later = IndentHeader(**{**H.to_dict(), "delivery_date": "2099-01-01"})
+    assert indents.find_duplicate(df, later) is None
+
+
+def test_delivery_window_and_pack_lot(backend):
+    m = _masters()
+    early = IndentHeader(**{**H.to_dict(), "expected_time": "07:00"})
+    assert any("between 10:00 and 20:00" in e for e in indents.validate(early, [HASS], m))
+    late = IndentHeader(**{**H.to_dict(), "expected_time": "20:30"})
+    assert any("between" in e for e in indents.validate(late, [HASS], m))
+    # rows saved earlier with lot "gms" read back as "Pack"
+    gms = IndentLine("Grapes", "200gm - Crimson grapes", "", "gms", 5, 10)
+    iid = indents.submit_new(H, [gms], "s@x.com")
+    assert indents.snapshot(indents.read_lines(fresh=True), iid).lines[0].lot == "Pack"
+
+
+def test_variety_only_for_apple():
+    m = _masters()
+    import pandas as pd
+    from core.schema import VARIETIES
+    m.varieties = pd.concat([m.varieties, pd.DataFrame([["Kiwi", "Gold"]], columns=TABS[VARIETIES])])
+    assert m.varieties_for("Kiwi") == [] and not m.needs_variety("Kiwi")
+    assert m.varieties_for("Apple") == ["Queen", "Gala"]
+    m.varieties = m.varieties[m.varieties["Parent SKU"] != "Apple"]
+    assert m.varieties_for("Apple")[:3] == ["Gala", "Granny Smith", "Queen"]  # default list

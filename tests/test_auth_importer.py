@@ -145,7 +145,7 @@ def test_masters_built_live_and_lot_is_fixed():
     assert source.startswith("live")
     assert m.parents("Bangalore", "Zepto") == ["Apple", "Avocado", "Kiwi", "Litchi", "Mandarin"]
     assert m.spec("Bangalore", "Zepto", "1PC - Hass Avocado Imported") == ("Tanzania", "20C")
-    assert m.lot_for("Bangalore", "Zepto", "200gm - Litchi Imported (Longan)") == "gms"
+    assert m.lot_for("Bangalore", "Zepto", "200gm - Litchi Imported (Longan)") == "Pack"
     assert m.lot_for("Bangalore", "Zepto", "1PC - Hass Avocado Imported") == "Pcs"
     assert m.lot_for("Bangalore", "Zepto", "Apple Royal Gala - PTP STD Lot") == ""  # no unit, no Lot column
     assert m.varieties_for("Apple") == ["Gala", "Fuji"]

@@ -36,6 +36,11 @@ def fmt_num(v) -> str:
     return f"{n:.3f}".rstrip("0").rstrip(".")
 
 
+def _lot(v) -> str:
+    from core.lots import normalize_lot
+    return normalize_lot(v)
+
+
 @dataclass
 class IndentHeader:
     delivery_date: str = ""   # YYYY-MM-DD
@@ -88,7 +93,7 @@ class IndentLine:
             parent_sku=str(d.get("parent_sku", "") or ""),
             customer_sku_name=str(d.get("customer_sku_name", "") or ""),
             variety=str(d.get("variety", "") or ""),
-            lot=str(d.get("lot", "") or ""),
+            lot=_lot(d.get("lot", "")),
             qty=to_number(d.get("qty")),
             price=to_number(d.get("price")),
         )

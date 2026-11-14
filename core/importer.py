@@ -11,7 +11,7 @@ Sources in the Google Sheet (read on every master-data refresh, never changed):
 
 Optional columns the team can add (matched by header name, any position):
 - "Lot" or "UOM" in either tab: fixes the lot for that SKU name
-  (Kg, Pcs, Tray, Box, gms). Without it the lot comes from the SKU name.
+  (Kg, Pcs, Tray, Box, Pack). Without it the lot comes from the SKU name.
 - "Active" in Mapping Whole: Y for the origin being sourced. Without it,
   Tanzania (Avocado), Peru (Blueberry) and RSA (Mandarin) are active, and a
   SKU with a single origin row is active.

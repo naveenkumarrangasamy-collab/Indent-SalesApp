@@ -13,31 +13,45 @@ from core.lots import lot_size
 from core.masters import Masters
 from core.models import fmt_num, to_number
 
-OUTPUT_COLUMNS = ["Parent SKU", "Variety", "Origin", "Size", "Lot", "Lot Size", "Total Qty",
+OUTPUT_COLUMNS = ["Parent SKU", "Variety", "Origin", "Lot", "Lot Size", "Spec-Size", "Total Qty",
                   "Lines", "Indents", "Customer SKU Names"]
 
 CITY_SKU_COLUMNS = ["City", "Customer", "Parent SKU", "Customer SKU Name", "Variety", "Lot",
-                    "Lot Size", "Qty", "Indents", "Stores"]
+                    "Lot Size", "Spec-Size", "Qty", "Indents", "Stores"]
 
 NO_ORIGIN = "(origin not set)"
 
 
-def aggregate(lines: pd.DataFrame, masters: Masters, with_spec: bool = True) -> pd.DataFrame:
-    """Group by Parent SKU > Variety > (Origin, Size if with_spec) > Lot."""
-    cols = OUTPUT_COLUMNS if with_spec else [c for c in OUTPUT_COLUMNS if c not in ("Origin", "Size")]
-    if lines is None or lines.empty:
-        return pd.DataFrame(columns=cols)
+def _whole(col: pd.Series) -> pd.Series:
+    """Quantities as whole numbers (30, not 30.0) when they all are."""
+    vals = col.map(lambda v: float(fmt_num(v)))
+    return vals.astype(int) if (vals % 1 == 0).all() else vals
+
+
+def _prep(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     df = lines.copy()
-    if with_spec:
-        specs = [masters.spec(r.city, r.customer, r.customer_sku_name) for r in df.itertuples()]
-        df["Origin"] = [s[0] or NO_ORIGIN for s in specs]
-        df["Size"] = [s[1] for s in specs]
-    else:
-        df["Origin"], df["Size"] = "", ""
     df["qty"] = df["qty"].map(to_number)
     df["variety"] = df["variety"].fillna("").astype(str)
     df["Lot Size"] = df["customer_sku_name"].map(lot_size)
-    g = (df.groupby(["parent_sku", "variety", "Origin", "Size", "lot", "Lot Size"], dropna=False)
+    if masters is not None:
+        df["Spec-Size"] = [masters.spec_size(r.city, r.customer, r.customer_sku_name)
+                           for r in df.itertuples()]
+    else:
+        df["Spec-Size"] = ""
+    return df
+
+
+def aggregate(lines: pd.DataFrame, masters: Masters, with_spec: bool = False) -> pd.DataFrame:
+    """Production sheet: Parent SKU > Variety > (Origin) > Lot > Lot size >
+    Spec-Size, with total qty. Origin only when with_spec (show_spec)."""
+    cols = OUTPUT_COLUMNS if with_spec else [c for c in OUTPUT_COLUMNS if c != "Origin"]
+    if lines is None or lines.empty:
+        return pd.DataFrame(columns=cols)
+    df = _prep(lines, masters)
+    df["Origin"] = ([masters.spec(r.city, r.customer, r.customer_sku_name)[0] or NO_ORIGIN
+                     for r in df.itertuples()] if with_spec else "")
+    keys = ["parent_sku", "variety", "Origin", "lot", "Lot Size", "Spec-Size"]
+    g = (df.groupby(keys, dropna=False)
            .agg(**{"Total Qty": ("qty", "sum"),
                    "Lines": ("customer_sku_name", "size"),
                    "Indents": ("indent_id", "nunique"),
@@ -46,7 +60,7 @@ def aggregate(lines: pd.DataFrame, masters: Masters, with_spec: bool = True) -> 
            .reset_index()
            .rename(columns={"parent_sku": "Parent SKU", "variety": "Variety", "lot": "Lot"}))
     g["Total Qty"] = _whole(g["Total Qty"])
-    g = g.sort_values(["Parent SKU", "Variety", "Origin", "Size", "Lot", "Lot Size"],
+    g = g.sort_values(["Parent SKU", "Variety", "Origin", "Lot", "Lot Size", "Spec-Size"],
                       key=lambda s: s.astype(str).str.casefold())
     return g[cols].reset_index(drop=True)
 
@@ -67,23 +81,14 @@ def filter_lines(current: pd.DataFrame, *, delivery_date: str | None, city: str 
     return df
 
 
-def _whole(col: pd.Series) -> pd.Series:
-    """Quantities as whole numbers (30, not 30.0) when they all are."""
-    vals = col.map(lambda v: float(fmt_num(v)))
-    return vals.astype(int) if (vals % 1 == 0).all() else vals
-
-
-def city_sku_report(lines: pd.DataFrame) -> pd.DataFrame:
+def city_sku_report(lines: pd.DataFrame, masters: Masters | None = None) -> pd.DataFrame:
     """City > Customer > Parent SKU > Customer SKU name (+ variety, lot,
     lot size) with total qty, from current-version indent rows."""
     if lines is None or lines.empty:
         return pd.DataFrame(columns=CITY_SKU_COLUMNS)
-    df = lines.copy()
-    df["qty"] = df["qty"].map(to_number)
-    df["variety"] = df["variety"].fillna("").astype(str)
-    df["Lot Size"] = df["customer_sku_name"].map(lot_size)
+    df = _prep(lines, masters)
     g = (df.groupby(["city", "customer", "parent_sku", "customer_sku_name", "variety", "lot",
-                     "Lot Size"], dropna=False)
+                     "Lot Size", "Spec-Size"], dropna=False)
            .agg(Qty=("qty", "sum"), Indents=("indent_id", "nunique"), Stores=("store", "nunique"))
            .reset_index()
            .rename(columns={"city": "City", "customer": "Customer", "parent_sku": "Parent SKU",
