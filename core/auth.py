@@ -113,8 +113,16 @@ import streamlit as st  # noqa: E402
 
 
 @st.cache_resource(show_spinner=False)
-def _lockout() -> _Lockout:
+def _cached_lockout() -> _Lockout:
     return _Lockout()
+
+
+def _lockout() -> _Lockout:
+    lock = _cached_lockout()
+    if type(lock) is not _Lockout:  # stale object from before a code update
+        _cached_lockout.clear()
+        lock = _cached_lockout()
+    return lock
 
 
 # ---------------------------------------------------------------- lookups

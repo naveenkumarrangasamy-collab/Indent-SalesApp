@@ -444,6 +444,19 @@ import streamlit as st  # noqa: E402  (kept here so the pure helpers above impor
 
 
 @st.cache_resource(show_spinner=False)
-def get_backend():
-    """One back end per server process, shared by all sessions."""
+def _cached_backend():
     return make_backend()
+
+
+def get_backend():
+    """One back end per server process, shared by all sessions.
+
+    Streamlit keeps cached objects across code updates. After a redeploy the
+    cached object can be an instance of the *old* class (missing new
+    methods), so it is rebuilt whenever its class is not the current one.
+    """
+    backend = _cached_backend()
+    if type(backend) not in (GoogleBackend, LocalBackend):
+        _cached_backend.clear()
+        backend = _cached_backend()
+    return backend

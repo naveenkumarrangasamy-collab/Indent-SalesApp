@@ -128,3 +128,22 @@ def test_retry_then_friendly_error(gb, monkeypatch):
     with pytest.raises(sheets.SheetError, match="busy"):
         b._call(flaky)
     assert calls["n"] == 3  # first try + 2 retries
+
+
+def test_stale_cached_backend_is_rebuilt(monkeypatch, tmp_path):
+    """After a redeploy Streamlit may hand back an object of the old class."""
+    class OldBackend:  # stands in for the pre-update class: no read_values_many
+        pass
+
+    calls = {"n": 0}
+
+    def fake_make():
+        calls["n"] += 1
+        return OldBackend() if calls["n"] == 1 else sheets.LocalBackend(tmp_path)
+
+    monkeypatch.setattr(sheets, "make_backend", fake_make)
+    sheets._cached_backend.clear()
+    b = sheets.get_backend()
+    assert isinstance(b, sheets.LocalBackend) and hasattr(b, "read_values_many")
+    assert sheets.get_backend() is b  # cached afterwards
+    sheets._cached_backend.clear()
