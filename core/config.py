@@ -46,6 +46,45 @@ def use_google() -> bool:
     return bool(sheet_id() and service_account_info())
 
 
+_SA_REQUIRED = ("type", "project_id", "private_key", "client_email", "token_uri")
+
+
+def google_status() -> tuple[bool, str]:
+    """(connected_config_ok, reason). Explains why the app would fall back to
+    local mode, so a missing secret is never silent."""
+    if not sheet_id():
+        return False, "`sheet_id` is missing from the app secrets."
+    info = get("gcp_service_account")
+    if not info:
+        return False, "The `[gcp_service_account]` section is missing from the app secrets."
+    info = dict(info)
+    missing = [k for k in _SA_REQUIRED if not str(info.get(k, "")).strip()]
+    if missing:
+        return False, "`[gcp_service_account]` is missing: " + ", ".join(missing) + "."
+    if "BEGIN PRIVATE KEY" not in str(info.get("private_key", "")):
+        return False, "`private_key` in `[gcp_service_account]` does not look like a key (paste it whole)."
+    return True, ""
+
+
+def show_spec() -> bool:
+    """Origin / size are not used for now (set show_spec = true to bring them back)."""
+    return bool(get("show_spec", False))
+
+
+def edit_cutoff_days() -> int:
+    try:
+        return int(get("edit_cutoff_days", 1))
+    except (TypeError, ValueError):
+        return 1
+
+
+def edit_cutoff_hour() -> int:
+    try:
+        return min(23, max(0, int(get("edit_cutoff_hour", 12))))
+    except (TypeError, ValueError):
+        return 12
+
+
 def owner_email() -> str:
     return str(get("owner_email", "") or "").strip().lower()
 

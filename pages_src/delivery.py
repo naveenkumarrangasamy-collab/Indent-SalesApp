@@ -5,7 +5,6 @@ from datetime import date, time
 
 import streamlit as st
 
-from core import config
 from core.masters import Masters
 from pages_src import common, state
 
@@ -63,14 +62,30 @@ def _index(options: list[str], value: str) -> int | None:
     return options.index(value) if value in options else None
 
 
+TIME_SLOTS = [f"{h:02d}:{m:02d}" for h in range(24) for m in (0, 30)]
+
+
+def fmt_slot(hhmm: str) -> str:
+    """'06:30' -> '06:30 AM'."""
+    try:
+        return time.fromisoformat(hhmm).strftime("%I:%M %p")
+    except ValueError:
+        return hhmm
+
+
 def render(m: Masters) -> None:
     hdr = state.header()
     st.subheader("Delivery details")
 
     c1, c2 = st.columns(2)
     k = _k("date")
-    c1.date_input("Delivery date", value=date.fromisoformat(hdr.delivery_date) if hdr.delivery_date else None,
-                  key=k, on_change=_on_simple, args=(k, "delivery_date"), format="DD/MM/YYYY")
+    min_d = state.min_delivery_date()
+    cur_d = date.fromisoformat(hdr.delivery_date) if hdr.delivery_date else None
+    if cur_d and cur_d < min_d:  # e.g. an old draft: ask for a new date
+        cur_d = None
+    c1.date_input("Delivery date", value=cur_d, min_value=min_d, key=k, on_change=_on_simple,
+                  args=(k, "delivery_date"), format="DD/MM/YYYY",
+                  help=f"From {min_d:%d %b %Y} onwards")
 
     cities = m.cities()
     if hdr.city and hdr.city not in cities:
@@ -98,9 +113,11 @@ def render(m: Masters) -> None:
 
     c5, _ = st.columns(2)
     k = _k("time")
-    c5.time_input("Expected delivery time",
-                  value=time.fromisoformat(hdr.expected_time) if hdr.expected_time else None,
-                  key=k, step=1800, on_change=_on_simple, args=(k, "expected_time"))
+    slots = TIME_SLOTS if hdr.expected_time in TIME_SLOTS or not hdr.expected_time \
+        else TIME_SLOTS + [hdr.expected_time]
+    c5.selectbox("Expected delivery time", slots, index=_index(slots, hdr.expected_time), key=k,
+                 format_func=fmt_slot, placeholder="Choose a 30-minute slot",
+                 on_change=_on_simple, args=(k, "expected_time"))
 
     if hdr.city and hdr.customer:
         pending = []
@@ -112,10 +129,9 @@ def render(m: Masters) -> None:
             st.info(f"Mapping pending for {hdr.customer} in {hdr.city}: " + " and ".join(pending)
                     + " are not in the sheet yet. Ask the indent owner to add them.")
 
-    if hdr.delivery_date and hdr.delivery_date < config.now_ist().date().isoformat():
-        st.caption("⚠️ The delivery date is in the past.")
-
     missing = hdr.missing()
+    if hdr.delivery_date and hdr.delivery_date < min_d.isoformat():
+        missing = missing + [f"a delivery date from {min_d:%d %b %Y}"]
     if st.button("Continue →", type="primary", disabled=bool(missing)):
         state.set_step("items")
         st.rerun()

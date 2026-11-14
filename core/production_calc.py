@@ -18,13 +18,18 @@ OUTPUT_COLUMNS = ["Parent SKU", "Variety", "Origin", "Size", "Lot", "Total Qty",
 NO_ORIGIN = "(origin not set)"
 
 
-def aggregate(lines: pd.DataFrame, masters: Masters) -> pd.DataFrame:
+def aggregate(lines: pd.DataFrame, masters: Masters, with_spec: bool = True) -> pd.DataFrame:
+    """Group by Parent SKU > Variety > (Origin, Size if with_spec) > Lot."""
+    cols = OUTPUT_COLUMNS if with_spec else [c for c in OUTPUT_COLUMNS if c not in ("Origin", "Size")]
     if lines is None or lines.empty:
-        return pd.DataFrame(columns=OUTPUT_COLUMNS)
+        return pd.DataFrame(columns=cols)
     df = lines.copy()
-    specs = [masters.spec(r.city, r.customer, r.customer_sku_name) for r in df.itertuples()]
-    df["Origin"] = [s[0] or NO_ORIGIN for s in specs]
-    df["Size"] = [s[1] for s in specs]
+    if with_spec:
+        specs = [masters.spec(r.city, r.customer, r.customer_sku_name) for r in df.itertuples()]
+        df["Origin"] = [s[0] or NO_ORIGIN for s in specs]
+        df["Size"] = [s[1] for s in specs]
+    else:
+        df["Origin"], df["Size"] = "", ""
     df["qty"] = df["qty"].map(to_number)
     df["variety"] = df["variety"].fillna("").astype(str)
     g = (df.groupby(["parent_sku", "variety", "Origin", "Size", "lot"], dropna=False)
@@ -38,7 +43,7 @@ def aggregate(lines: pd.DataFrame, masters: Masters) -> pd.DataFrame:
     g["Total Qty"] = g["Total Qty"].map(lambda v: float(fmt_num(v)))
     g = g.sort_values(["Parent SKU", "Variety", "Origin", "Size", "Lot"],
                       key=lambda s: s.astype(str).str.casefold())
-    return g[OUTPUT_COLUMNS].reset_index(drop=True)
+    return g[cols].reset_index(drop=True)
 
 
 def filter_lines(current: pd.DataFrame, *, delivery_date: str | None, city: str | None,

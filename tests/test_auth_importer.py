@@ -196,3 +196,27 @@ def test_variety_column_with_parent_header():
     assert all(r["Variety"] == "" for r in rows)  # Classification == parent: user picks the variety
     headerless = [r[:6] + [""] for r in [ac[0][:6]] + ac[1:]]
     assert importer.build_varieties(headerless) == []
+
+
+
+def test_variety_tab_and_sheet_only_customers():
+    from core.masters import frames_from_values, masters_from_frames
+
+    assert importer.variety_tab_parent("Apple Varity") == "Apple"
+    assert importer.variety_tab_parent("Apple Variety") == "Apple"
+    assert importer.variety_tab_parent("Varieties") is None
+    tab = [["Apple Variety"], ["Gala"], ["Granny Smith"], [""], ["Gala"], ["Fuji"]]
+    assert [v["Variety"] for v in importer.build_varieties_from_tab("Apple", tab)] == ["Gala", "Granny Smith", "Fuji"]
+    assert [v["Variety"] for v in importer.build_varieties_from_tab("Apple", [["Gala"], ["Queen"]])] == ["Gala", "Queen"]
+
+    ac = [["City", "Customer", "Parent SKU", "Classification", "Customer SKU Name"],
+          ["PTP Bangalore", "Zepto", "Apple", "Apple", "2PC - Apple Queen Imported"],
+          ["PTP Bangalore", "Swiggy", "Avocado", "Avocado", "1PC - Nectar Avocado"]]
+    cl = [["City", "Customer List", "Store names"], ["PTP Bangalore", "Zepto", "Zepto - A"],
+          ["PTP Bangalore", "Zomato", "ZOMATO HYPERPURE PVT Ltd"]]
+    raw = {"All Cux City": ac, "Customer List": cl, "Apple Varity": [["Gala"], ["Queen"]]}
+    m = masters_from_frames(*frames_from_values(raw))
+    assert m.varieties_for("Apple") == ["Gala", "Queen"] and m.needs_variety("Apple")
+    assert m.cities() == ["PTP Bangalore"]
+    assert m.customers("PTP Bangalore") == ["Zepto", "Zomato", "Swiggy"]  # sheet only, sheet order
+    assert m.customers("Nowhere") == ["Swiggy", "Zomato", "Zepto", "Firstclub", "Namdhari"]

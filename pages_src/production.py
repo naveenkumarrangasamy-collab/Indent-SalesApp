@@ -43,7 +43,7 @@ def render(user: User) -> None:
         st.info("No submitted indents for this date and city.")
         return
 
-    agg = aggregate(lines, m)
+    agg = aggregate(lines, m, with_spec=config.show_spec())
     k = st.columns(4)
     k[0].metric("Indents", lines["indent_id"].nunique())
     k[1].metric("Stores", lines["store"].nunique())

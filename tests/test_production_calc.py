@@ -90,3 +90,15 @@ def test_only_current_version_counts_and_filters():
 
 def test_empty():
     assert aggregate(_lines([]), _masters()).empty
+
+
+
+def test_without_spec_groups_by_parent_variety_lot():
+    df = _lines([
+        dict(BASE, indent_id="A", version="1", customer="Zepto", parent_sku="Mandarin",
+             customer_sku_name="3PC - Baby Orange Imported", qty="7"),
+        dict(BASE, indent_id="B", version="1", customer="Zepto", parent_sku="Mandarin",
+             customer_sku_name="3PC - Baby Orange Imported", qty="3"),
+    ])
+    agg = aggregate(df, _masters(), with_spec=False)
+    assert "Origin" not in agg.columns and agg.iloc[0]["Total Qty"] == 10

@@ -34,6 +34,19 @@ def inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
+def connection_banner() -> None:
+    """Loud warning on every page when the app is not using the Google Sheet."""
+    if get_backend().mode == "gsheets":
+        return
+    from core.sheets import CONNECT_ERROR
+
+    reason = CONNECT_ERROR["reason"] or config.google_status()[1]
+    st.error("**Not connected to the Google Sheet.** The app is showing built-in test data and "
+             "nothing is saved to your sheet. " + (reason or "")
+             + " Fix it in Streamlit Cloud → Manage app → Settings → Secrets, then Reboot app.",
+             icon="⚠️")
+
+
 def badge(status: str) -> str:
     cls = "frz" if status == "Frozen" else "sub"
     return f'<span class="mt-badge {cls}">{status}</span>'
@@ -103,9 +116,10 @@ def sidebar(user: auth.User) -> None:
         st.markdown(f"**{user.label}**  \n<span class='mt-muted'>{user.email} · {user.role}</span>",
                     unsafe_allow_html=True)
         backend = get_backend()
-        if backend.mode == "local":
-            st.warning("Local mode: data is saved to CSV files in `data/`, not to Google Sheets. "
-                       "Add the service account to the app secrets to go live.", icon="💾")
+        if backend.mode == "gsheets" and user.is_owner:
+            st.link_button("📄 Open Google Sheet", backend.sheet_url(), width="stretch",
+                           help="Indent_Lines = every version of every indent; "
+                                "Change_Log = edit history per indent")
         if st.session_state.get("must_change_pin"):
             st.warning("You signed in with the initial PIN. Please set your own PIN below.")
         c1, c2 = st.columns(2)

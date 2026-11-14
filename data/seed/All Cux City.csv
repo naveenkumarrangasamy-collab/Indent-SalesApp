@@ -1,4 +1,4 @@
-City,Customer,Parent SKU,Classification,Customer SKU Name,,Apple Variety
+City,Customer,Parent SKU,Classification,Customer SKU Name
 PTP Bangalore,Zepto,Avocado,Avocado,1PC - Snacky Avocado Imported
 PTP Bangalore,Zepto,Avocado,Avocado,1PC - Hass Avocado Imported
 PTP Bangalore,Zepto,Avocado,Avocado,1PC - Large Avocado Imported
@@ -25,19 +25,19 @@ PTP Bangalore,Zepto,Kiwi,Kiwi,2PC - Bloom Kiwi
 PTP Bangalore,Zepto,Kiwi,Kiwi,3PC - Bloom Kiwi
 PTP Bangalore,Zepto,Kiwi,Kiwi,2PC - Bloom Kiwi Sungold Imported (New Zealand)
 PTP Bangalore,Zepto,Kiwi,Kiwi,3PC - Bloom Kiwi Sungold Imported (New Zealand)
-PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Royal Gala Imported,,Gala
-PTP Bangalore,Zepto,Apple,Apple,2PC - Bloom Apple Royal Gala Imported,,Gala
-PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Snacky,,Gala
-PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Green Imported (Granny Smith),,Granny Smith
-PTP Bangalore,Zepto,Apple,Apple,2PC - Bloom Apple Green Imported (Granny Smith),,Granny Smith
-PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Queen Imported,,Queen
-,,,,200gm - Snacky Apple,,RD
-,,,,,,Pink Lady
-,,,,,,Crispy Pink
-,,,,,,Braeburn
-,,,,,,Sonya
-,,,,,,Fuji
-,,,,,,Jazz
+PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Royal Gala Imported
+PTP Bangalore,Zepto,Apple,Apple,2PC - Bloom Apple Royal Gala Imported
+PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Snacky
+PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Green Imported (Granny Smith)
+PTP Bangalore,Zepto,Apple,Apple,2PC - Bloom Apple Green Imported (Granny Smith)
+PTP Bangalore,Zepto,Apple,Apple,2PC - Apple Queen Imported
+,,,,200gm - Snacky Apple
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
+,,,,
 PTP Bangalore,Zepto,Litchi,Litchi,200gm - Litchi Imported (Longan)
 PTP Bangalore,Zepto,Grapes,Grapes,250gm - Bloom Grapes Red globe
 PTP Bangalore,Zepto,Grapes,Grapes,200gm - Crimson grapes
@@ -45,3 +45,17 @@ PTP Bangalore,Zepto,Grapes,Grapes,200gm - Grapes Crimson Red Imported
 PTP Bangalore,Zepto,Grapes,Grapes,250gm - Grapes Red Globe Imported
 PTP Bangalore,Zepto,Grapefruit,Grapefruit,1PC - Bloom Grapefruit (250-300 g)
 PTP Bangalore,Zepto,Grapefruit,Grapefruit,1PC - Grapefruit Imported
+,,,,
+,,,,
+,,,,
+PTP Bangalore,Swiggy,Blueberry,Blueberry,1PC -Bulk Imported Blueberries
+PTP Bangalore,Swiggy,Blueberry,Blueberry,1PC - Blueberry
+PTP Bangalore,Swiggy,Blueberry,Blueberry,1PC - Jumbo Blueberry
+PTP Bangalore,Swiggy,Blueberry,Blueberry,125gm - Blueberry Imported
+PTP Bangalore,Swiggy,Blueberry,Blueberry,1PC - Bulk Nectr Blueberry
+PTP Bangalore,Swiggy,Blueberry,Blueberry,1PC - Bulk PP Blueberry
+PTP Bangalore,Swiggy,Avocado,Avocado,1PC - Bulk Semiripe Imported Avocado
+PTP Bangalore,Swiggy,Avocado,Avocado,1PC - Mini Gems Avocado
+PTP Bangalore,Swiggy,Avocado,Avocado,1PC - Unripe Imported Avocado
+PTP Bangalore,Swiggy,Avocado,Avocado,1PC - Bulk PP Avocado
+PTP Bangalore,Swiggy,Avocado,Avocado,1PC - Nectar Avocado

@@ -6,6 +6,7 @@ st.set_page_config(page_title="MT Indent", page_icon="🧾", layout="wide")
 from pages_src import access, common, indent, login, my_indents, production  # noqa: E402
 
 common.inject_css()
+common.connection_banner()
 user = common.current_user()
 
 if user is None:

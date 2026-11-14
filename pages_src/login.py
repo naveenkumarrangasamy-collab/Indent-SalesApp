@@ -22,6 +22,18 @@ def render() -> None:
         if submitted:
             _do_login(email, pin)
         st.caption("Forgot your PIN or need access? Ask the indent owner to set one for you.")
+        with st.expander("Admin: how to give someone access"):
+            st.markdown(
+                "1. Sign in with the **owner email** (the `owner_email` in the app secrets). "
+                "The first time, use the `owner_initial_pin`, then set your own PIN in the "
+                "sidebar under **Change my PIN**.\n"
+                "2. Open **🔑 Access** in the left sidebar (only the owner sees it).\n"
+                "3. Under **Add a user**, enter their work email, name, role (**sales**, or "
+                "**owner** for another admin) and a 4–6 digit PIN, then press **Add user**.\n"
+                "4. Send them the app link, their email and the PIN privately. They can change "
+                "the PIN after signing in.\n"
+                "5. To block someone, open **Manage a user** on the same page and press "
+                "**Revoke access**; **Reset PIN** sets a new PIN if they forget it.")
 
 
 def _do_login(email: str, pin: str) -> None:

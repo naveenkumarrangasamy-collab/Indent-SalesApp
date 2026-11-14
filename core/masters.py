@@ -44,20 +44,16 @@ class Masters:
                   & (df["Customer SKU Name"] != "")]
 
     def cities(self) -> list[str]:
-        vals = list(self.sku["City"]) + list(self.stores["City"])
-        return _unique_sorted(vals)
+        """Cities in the order they appear in the sheet (stores first)."""
+        return _unique_in_order(list(self.stores["City"]) + list(self.sku["City"]))
 
     def customers(self, city: str) -> list[str]:
-        """The five MT customers first, then any other customer mapped for the city."""
-        found = [c for c in list(self.sku.loc[self.sku["City"].map(_key) == _key(city), "Customer"])
-                 + list(self.stores.loc[self._city_match(self.stores, city), "Customer"]) if c]
-        out = list(DEFAULT_CUSTOMERS)
-        known = {_key(c) for c in out}
-        for c in _unique_sorted(found):
-            if _key(c) not in known:
-                out.append(c)
-                known.add(_key(c))
-        return out
+        """Customers mapped for the city in the sheet (Customer List first,
+        then All Cux City), in sheet order. Only if the sheet has none for the
+        city are the five MT customers offered."""
+        found = (list(self.stores.loc[self._city_match(self.stores, city), "Customer"])
+                 + list(self.sku.loc[self.sku["City"].map(_key) == _key(city), "Customer"]))
+        return _unique_in_order(found) or list(DEFAULT_CUSTOMERS)
 
     def has_sku_mapping(self, city: str, customer: str) -> bool:
         return not self._sku_for(city, customer).empty
@@ -196,6 +192,17 @@ def frames_from_values(raw: dict[str, list[list]]) -> tuple[dict[str, pd.DataFra
         frames[VARIETIES] = merged[merged["Variety"].astype(str).str.strip() != ""].drop_duplicates()
         frames[VARIETIES]["_row"] = 0
         source = f"live from '{importer.ALL_CUX_CITY}' + '{importer.MAPPING_WHOLE}'"
+    extra_var = []
+    for tab, values in raw.items():
+        parent = importer.variety_tab_parent(tab)
+        if parent:
+            extra_var += importer.build_varieties_from_tab(parent, values)
+    if extra_var:
+        merged = pd.concat([frames[VARIETIES][TABS[VARIETIES]],
+                            pd.DataFrame(extra_var, columns=TABS[VARIETIES])], ignore_index=True)
+        merged["_k"] = merged["Parent SKU"].map(_key) + "|" + merged["Variety"].map(_key)
+        frames[VARIETIES] = merged.drop_duplicates("_k").drop(columns="_k").reset_index(drop=True)
+        frames[VARIETIES]["_row"] = 0
     stores = importer.build_store_map(raw.get(importer.CUSTOMER_LIST, []))
     if stores:
         live = pd.DataFrame(stores, columns=TABS[STORE_MAP])
@@ -212,7 +219,8 @@ def _load_frames() -> tuple[dict[str, pd.DataFrame], str]:
 
     backend = get_backend()
     present = set(backend.list_tabs())
-    tabs = MASTER_TABS + [t for t in importer.LEGACY_TABS if t in present]
+    tabs = MASTER_TABS + [t for t in present
+                          if t in importer.LEGACY_TABS or importer.variety_tab_parent(t)]
     return frames_from_values(backend.read_values_many(tabs))
 
 

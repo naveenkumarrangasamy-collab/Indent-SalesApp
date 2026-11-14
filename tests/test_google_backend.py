@@ -147,3 +147,22 @@ def test_stale_cached_backend_is_rebuilt(monkeypatch, tmp_path):
     assert isinstance(b, sheets.LocalBackend) and hasattr(b, "read_values_many")
     assert sheets.get_backend() is b  # cached afterwards
     sheets._cached_backend.clear()
+
+
+def test_bad_key_falls_back_with_reason(monkeypatch, tmp_path):
+    monkeypatch.setattr(sheets.config, "google_status", lambda: (True, ""))
+    monkeypatch.setattr(sheets.config, "sheet_id", lambda: "abc")
+    monkeypatch.setattr(sheets.config, "service_account_info",
+                        lambda: {"client_email": "x", "private_key": "-----BEGIN PRIVATE KEY-----\nbad"})
+    monkeypatch.setattr(sheets, "LOCAL_DATA_DIR", tmp_path)
+    b = sheets.make_backend()
+    assert b.mode == "local" and "could not be used" in sheets.CONNECT_ERROR["reason"]
+    sheets.CONNECT_ERROR["reason"] = ""
+
+
+def test_google_status_reasons(monkeypatch):
+    from core import config
+    monkeypatch.setattr(config, "_secrets", lambda: {})
+    assert "sheet_id" in config.google_status()[1]
+    monkeypatch.setattr(config, "_secrets", lambda: {"sheet_id": "x", "gcp_service_account": {"type": "service_account"}})
+    assert "missing: project_id, private_key, client_email, token_uri" in config.google_status()[1]

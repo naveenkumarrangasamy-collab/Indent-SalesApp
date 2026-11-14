@@ -27,7 +27,7 @@ WIDGET_PREFIXES = ("w_", "a_", "ed_")
 
 def blank() -> dict:
     return {"mode": "new", "indent_id": "", "base_version": 0, "base": None, "step": "delivery",
-            "header": IndentHeader().to_dict(), "lines": []}
+            "created_at": "", "header": IndentHeader().to_dict(), "lines": []}
 
 
 def get() -> dict:
@@ -92,6 +92,12 @@ def changed_vs_base() -> bool:
     return changelog.has_changes(b[0], b[1], header(), lines())
 
 
+def min_delivery_date():
+    from core.indents import min_delivery_date as _min
+    ind = get()
+    return _min(ind.get("created_at") or None) if ind["mode"] == "edit" else _min()
+
+
 def has_unsaved_work() -> bool:
     ind = get()
     if ind["mode"] == "edit":
@@ -107,7 +113,8 @@ def start_new() -> None:
     mark_dirty(force=True)
 
 
-def open_for_edit(current: IndentSnapshot, load: IndentSnapshot | None = None) -> None:
+def open_for_edit(current: IndentSnapshot, load: IndentSnapshot | None = None,
+                  created_at: str = "") -> None:
     """Load an indent into the form. `load` is an older version to copy in;
     the comparison base is always the current version."""
     src = load or current
@@ -115,6 +122,7 @@ def open_for_edit(current: IndentSnapshot, load: IndentSnapshot | None = None) -
         "mode": "edit", "indent_id": current.indent_id, "base_version": current.version,
         "base": {"header": current.header.to_dict(), "lines": [x.to_dict() for x in current.lines]},
         "step": "items",
+        "created_at": created_at,
         "header": src.header.to_dict(),
         "lines": [x.to_dict() for x in src.lines],
     }

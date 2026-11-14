@@ -17,7 +17,12 @@ def backend(tmp_path, monkeypatch):
     return b
 
 
-H = IndentHeader("2026-11-15", "Bangalore", "Zepto", "Store A", "07:00")
+from datetime import datetime, timedelta
+
+from core import config
+
+TOMORROW = (config.now_ist().date() + timedelta(days=1)).isoformat()
+H = IndentHeader(TOMORROW, "Bangalore", "Zepto", "Store A", "07:00")
 HASS = IndentLine("Avocado", "1PC - Hass Avocado Imported", "", "Pcs", 30, 120)
 BLUE = IndentLine("Blueberry", "1PC - Blueberry Imported", "", "Pcs", 10, 300)
 
@@ -142,6 +147,41 @@ def test_store_and_customer_lists():
     m = _masters()
     assert m.stores_for("Bangalore", "Zepto") == ["Store A"]
     assert m.stores_for("bangalore", "swiggy") == ["Store S"]
-    assert m.customers("Bangalore")[:5] == ["Swiggy", "Zomato", "Zepto", "Firstclub", "Namdhari"]
+    assert m.customers("Bangalore") == ["Zepto", "Swiggy"]  # from the sheet, in sheet order
     assert m.needs_variety("Apple") and not m.needs_variety("Avocado")
     assert m.default_variety("Bangalore", "Zepto", "2PC - Apple Queen Imported") == "Queen"
+
+
+
+def test_edit_deadline_is_next_day_noon():
+    d = indents.edit_deadline("2026-11-14T18:20:05+05:30")
+    assert d.isoformat() == "2026-11-15T12:00:00+05:30"
+    ist = config.IST
+    assert indents.can_edit("2026-11-14T18:20:05+05:30", datetime(2026, 11, 15, 11, 59, tzinfo=ist))
+    assert not indents.can_edit("2026-11-14T18:20:05+05:30", datetime(2026, 11, 15, 12, 0, tzinfo=ist))
+    assert indents.can_edit("2026-11-14T00:05:00+05:30", datetime(2026, 11, 14, 23, 0, tzinfo=ist))
+
+
+def test_update_blocked_after_cutoff(backend, monkeypatch):
+    iid = indents.submit_new(H, [HASS], "s@x.com")
+    later = config.now_ist() + timedelta(days=2)
+    monkeypatch.setattr(indents.config, "now_ist", lambda: later)
+    with pytest.raises(indents.CutoffError, match="edit window closed"):
+        indents.submit_update(iid, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 99})], "s@x.com")
+
+
+def test_delivery_date_must_be_after_today(backend):
+    today = config.now_ist().date().isoformat()
+    with pytest.raises(indents.SheetError, match="after today"):
+        indents.submit_new(IndentHeader(**{**H.to_dict(), "delivery_date": today}), [HASS], "s@x.com")
+    m = _masters()
+    errs = indents.validate(IndentHeader(**{**H.to_dict(), "delivery_date": today}), [HASS], m,
+                            min_date=indents.min_delivery_date())
+    assert any("Delivery date must be on or after" in e for e in errs)
+    assert indents.min_delivery_date("2026-11-14T18:00:00+05:30").isoformat() == "2026-11-15"
+
+
+def test_summary_marks_editable(backend):
+    indents.submit_new(H, [HASS], "s@x.com")
+    s = indents.summary(indents.read_lines(fresh=True))
+    assert bool(s.iloc[0]["can_edit"]) is True

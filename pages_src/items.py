@@ -1,10 +1,12 @@
 """Step 3: items (parent SKU, customer SKU name, variety, lot, qty, price)."""
 from __future__ import annotations
 
+from datetime import date
+
 import pandas as pd
 import streamlit as st
 
-from core import indents
+from core import changelog, config, indents
 from core.auth import User
 from core.masters import Masters
 from core.models import IndentLine, clean_str, fmt_num, to_number
@@ -106,9 +108,10 @@ def _add_form(m: Masters) -> None:
                           placeholder="0.00")
 
         if sku:
-            origin, size = m.spec(hdr.city, hdr.customer, sku)
-            spec = " · ".join(x for x in (origin, size) if x) or "origin / size not in Mapping Whole"
-            st.caption(f"Spec: {spec}")
+            if config.show_spec():
+                origin, size = m.spec(hdr.city, hdr.customer, sku)
+                spec = " · ".join(x for x in (origin, size) if x) or "origin / size not in Mapping Whole"
+                st.caption(f"Spec: {spec}")
             if not lot_now:
                 st.warning("No lot is mapped for this SKU name, so it can't be added yet.")
 
@@ -143,6 +146,8 @@ def _lines_table(m: Masters) -> None:
     df = pd.DataFrame(rows)
     if not any_variety:
         df = df.drop(columns=["Variety"])
+    if not config.show_spec():
+        df = df.drop(columns=["Spec"])
     key = f"ed_{st.session_state.get('editor_rev', 0)}"
     edited = st.data_editor(
         df, key=key, hide_index=True, width="stretch", num_rows="fixed",
@@ -159,19 +164,19 @@ def _lines_table(m: Masters) -> None:
 
     # Sync edits back into the working indent.
     new_lines: list[IndentLine] = []
-    removed = False
+    to_remove: list[str] = []
     for x, (_, r) in zip(lines, edited.iterrows()):
         if bool(r.get("Remove")):
-            removed = True
-            continue
+            to_remove.append(x.customer_sku_name)
         variety = clean_str(r.get("Variety")) if "Variety" in edited.columns else x.variety
         if not m.needs_variety(x.parent_sku):
             variety = ""
         new_lines.append(IndentLine(parent_sku=x.parent_sku, customer_sku_name=x.customer_sku_name,
                                     variety=variety, lot=x.lot,
                                     qty=to_number(r.get("Qty")), price=to_number(r.get("Price"))))
-    if removed:
-        state.set_lines(new_lines, structural=True)
+    if to_remove:  # ask first; the tick is undone until confirmed
+        st.session_state["pending_remove"] = to_remove
+        state.bump_editor()
         st.rerun()
     if [y.to_dict() for y in new_lines] != [y.to_dict() for y in lines]:
         state.set_lines(new_lines, structural=False)
@@ -193,11 +198,115 @@ def _totals() -> None:
     c[2].metric("Qty by lot", "  ·  ".join(f"{fmt_num(q)} {lot}" for lot, q in by_lot.items()))
 
 
+# ------------------------------------------------------------ dialogs
+
+def _fmt_date(iso: str) -> str:
+    try:
+        return date.fromisoformat(iso).strftime("%a, %d %b %Y")
+    except ValueError:
+        return iso
+
+
+def _lines_frame(lines: list[IndentLine]) -> pd.DataFrame:
+    df = pd.DataFrame([{"Parent SKU": x.parent_sku, "Customer SKU Name": x.customer_sku_name,
+                        "Variety": x.variety, "Lot": x.lot, "Qty": x.qty, "Price": x.price,
+                        "Amount": x.amount} for x in lines])
+    if not df.empty and not df["Variety"].astype(bool).any():
+        df = df.drop(columns=["Variety"])
+    return df
+
+
+@st.dialog("Remove item?", dismissible=False)
+def _confirm_remove() -> None:
+    names = st.session_state.get("pending_remove", [])
+    st.write("This will remove from the indent:")
+    for n in names:
+        st.markdown(f"- **{n}**")
+    c = st.columns(2)
+    if c[0].button("Yes, remove", type="primary", width="stretch"):
+        keep = [x for x in state.lines() if x.customer_sku_name not in set(names)]
+        state.set_lines(keep, structural=True)
+        st.session_state.pop("pending_remove", None)
+        st.rerun()
+    if c[1].button("Cancel", width="stretch"):
+        st.session_state.pop("pending_remove", None)
+        st.rerun()
+
+
+@st.dialog("Are you sure?", dismissible=False)
+def _confirm_action() -> None:
+    action = st.session_state.get("pending_action")
+    ind = state.get()
+    if action == "discard":
+        st.write(f"Discard all unsaved changes to **{ind['indent_id']}**? "
+                 "The saved version in the sheet is not affected.")
+        label = "Yes, discard"
+    else:
+        st.write("Clear the whole form? All delivery details and items entered so far will be removed.")
+        label = "Yes, clear"
+    c = st.columns(2)
+    if c[0].button(label, type="primary", width="stretch"):
+        st.session_state.pop("pending_action", None)
+        state.start_new()
+        if action == "discard":
+            common.flash("info", f"Changes to {ind['indent_id']} discarded.")
+        st.rerun()
+    if c[1].button("Cancel", width="stretch"):
+        st.session_state.pop("pending_action", None)
+        st.rerun()
+
+
+@st.dialog("Review and confirm", width="large", dismissible=False)
+def _review(m: Masters, user: User) -> None:
+    ind = state.get()
+    hdr, lines = state.header(), state.lines()
+    edit = ind["mode"] == "edit"
+    from pages_src.delivery import fmt_slot
+    st.markdown(f"**{'Update ' + ind['indent_id'] if edit else 'New indent'}** — please check before "
+                f"{'saving' if edit else 'submitting'}.")
+    st.markdown(
+        "<div class='mt-strip'>"
+        f"<span><b>Delivery</b>{_fmt_date(hdr.delivery_date)}</span>"
+        f"<span><b>Time</b>{fmt_slot(hdr.expected_time)}</span>"
+        f"<span><b>City</b>{hdr.city}</span><span><b>Customer</b>{hdr.customer}</span>"
+        f"<span><b>Store</b>{hdr.store}</span></div>", unsafe_allow_html=True)
+    st.dataframe(_lines_frame(lines), hide_index=True, width="stretch",
+                 column_config={"Qty": st.column_config.NumberColumn(format="%g"),
+                                "Price": st.column_config.NumberColumn(format="%.2f"),
+                                "Amount": st.column_config.NumberColumn(format="%.2f")})
+    total = sum(x.amount for x in lines)
+    st.markdown(f"**{len(lines)} item(s) · Total ₹ {total:,.2f}**")
+    if edit:
+        base = state.base_snapshot()
+        if base:
+            changes = changelog.diff(base[0], base[1], hdr, lines)
+            with st.expander(f"Changes compared with version {ind['base_version']} ({len(changes)})",
+                             expanded=True):
+                for ch in changes:
+                    what = ch["customer_sku_name"] or "Delivery details"
+                    kind = ch["change_type"].replace("_", " ")
+                    detail = (f"{ch['field']}: {ch['old_value']} → {ch['new_value']}" if ch["field"]
+                              else (ch["new_value"] or ch["old_value"]))
+                    st.markdown(f"- **{what}** — {kind}: {detail}")
+    c = st.columns(2)
+    go = c[0].button("✓ Confirm update" if edit else "✓ Confirm & submit", type="primary",
+                     width="stretch")
+    if c[1].button("← Go back and edit", width="stretch"):
+        st.session_state.pop("review_open", None)
+        st.rerun()
+    if go:
+        (_update if edit else _submit)(m, user)
+
+
 # ------------------------------------------------------------ actions
+
+def _check(m: Masters) -> list[str]:
+    return indents.validate(state.header(), state.lines(), m, min_date=state.min_delivery_date())
+
 
 def _submit(m: Masters, user: User) -> None:
     hdr, lines = state.header(), state.lines()
-    errors = indents.validate(hdr, lines, m)
+    errors = _check(m)
     if errors:
         for e in errors:
             st.error(e)
@@ -209,6 +318,7 @@ def _submit(m: Masters, user: User) -> None:
             state.autosave(force=True)
             st.error(f"Not submitted. {e} Your draft is kept.")
             return
+    st.session_state.pop("review_open", None)
     state.clear_after_submit()
     common.flash("success", f"Indent **{indent_id}** submitted (version 1, {len(lines)} items).")
     st.rerun()
@@ -217,7 +327,7 @@ def _submit(m: Masters, user: User) -> None:
 def _update(m: Masters, user: User) -> None:
     ind = state.get()
     hdr, lines = state.header(), state.lines()
-    errors = indents.validate(hdr, lines, m)
+    errors = _check(m)
     if errors:
         for e in errors:
             st.error(e)
@@ -230,6 +340,7 @@ def _update(m: Masters, user: User) -> None:
             state.autosave(force=True)
             st.error(f"Not updated. {e}")
             return
+    st.session_state.pop("review_open", None)
     state.clear_after_submit()
     msg = f"Indent **{ind['indent_id']}** updated to version {new_v}."
     if not log_ok:
@@ -239,15 +350,18 @@ def _update(m: Masters, user: User) -> None:
 
 
 def render(m: Masters, user: User) -> None:
+    from pages_src.delivery import fmt_slot
+
     hdr = state.header()
     ind = state.get()
+    s = st.session_state
 
     strip = st.columns([6, 1])
     strip[0].markdown(
         "<div class='mt-strip'>"
-        f"<span><b>Date</b>{hdr.delivery_date}</span><span><b>City</b>{hdr.city}</span>"
+        f"<span><b>Date</b>{_fmt_date(hdr.delivery_date)}</span><span><b>City</b>{hdr.city}</span>"
         f"<span><b>Customer</b>{hdr.customer}</span><span><b>Store</b>{hdr.store}</span>"
-        f"<span><b>Time</b>{hdr.expected_time}</span></div>", unsafe_allow_html=True)
+        f"<span><b>Time</b>{fmt_slot(hdr.expected_time)}</span></div>", unsafe_allow_html=True)
     if strip[1].button("Edit", width="stretch", help="Change delivery details"):
         state.set_step("delivery")
         st.rerun()
@@ -263,21 +377,49 @@ def render(m: Masters, user: User) -> None:
 
     st.divider()
     if ind["mode"] == "edit":
+        open_ = indents.can_edit(ind.get("created_at") or "")
+        deadline = (indents.edit_deadline(ind["created_at"]).strftime("%d %b %Y, %I:%M %p")
+                    if ind.get("created_at") else "")
         changed = state.changed_vs_base()
         c = st.columns([1, 1, 2])
         if c[0].button("Discard changes", width="stretch"):
-            state.start_new()
-            common.flash("info", f"Changes to {ind['indent_id']} discarded.")
+            s["pending_action"] = "discard"
             st.rerun()
-        if c[1].button("Update indent", type="primary", disabled=not changed, width="stretch"):
-            _update(m, user)
-        if not changed:
-            c[2].caption("Nothing changed yet. Update is enabled once something changes.")
+        if c[1].button("Update indent", type="primary", disabled=not (changed and open_),
+                       width="stretch"):
+            errors = _check(m)
+            if errors:
+                for e in errors:
+                    st.error(e)
+            else:
+                s["review_open"] = True
+                st.rerun()
+        if not open_:
+            st.error(f"The edit window for {ind['indent_id']} closed at {deadline}. "
+                     "It can no longer be changed.")
+        elif not changed:
+            c[2].caption(f"Nothing changed yet. Editable until {deadline}.")
+        else:
+            c[2].caption(f"Editable until {deadline}.")
     else:
         c = st.columns([1, 1, 2])
         if c[0].button("Clear form", width="stretch", disabled=not state.has_work()):
-            state.start_new()
+            s["pending_action"] = "clear"
             st.rerun()
         if c[1].button("Submit indent", type="primary", width="stretch",
                        disabled=not state.lines()):
-            _submit(m, user)
+            errors = _check(m)
+            if errors:
+                for e in errors:
+                    st.error(e)
+            else:
+                s["review_open"] = True
+                st.rerun()
+
+    # Only one dialog at a time.
+    if s.get("pending_remove"):
+        _confirm_remove()
+    elif s.get("pending_action"):
+        _confirm_action()
+    elif s.get("review_open"):
+        _review(m, user)

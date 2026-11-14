@@ -23,7 +23,7 @@ def fmt_ts(iso: str) -> str:
 
 
 def _open_in_form(cur, load=None) -> None:
-    state.open_for_edit(cur, load)
+    state.open_for_edit(cur, load, created_at=st.session_state.get("mi_created_at", ""))
     v = f" (copied from version {load.version})" if load is not None and load.version != cur.version else ""
     common.flash("info", f"{cur.indent_id} loaded for correction{v}. Change what you need, then press "
                          "Update indent.")
@@ -81,6 +81,7 @@ def render(user: User) -> None:
         "Delivery": view["delivery_date"], "City": view["city"], "Customer": view["customer"],
         "Store": view["store"], "Items": view["lines"], "Amount": view["total_amount"],
         "Last edited": view["last_edited_at"].map(fmt_ts), "By": view["last_edited_by"],
+        "Editable": view["can_edit"].map(lambda b: "yes" if b else "closed"),
     })
     if user.is_owner:
         show["Created by"] = view["created_by"].values
@@ -123,6 +124,10 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
     st.caption(f"Total amount ₹ {cur.total_amount:,.2f}")
 
     frozen = cur.status == STATUS_FROZEN
+    created = indents.created_at(df, indent_id)
+    st.session_state["mi_created_at"] = created
+    open_ = indents.can_edit(created)
+    deadline = indents.edit_deadline(created).strftime("%d %b %Y, %I:%M %p") if created else ""
     confirm = st.session_state.get("mi_confirm")
     if confirm and confirm[0] == indent_id:
         load_v = confirm[1]
@@ -134,15 +139,19 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
         if c[1].button("Keep my work"):
             st.session_state.pop("mi_confirm", None)
             st.rerun()
-    elif not frozen:
-        if st.button("✏️ Correct this indent", type="primary"):
-            _request_open(cur)
-    else:
+    elif frozen:
         st.info("This indent is frozen with a PO and is read-only.")
+    elif not open_:
+        st.info(f"The edit window closed at {deadline}. This indent can no longer be changed.")
+    else:
+        c = st.columns([1, 3])
+        if c[0].button("✏️ Correct this indent", type="primary"):
+            _request_open(cur)
+        c[1].caption(f"Editable until **{deadline}**.")
 
     tabs = st.tabs(["Versions", "Change log", "PO & freeze"])
     with tabs[0]:
-        _versions(df, cur, frozen)
+        _versions(df, cur, frozen or not open_)
     with tabs[1]:
         _change_log(indent_id)
     with tabs[2]:

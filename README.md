@@ -16,6 +16,24 @@ Built from `MT_INDENT_BUILD_SPEC.md`, with one change: users sign in with their 
 
 Every user can change their own PIN from the sidebar.
 
+### Rules on the Indent screens
+
+- **Delivery date** must be after today (corrections: after the day the indent was created).
+- **Expected delivery time** is picked from 30-minute slots (12:00 AM … 11:30 PM).
+- **Submit / Update** opens a review box with everything entered (and, for corrections, the list of changes); nothing is saved until **Confirm**.
+- **Removing an item, clearing the form or discarding changes** asks for confirmation first.
+- **Edit window**: an indent can be corrected until **12:00 PM IST the day after it was created** (created 14 Nov 6:20 PM → editable until 15 Nov 12:00 PM). After that, Correct/Load/Update are disabled and the save is refused. Change with `edit_cutoff_days` / `edit_cutoff_hour` in the secrets.
+- **Spec** (origin / size) is switched off for now: not shown, and the production sheet groups by Parent SKU → Variety → Lot. Set `show_spec = true` in the secrets to bring it back.
+- If the app is **not connected to the Google Sheet** (secrets missing or wrong), every page shows a red banner with the exact reason.
+
+### Where to see all indents and their edit history
+
+In the Google Sheet (the owner also gets an **📄 Open Google Sheet** button in the sidebar):
+- **Indent_Lines**: every submitted version of every indent, one row per item. Filter `indent_id`; the highest `version` is current.
+- **Change_Log**: one row per change (who, when, from/to version, field, old → new). Filter `indent_id` for an indent's edit history.
+- **PO_Freeze**: which PO froze which indent.
+These tabs are created on the first submit (or with **Access → Create missing tabs**).
+
 ## Deploy on Streamlit Community Cloud
 
 1. **Google service account** (one time)
@@ -42,7 +60,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 ### SKU mapping (read live from the team's own tabs)
 
 - **All Cux City** is the list of SKU names: City, Customer, Parent SKU, Classification, Customer SKU Name.
-- **Apple varieties**: a column headed **Apple Variety** (any `<Parent> Variety` header works) lists the varieties the user chooses from, one per cell, anywhere down the column. A parent with varieties makes Variety required on page 3. If *Classification* holds a variety (different from the parent), it is pre-selected for that SKU.
+- **Apple varieties**: a tab named **Apple Variety** (or *Apple Varity* / *Apple Varieties*; any `<Parent> Variety` name) with one variety per row in its first column, or a column headed **Apple Variety** in All Cux City. A parent with varieties makes Variety required on page 3. If *Classification* holds a variety (different from the parent), it is pre-selected for that SKU.
 - **Mapping Whole** gives origin and size per SKU name (Spec-Origin, Spec-Size). Its rows are matched to All Cux City by City + Customer + SKU name. SKU names that appear only in Mapping Whole are not offered, which avoids near-duplicate names.
 - **Active origin**: by default Tanzania (Avocado), Peru (Blueberry) and RSA (Mandarin); a SKU with one origin row is active. To choose explicitly, add an **Active** column to Mapping Whole with `Y` on the origin being sourced.
 - **Lot is fixed per SKU** and cannot be edited in the app. It comes from an optional **Lot** (or **UOM**) column in either tab, or else from the unit in the name (`1PC/2PC/3PC` → Pcs, `200gm` → gms, `1Kg` → Kg, `Box`, `Tray`). A SKU with neither cannot be added; the Access page lists any such SKUs.
@@ -52,7 +70,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 
 ### Stores (read live from the team's own tab)
 
-- **Customer List**: *Customer List* (the customer) and *Store names*. Page 2 lists the stores of the chosen customer, in sheet order. The tab has no City column, so each store is offered for its customer in every city; add a **City** column if stores should be limited to a city.
+- **Customer List**: *City*, *Customer List* (the customer) and *Store names*. Page 2 offers the cities and customers found in the sheet (Customer List first, then All Cux City), in sheet order, and the stores of the chosen customer. The tab has no City column, so each store is offered for its customer in every city; add a **City** column if stores should be limited to a city.
 - A **Store_Map** tab (City, Customer, Store Name), if present, is added to that list.
 
 ### Other tabs

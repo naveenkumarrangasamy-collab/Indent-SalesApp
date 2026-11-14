@@ -161,8 +161,10 @@ def _setup(m: masters.Masters | None, me: User) -> None:
 
     if m is not None:
         st.markdown("**Master data checks**")
-        warn = m.active_warnings()
-        if warn.empty:
+        warn = m.active_warnings() if config.show_spec() else m.active_warnings().iloc[0:0]
+        if warn.empty and not config.show_spec():
+            st.caption("Spec (origin / size) is switched off, so Active-origin checks are skipped.")
+        elif warn.empty:
             st.success("Every SKU name has exactly one Active origin (or a single row).")
         else:
             st.warning(f"{len(warn)} SKU name(s) need exactly one row with Active = Y in SKU_Map:")

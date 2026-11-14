@@ -428,9 +428,17 @@ class LocalBackend(_Base):
 LOCAL_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
+CONNECT_ERROR = {"reason": ""}
+
+
 def make_backend():
-    if config.use_google():
-        return GoogleBackend(config.sheet_id(), config.service_account_info())
+    ok, reason = config.google_status()
+    CONNECT_ERROR["reason"] = reason
+    if ok:
+        try:
+            return GoogleBackend(config.sheet_id(), config.service_account_info())
+        except Exception as e:  # bad key etc.: fall back, and say why on every page
+            CONNECT_ERROR["reason"] = f"The service account key could not be used ({type(e).__name__}: {e})."
     # Local mode: start from the committed seed files on first run.
     seed = LOCAL_DATA_DIR / "seed"
     if seed.is_dir() and not any(LOCAL_DATA_DIR.glob("*.csv")):

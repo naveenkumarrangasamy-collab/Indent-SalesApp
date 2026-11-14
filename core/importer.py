@@ -139,6 +139,36 @@ def _default_active(group: list[dict], active_origins: dict[str, str]) -> None:
             x["Active"] = "Y" if x["Spec-Origin"].casefold() == want else "N"
 
 
+def variety_tab_parent(tab_name: str) -> str | None:
+    """'Apple Variety', 'Apple Varity', 'Apple Varieties' -> 'Apple'."""
+    text = _s(tab_name)
+    low = text.casefold()
+    for suffix in (" varieties", " variety", " varity", " varities"):
+        if low.endswith(suffix) and len(text) > len(suffix):
+            return text[: -len(suffix)].strip()
+    return None
+
+
+def build_varieties_from_tab(parent: str, values: list[list]) -> list[dict]:
+    """Varieties listed in a tab of their own: every non-empty cell of the
+    first filled column. A first row that is a header ('Variety', 'Apple
+    Variety', 'Apple', ...) is skipped."""
+    out, seen = [], set()
+    rows = [r for r in values if any(_s(c) for c in r)]
+    if not rows:
+        return out
+    col = next(i for i, c in enumerate(rows[0]) if _s(c)) if any(_s(c) for c in rows[0]) else 0
+    first = _s(rows[0][col]).casefold() if col < len(rows[0]) else ""
+    if "variet" in first or "varit" in first or first in {parent.casefold(), "name", "names"}:
+        rows = rows[1:]
+    for r in rows:
+        v = _s(r[col]) if col < len(r) else ""
+        if v and _k(parent, v) not in seen:
+            seen.add(_k(parent, v))
+            out.append({"Parent SKU": parent, "Variety": v})
+    return out
+
+
 def _variety_columns(values: list[list]) -> list[tuple[int, str]]:
     """Columns headed '<Parent> Variety' (e.g. 'Apple Variety'): (index, parent)."""
     if not values:

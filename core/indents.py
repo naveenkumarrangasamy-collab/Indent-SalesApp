@@ -11,7 +11,7 @@ the next number (new indent) or reports a conflict (correction / freeze).
 from __future__ import annotations
 
 import re
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -34,6 +34,47 @@ class FrozenError(SheetError):
 
 class NothingChangedError(SheetError):
     pass
+
+
+class CutoffError(SheetError):
+    """The edit window of the indent has closed."""
+
+
+# ----------------------------------------------------------- time rules
+
+def _ist(iso: str) -> datetime:
+    dt = datetime.fromisoformat(str(iso))
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=config.IST)
+    return dt.astimezone(config.IST)
+
+
+def edit_deadline(created_iso: str) -> datetime:
+    """Indents can be edited until `edit_cutoff_hour` (12:00) IST on the day
+    after they were created (`edit_cutoff_days` = 1)."""
+    d = _ist(created_iso).date() + timedelta(days=config.edit_cutoff_days())
+    return datetime(d.year, d.month, d.day, config.edit_cutoff_hour(), tzinfo=config.IST)
+
+
+def can_edit(created_iso: str, now: datetime | None = None) -> bool:
+    try:
+        return (now or config.now_ist()) < edit_deadline(created_iso)
+    except (TypeError, ValueError):
+        return False
+
+
+def min_delivery_date(created_iso: str | None = None) -> date:
+    """Delivery must be after today (new indent) or after the day the indent
+    was created (corrections), so a saved date stays valid while editing."""
+    base = _ist(created_iso).date() if created_iso else config.now_ist().date()
+    return base + timedelta(days=1)
+
+
+def created_at(df: pd.DataFrame, indent_id: str) -> str:
+    sub = df[df["indent_id"] == indent_id]
+    if sub.empty:
+        return ""
+    return sub.sort_values(["version", "_row"]).iloc[0]["submitted_at"]
 
 
 # ------------------------------------------------------------------ reading
@@ -81,7 +122,7 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
     """One row per indent (current version) for the My indents table."""
     cols = ["indent_id", "version", "status", "delivery_date", "city", "customer", "store",
             "expected_time", "lines", "total_amount", "last_edited_at", "last_edited_by",
-            "created_by", "created_at"]
+            "created_by", "created_at", "can_edit"]
     if df.empty:
         return pd.DataFrame(columns=cols)
     first = (df.sort_values(["indent_id", "version", "_row"])
@@ -98,6 +139,7 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
                    last_edited_by=("submitted_by", "first")))
     out = agg.join(first).reset_index()
     out["total_amount"] = out["total_amount"].round(2)
+    out["can_edit"] = out["created_at"].map(can_edit) & (out["status"] != STATUS_FROZEN)
     return out.sort_values("last_edited_at", ascending=False)[cols].reset_index(drop=True)
 
 
@@ -135,11 +177,14 @@ def snapshot(df: pd.DataFrame, indent_id: str, version: int | None = None) -> In
 
 # --------------------------------------------------------------- validation
 
-def validate(header: IndentHeader, lines: list[IndentLine], m: Masters) -> list[str]:
+def validate(header: IndentHeader, lines: list[IndentLine], m: Masters,
+             min_date: date | None = None) -> list[str]:
     errors: list[str] = []
     missing = header.missing()
     if missing:
         errors.append("Delivery details missing: " + ", ".join(missing) + ".")
+    if min_date and header.delivery_date and header.delivery_date < min_date.isoformat():
+        errors.append(f"Delivery date must be on or after {min_date:%d %b %Y}.")
     if header.city and header.customer and header.store:
         if header.store not in m.stores_for(header.city, header.customer):
             errors.append(f"Store '{header.store}' is not mapped to {header.customer} in {header.city}.")
@@ -217,6 +262,8 @@ def _append_verified(backend, rows: list[dict], indent_id: str, version: int,
 
 
 def submit_new(header: IndentHeader, lines: list[IndentLine], user: str) -> str:
+    if header.delivery_date < min_delivery_date().isoformat():
+        raise SheetError("The delivery date must be after today.")
     backend = get_backend()
     for _ in range(3):
         df = prepare(backend.read(INDENT_LINES))
@@ -251,6 +298,12 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
     df = prepare(backend.read(INDENT_LINES))
     cur = snapshot(df, indent_id)
     _check_editable(cur, indent_id, base_version)
+    created = created_at(df, indent_id)
+    if not can_edit(created):
+        raise CutoffError(f"{indent_id} can no longer be edited: the edit window closed at "
+                          f"{edit_deadline(created):%d %b %Y, %I:%M %p}.")
+    if header.delivery_date < min_delivery_date(created).isoformat():
+        raise SheetError(f"The delivery date must be on or after {min_delivery_date(created):%d %b %Y}.")
     changes = changelog.diff(cur.header, cur.lines, header, lines)
     if not changes:
         raise NothingChangedError("Nothing changed compared with the saved version.")
@@ -299,6 +352,6 @@ def freeze(indent_id: str, base_version: int, po_file_name: str, user: str) -> i
     return new_v
 
 
-__all__ = ["read_lines", "current_rows", "summary", "versions", "snapshot", "validate",
+__all__ = ["edit_deadline", "can_edit", "min_delivery_date", "created_at", "CutoffError", "read_lines", "current_rows", "summary", "versions", "snapshot", "validate",
            "submit_new", "submit_update", "freeze", "next_indent_id", "build_rows",
            "ConflictError", "FrozenError", "NothingChangedError", "fmt_num"]
