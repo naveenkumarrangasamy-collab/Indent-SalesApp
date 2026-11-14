@@ -18,10 +18,11 @@ PO_FREEZE = "PO_Freeze"
 DRAFTS = "Drafts"
 
 TABS: dict[str, list[str]] = {
-    # Input tabs (maintained by the team). "Variety" in SKU_Map is optional:
-    # when filled it pre-selects the variety for that SKU name.
+    # Input tabs (maintained by the team). Only used when the sheet has no
+    # "All Cux City" tab (see core/importer.py). "Variety" pre-selects the
+    # variety and "Lot" fixes the lot for that SKU name; both optional.
     SKU_MAP: ["City", "Customer", "Parent SKU", "Customer SKU Name",
-              "Spec-Origin", "Spec-Size", "Active", "Variety"],
+              "Spec-Origin", "Spec-Size", "Active", "Variety", "Lot"],
     STORE_MAP: ["City", "Customer", "Store Name"],
     VARIETIES: ["Parent SKU", "Variety"],
     # Access is edited from the app's Access page (owner only).

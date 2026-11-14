@@ -112,8 +112,8 @@ def test_versions_and_summary(backend):
 
 def _masters():
     sku = pd.DataFrame([
-        ["Bangalore", "Zepto", "Avocado", "1PC - Hass Avocado Imported", "Tanzania", "20C", "Y", ""],
-        ["Bangalore", "Zepto", "Apple", "2PC - Apple Queen Imported", "", "", "Y", "Queen"],
+        ["Bangalore", "Zepto", "Avocado", "1PC - Hass Avocado Imported", "Tanzania", "20C", "Y", "", ""],
+        ["Bangalore", "Zepto", "Apple", "2PC - Apple Queen Imported", "", "", "Y", "Queen", ""],
     ], columns=TABS[SKU_MAP])
     stores = pd.DataFrame([["Bangalore", "Zepto", "Store A"], ["Bangalore", "Swiggy", "Store S"]],
                           columns=TABS[STORE_MAP])

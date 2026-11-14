@@ -87,9 +87,11 @@ MW = [["City", "Customer", "Parent SKU", "Customer SKU Name", "Spec-Origin", "Sp
       ["Bangalore", "Zepto", "Avocado", "1PC - Hass Avocado Imported", "Kenya", "20C", ""],
       ["Bangalore", "Zepto", "Mandarin", "3PC - Baby Orange Imported", "China", "60", ""],
       ["Bangalore", "Zepto", "Mandarin", "3PC - Baby Orange Imported", "RSA", "2C", ""],
+      ["Bangalore", "Zepto", "Apple", "2PC - Snacky Apple", "", "", ""],
       ["", "", "Apple", "2PC", "", "", ""]]
 AC = [["City", "Customer", "Parent SKU", "Classification", "Customer SKU Name", "", "x"],
       ["Bangalore", "Zepto", "Avocado", "Avocado", "1PC - Hass Avocado Imported", "", ""],
+      ["Bangalore", "Zepto", "Mandarin", "Mandarin", "3PC - Baby Orange Imported", "", ""],
       ["Bangalore", "Zepto", "Apple", "Gala", "2PC - Apple Royal Gala Imported", "", "Gala"],
       ["", "", "", "Fuji", "", "", "Fuji"],
       ["Bangalore", "Zepto", "Kiwi", "Kiwi", "2PC - Snacky Kiwi", "", ""],
@@ -98,7 +100,7 @@ AC = [["City", "Customer", "Parent SKU", "Classification", "Customer SKU Name", 
       ["", "", "", "Stray", "", "", ""]]
 
 
-def test_importer_builds_sku_map_and_varieties():
+def test_names_come_from_all_cux_city_with_specs_from_mapping_whole():
     rows = importer.build_sku_map(MW, AC)
     by = {(r["Customer SKU Name"], r["Spec-Origin"]): r for r in rows}
     assert by[("1PC - Hass Avocado Imported", "Tanzania")]["Active"] == "Y"
@@ -108,6 +110,51 @@ def test_importer_builds_sku_map_and_varieties():
     assert by[("2PC - Apple Royal Gala Imported", "")]["Variety"] == "Gala"
     assert by[("2PC - Apple Royal Gala Imported", "")]["Active"] == "Y"
     assert sum(1 for r in rows if "Snacky Kiwi" in r["Customer SKU Name"]) == 1  # de-duplicated
-    assert not any(r["Customer SKU Name"] == "2PC" for r in rows)  # rows without city skipped
+    # Names only in Mapping Whole are not added (avoids near-duplicates)
+    assert not any(r["Customer SKU Name"] == "2PC - Snacky Apple" for r in rows)
+    assert not any(r["Customer SKU Name"] == "2PC" for r in rows)
     var = importer.build_varieties(AC)
     assert var == [{"Parent SKU": "Apple", "Variety": "Gala"}, {"Parent SKU": "Apple", "Variety": "Fuji"}]
+
+
+def test_mapping_whole_used_when_all_cux_city_is_empty():
+    rows = importer.build_sku_map(MW, [])
+    assert {r["Customer SKU Name"] for r in rows} == {
+        "1PC - Hass Avocado Imported", "3PC - Baby Orange Imported", "2PC - Snacky Apple"}
+
+
+def test_optional_lot_and_active_columns():
+    mw = [["City", "Customer", "Parent SKU", "Customer SKU Name", "Spec-Origin", "Spec-Size", "Active"],
+          ["Bangalore", "Zepto", "Avocado", "Avocado Loose", "Kenya", "20C", "Y"],
+          ["Bangalore", "Zepto", "Avocado", "Avocado Loose", "Tanzania", "20C", ""]]
+    ac = [["City", "Customer", "Parent SKU", "Classification", "Customer SKU Name", "UOM"],
+          ["Bangalore", "Zepto", "Avocado", "Avocado", "Avocado Loose", "kg"]]
+    rows = importer.build_sku_map(mw, ac)
+    assert {r["Spec-Origin"]: r["Active"] for r in rows} == {"Kenya": "Y", "Tanzania": "N"}
+    assert {r["Lot"] for r in rows} == {"Kg"}
+
+
+def test_masters_built_live_and_lot_is_fixed():
+    from core.masters import frames_from_values, masters_from_frames
+
+    raw = {"All Cux City": AC + [["Bangalore", "Zepto", "Litchi", "Litchi", "200gm - Litchi Imported (Longan)"],
+                                 ["Bangalore", "Zepto", "Apple", "Gala", "Apple Royal Gala - PTP STD Lot"]],
+           "Mapping Whole": MW}
+    frames, source = frames_from_values(raw)
+    m = masters_from_frames(frames, source)
+    assert source.startswith("live")
+    assert m.parents("Bangalore", "Zepto") == ["Apple", "Avocado", "Kiwi", "Litchi", "Mandarin"]
+    assert m.spec("Bangalore", "Zepto", "1PC - Hass Avocado Imported") == ("Tanzania", "20C")
+    assert m.lot_for("Bangalore", "Zepto", "200gm - Litchi Imported (Longan)") == "gms"
+    assert m.lot_for("Bangalore", "Zepto", "1PC - Hass Avocado Imported") == "Pcs"
+    assert m.lot_for("Bangalore", "Zepto", "Apple Royal Gala - PTP STD Lot") == ""  # no unit, no Lot column
+    assert m.varieties_for("Apple") == ["Gala", "Fuji"]
+
+
+def test_sku_map_tab_used_without_legacy_tabs():
+    from core.masters import frames_from_values
+
+    raw = {"SKU_Map": [["City", "Customer", "Parent SKU", "Customer SKU Name", "Lot"],
+                       ["Pune", "Zepto", "Onion", "Onion loose", "Kg"]]}
+    frames, source = frames_from_values(raw)
+    assert source == "SKU_Map tab" and frames["SKU_Map"].iloc[0]["Lot"] == "Kg"

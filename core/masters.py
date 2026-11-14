@@ -11,9 +11,10 @@ from dataclasses import dataclass
 import pandas as pd
 import streamlit as st
 
-from core import config
+from core import config, importer
+from core.lots import detect_lot
 from core.schema import (ACCESS, DEFAULT_CUSTOMERS, MASTER_TABS, SKU_MAP,
-                         STORE_MAP, VARIETIES)
+                         STORE_MAP, TABS, VARIETIES)
 
 
 def _clean(df: pd.DataFrame) -> pd.DataFrame:
@@ -34,6 +35,7 @@ class Masters:
     stores: pd.DataFrame
     varieties: pd.DataFrame
     access: pd.DataFrame
+    sku_source: str = "SKU_Map tab"
 
     # ---------------- lookups used by the screens ----------------
     def _sku_for(self, city: str, customer: str) -> pd.DataFrame:
@@ -103,6 +105,17 @@ class Masters:
         vals = [v for v in df.get("Variety", pd.Series(dtype=str)) if v]
         return vals[0] if vals else ""
 
+    def lot_for(self, city: str, customer: str, sku_name: str) -> str:
+        """The fixed lot for a SKU name: the Lot/UOM column of the mapping if
+        filled, otherwise the unit word in the name. '' if neither."""
+        df = self._sku_for(city, customer)
+        df = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
+        for v in df.get("Lot", pd.Series(dtype=str)):
+            lot = detect_lot(v) if v else None
+            if lot:
+                return lot
+        return detect_lot(sku_name) or ""
+
     def varieties_for(self, parent: str) -> list[str]:
         df = self.varieties
         df = df[df["Parent SKU"].map(_key) == _key(parent)]
@@ -149,24 +162,51 @@ def _unique_in_order(vals) -> list[str]:
     return out
 
 
-def masters_from_frames(frames: dict[str, pd.DataFrame]) -> Masters:
+def masters_from_frames(frames: dict[str, pd.DataFrame], sku_source: str = "SKU_Map tab") -> Masters:
     return Masters(
         sku=_clean(frames[SKU_MAP]),
         stores=_clean(frames[STORE_MAP]),
         varieties=_clean(frames[VARIETIES]),
         access=_clean(frames[ACCESS]),
+        sku_source=sku_source,
     )
 
 
+def frames_from_values(raw: dict[str, list[list]]) -> tuple[dict[str, pd.DataFrame], str]:
+    """Master frames from raw tab values. When the sheet has an
+    'All Cux City' tab, the SKU mapping and varieties are built live from it
+    (plus 'Mapping Whole' for origin and size) instead of the SKU_Map tab."""
+    from core.sheets import frame_from_values
+
+    frames = {t: frame_from_values(t, raw.get(t, [])) for t in MASTER_TABS}
+    source = "SKU_Map tab"
+    if any(any(str(c).strip() for c in row) for row in raw.get(importer.ALL_CUX_CITY, [])[1:]):
+        sku_rows = importer.build_sku_map(raw.get(importer.MAPPING_WHOLE, []),
+                                          raw[importer.ALL_CUX_CITY])
+        frames[SKU_MAP] = pd.DataFrame(sku_rows, columns=TABS[SKU_MAP])
+        frames[SKU_MAP]["_row"] = 0
+        var = pd.DataFrame(importer.build_varieties(raw[importer.ALL_CUX_CITY]),
+                           columns=TABS[VARIETIES])
+        merged = pd.concat([frames[VARIETIES][TABS[VARIETIES]], var], ignore_index=True)
+        frames[VARIETIES] = merged[merged["Variety"].astype(str).str.strip() != ""].drop_duplicates()
+        frames[VARIETIES]["_row"] = 0
+        source = f"live from '{importer.ALL_CUX_CITY}' + '{importer.MAPPING_WHOLE}'"
+    return frames, source
+
+
 @st.cache_data(ttl=config.master_cache_seconds(), show_spinner="Loading master data…")
-def _load_frames() -> dict[str, pd.DataFrame]:
+def _load_frames() -> tuple[dict[str, pd.DataFrame], str]:
     from core.sheets import get_backend
 
-    return get_backend().read_many(MASTER_TABS)
+    backend = get_backend()
+    present = set(backend.list_tabs())
+    tabs = MASTER_TABS + [t for t in importer.LEGACY_TABS if t in present]
+    return frames_from_values(backend.read_values_many(tabs))
 
 
 def load_masters() -> Masters:
-    return masters_from_frames(_load_frames())
+    frames, source = _load_frames()
+    return masters_from_frames(frames, source)
 
 
 def clear_cache() -> None:

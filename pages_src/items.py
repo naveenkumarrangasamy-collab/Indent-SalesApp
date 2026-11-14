@@ -6,10 +6,8 @@ import streamlit as st
 
 from core import indents
 from core.auth import User
-from core.lots import detect_lot
 from core.masters import Masters
 from core.models import IndentLine, clean_str, fmt_num, to_number
-from core.schema import LOTS
 from core.sheets import SheetError
 from pages_src import common, state
 
@@ -26,7 +24,7 @@ def _ak(name: str) -> str:
 
 def _on_parent() -> None:
     s = st.session_state
-    for n in ("sku", "variety", "lot"):
+    for n in ("sku", "variety"):
         s.pop(_ak(n), None)
 
 
@@ -34,7 +32,6 @@ def _on_sku(m: Masters) -> None:
     s = st.session_state
     hdr = state.header()
     sku = s.get(_ak("sku"))
-    s[_ak("lot")] = detect_lot(sku) if sku else None
     parent = s.get(_ak("parent")) or ""
     varieties = m.varieties_for(parent)
     if varieties:
@@ -48,7 +45,7 @@ def _add_line(m: Masters) -> None:
     parent = s.get(_ak("parent"))
     sku = s.get(_ak("sku"))
     variety = s.get(_ak("variety")) or ""
-    lot = s.get(_ak("lot"))
+    lot = m.lot_for(hdr.city, hdr.customer, sku) if sku else ""
     qty = to_number(s.get(_ak("qty")))
     price = to_number(s.get(_ak("price")))
     errors = []
@@ -59,7 +56,8 @@ def _add_line(m: Masters) -> None:
     if parent and m.needs_variety(parent) and not variety:
         errors.append("Choose a variety.")
     if not lot:
-        errors.append("Choose a lot (no unit found in the SKU name).")
+        errors.append("No lot is mapped for this SKU name. Ask the indent owner to add a "
+                      "'Lot' column value for it in the sheet.")
     if qty <= 0:
         errors.append("Qty must be greater than 0.")
     if price <= 0:
@@ -100,26 +98,24 @@ def _add_form(m: Masters) -> None:
             c[2].selectbox("Variety", varieties, index=None, key=_ak("variety"), placeholder="Choose")
         else:
             c[2].selectbox("Variety", ["Not needed"], index=0, disabled=True, key=_ak("variety_na"))
-        c[3].selectbox("Lot", LOTS, index=None, key=_ak("lot"), placeholder="Choose")
+        lot_now = m.lot_for(hdr.city, hdr.customer, sku) if sku else ""
+        c[3].text_input("Lot", value=lot_now or ("not mapped" if sku else ""), disabled=True,
+                        help="Set automatically from the SKU mapping; it cannot be changed here.")
         c[4].number_input("Qty", min_value=0.0, value=None, step=1.0, key=_ak("qty"), placeholder="0")
         c[5].number_input("Price / lot", min_value=0.0, value=None, step=1.0, key=_ak("price"),
                           placeholder="0.00")
 
         if sku:
             origin, size = m.spec(hdr.city, hdr.customer, sku)
-            spec = " · ".join(x for x in (origin, size) if x) or "no active origin set"
-            hint = ""
-            lot_now = s.get(_ak("lot"))
-            if lot_now and detect_lot(sku) == lot_now:
-                hint = f" · lot **{lot_now}** picked from the name (you can change it)"
-            elif detect_lot(sku) is None:
-                hint = " · no unit in the name, please choose the lot"
-            st.caption(f"Spec: {spec}{hint}")
+            spec = " · ".join(x for x in (origin, size) if x) or "origin / size not in Mapping Whole"
+            st.caption(f"Spec: {spec}")
+            if not lot_now:
+                st.warning("No lot is mapped for this SKU name, so it can't be added yet.")
 
         qty, price = to_number(s.get(_ak("qty"))), to_number(s.get(_ak("price")))
         b1, b2 = st.columns([1, 4])
         b1.button("＋ Add item", on_click=_add_line, args=(m,), type="secondary",
-                  width="stretch")
+                  width="stretch", disabled=bool(sku) and not lot_now)
         if qty > 0 and price > 0:
             b2.caption(f"Amount: ₹ {qty * price:,.2f}")
         for e in s.pop("add_errors", []):
@@ -150,11 +146,11 @@ def _lines_table(m: Masters) -> None:
     key = f"ed_{st.session_state.get('editor_rev', 0)}"
     edited = st.data_editor(
         df, key=key, hide_index=True, width="stretch", num_rows="fixed",
-        disabled=["Parent SKU", "Customer SKU Name", "Spec", "Amount"],
+        disabled=["Parent SKU", "Customer SKU Name", "Spec", "Lot", "Amount"],
         column_config={
             "Customer SKU Name": st.column_config.TextColumn(width="large"),
             "Variety": st.column_config.SelectboxColumn(options=all_varieties),
-            "Lot": st.column_config.SelectboxColumn(options=LOTS, required=True),
+            "Lot": st.column_config.TextColumn(help="Fixed by the SKU mapping"),
             "Qty": st.column_config.NumberColumn(min_value=0.0, step=0.001, format="%g"),
             "Price": st.column_config.NumberColumn("Price / lot", min_value=0.0, step=0.01, format="%.2f"),
             "Amount": st.column_config.NumberColumn(format="%.2f"),
@@ -172,7 +168,7 @@ def _lines_table(m: Masters) -> None:
         if not m.needs_variety(x.parent_sku):
             variety = ""
         new_lines.append(IndentLine(parent_sku=x.parent_sku, customer_sku_name=x.customer_sku_name,
-                                    variety=variety, lot=clean_str(r.get("Lot")),
+                                    variety=variety, lot=x.lot,
                                     qty=to_number(r.get("Qty")), price=to_number(r.get("Price"))))
     if removed:
         state.set_lines(new_lines, structural=True)

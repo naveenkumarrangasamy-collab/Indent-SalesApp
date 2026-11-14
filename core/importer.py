@@ -1,97 +1,134 @@
-"""One-time import of SKU_Map and Varieties from the team's existing tabs.
+"""Builds the SKU mapping live from the team's existing tabs.
 
-Sources in the current Google Sheet:
-- "Mapping Whole": City, Customer, Parent SKU, Customer SKU Name,
-  Spec-Origin, Spec-Size (one row per origin).
-- "All Cux City": City, Customer, Parent SKU, Classification,
-  Customer SKU Name. For Apple, Classification is the variety
-  (Gala, Granny Smith, ...).
+Sources in the Google Sheet (read on every master-data refresh, never changed):
 
-Nothing in the source tabs is changed. The owner runs this from the Access
-page when SKU_Map / Varieties are still empty, then maintains SKU_Map.
+- "All Cux City" is the master list of customer SKU names:
+  City, Customer, Parent SKU, Classification, Customer SKU Name.
+  For Apple, Classification is the variety (Gala, Granny Smith, ...).
+- "Mapping Whole" gives the spec per origin:
+  City, Customer, Parent SKU, Customer SKU Name, Spec-Origin, Spec-Size.
+  Its rows are matched to All Cux City by City + Customer + SKU name.
+
+Optional columns the team can add (matched by header name, any position):
+- "Lot" or "UOM" in either tab: fixes the lot for that SKU name
+  (Kg, Pcs, Tray, Box, gms). Without it the lot comes from the SKU name.
+- "Active" in Mapping Whole: Y for the origin being sourced. Without it,
+  Tanzania (Avocado), Peru (Blueberry) and RSA (Mandarin) are active, and a
+  SKU with a single origin row is active.
+
+If "All Cux City" has no usable rows, the names from "Mapping Whole" are used.
 """
 from __future__ import annotations
 
+from core.lots import detect_lot
 from core.schema import norm_header
 
 MAPPING_WHOLE = "Mapping Whole"
 ALL_CUX_CITY = "All Cux City"
+LEGACY_TABS = [ALL_CUX_CITY, MAPPING_WHOLE]
 
 # Origin currently being sourced, per parent (the yellow rows in the spec).
 DEFAULT_ACTIVE_ORIGINS = {"avocado": "tanzania", "blueberry": "peru", "mandarin": "rsa"}
 
+_LOT_HEADERS = ("lot", "uom", "lotuom", "unit")
 
-def _records(values: list[list]) -> list[dict]:
-    """Rows as dicts keyed by normalised header; blank header cells skipped."""
+
+def _s(v) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, float) and v.is_integer():
+        v = int(v)
+    return " ".join(str(v).split())
+
+
+def _records(values: list[list]) -> tuple[list[dict], set[str]]:
+    """Rows as dicts keyed by normalised header (blank headers skipped),
+    plus the set of headers present."""
     if not values:
-        return []
+        return [], set()
     header = [norm_header(h) for h in values[0]]
     out = []
     for row in values[1:]:
         rec = {}
         for i, h in enumerate(header):
             if h and h not in rec:
-                rec[h] = str(row[i]).strip() if i < len(row) and row[i] is not None else ""
+                rec[h] = _s(row[i]) if i < len(row) else ""
         out.append(rec)
-    return out
+    return out, {h for h in header if h}
 
 
 def _k(*parts: str) -> tuple:
-    return tuple(" ".join(str(p).split()).casefold() for p in parts)
+    return tuple(_s(p).casefold() for p in parts)
+
+
+def _lot_of(rec: dict) -> str:
+    for h in _LOT_HEADERS:
+        if rec.get(h):
+            return detect_lot(rec[h]) or ""
+    return ""
+
+
+def _valid(rec: dict) -> bool:
+    return all(rec.get(f) for f in ("city", "customer", "parentsku", "customerskuname"))
 
 
 def build_sku_map(mapping_whole: list[list], all_cux_city: list[list],
                   active_origins: dict[str, str] | None = None) -> list[dict]:
     active_origins = DEFAULT_ACTIVE_ORIGINS if active_origins is None else active_origins
+    mw, mw_headers = _records(mapping_whole)
+    ac, _ = _records(all_cux_city)
+    has_active_col = "active" in mw_headers
+
+    # Spec rows from Mapping Whole, by (city, customer, name).
+    specs: dict[tuple, list[dict]] = {}
+    for r in mw:
+        if r.get("city") and r.get("customer") and r.get("customerskuname"):
+            specs.setdefault(_k(r["city"], r["customer"], r["customerskuname"]), []).append(r)
+
+    names = [r for r in ac if _valid(r)] or [r for r in mw if _valid(r)]
+
     rows: list[dict] = []
     seen: set[tuple] = set()
-
-    # Default variety per (city, customer, name) from All Cux City.
-    variety_by_name: dict[tuple, str] = {}
-    for r in _records(all_cux_city):
-        parent, cls, name = r.get("parentsku", ""), r.get("classification", ""), r.get("customerskuname", "")
-        if parent and cls and name and cls.casefold() != parent.casefold():
-            variety_by_name[_k(r.get("city", ""), r.get("customer", ""), name)] = cls
-
-    def add(city, customer, parent, name, origin, size):
-        name = " ".join(name.split())
-        if not (city and customer and parent and name):
-            return
-        key = _k(city, customer, name, origin)
+    for r in names:
+        key = _k(r["city"], r["customer"], r["customerskuname"])
         if key in seen:
-            return
+            continue
         seen.add(key)
-        rows.append({"City": city, "Customer": customer, "Parent SKU": parent,
-                     "Customer SKU Name": name, "Spec-Origin": origin, "Spec-Size": size,
-                     "Active": "", "Variety": variety_by_name.get(_k(city, customer, name), "")})
-
-    for r in _records(mapping_whole):
-        add(r.get("city", ""), r.get("customer", ""), r.get("parentsku", ""),
-            r.get("customerskuname", ""), r.get("specorigin", ""), r.get("specsize", ""))
-
-    named = {_k(x["City"], x["Customer"], x["Customer SKU Name"]) for x in rows}
-    for r in _records(all_cux_city):
-        key = _k(r.get("city", ""), r.get("customer", ""), " ".join(r.get("customerskuname", "").split()))
-        if key in named:
-            continue
-        add(r.get("city", ""), r.get("customer", ""), r.get("parentsku", ""),
-            r.get("customerskuname", ""), "", "")
-        named.add(key)
-
-    # Active flag: a single row is active; with several origins, the
-    # configured origin for that parent is active and the rest are N.
-    groups: dict[tuple, list[dict]] = {}
-    for x in rows:
-        groups.setdefault(_k(x["City"], x["Customer"], x["Customer SKU Name"]), []).append(x)
-    for grp in groups.values():
-        if len(grp) == 1:
-            grp[0]["Active"] = "Y"
-            continue
-        want = active_origins.get(grp[0]["Parent SKU"].casefold())
-        if want and any(x["Spec-Origin"].casefold() == want for x in grp):
-            for x in grp:
-                x["Active"] = "Y" if x["Spec-Origin"].casefold() == want else "N"
+        parent = r["parentsku"]
+        cls = r.get("classification", "")
+        variety = cls if cls and cls.casefold() != parent.casefold() else ""
+        spec_rows = specs.get(key, [])
+        lot = _lot_of(r) or next((_lot_of(x) for x in spec_rows if _lot_of(x)), "")
+        origins_seen: set[str] = set()
+        group: list[dict] = []
+        for sr in spec_rows or [{}]:
+            origin = sr.get("specorigin", "")
+            if origin.casefold() in origins_seen:
+                continue
+            origins_seen.add(origin.casefold())
+            active = ""
+            if has_active_col and sr:
+                active = "Y" if sr.get("active", "").strip().lower() in {"y", "yes", "true", "1"} else "N"
+            group.append({"City": r["city"], "Customer": r["customer"], "Parent SKU": parent,
+                          "Customer SKU Name": r["customerskuname"], "Spec-Origin": origin,
+                          "Spec-Size": sr.get("specsize", ""), "Active": active,
+                          "Variety": variety, "Lot": lot})
+        _default_active(group, active_origins)
+        rows.extend(group)
     return rows
+
+
+def _default_active(group: list[dict], active_origins: dict[str, str]) -> None:
+    """Fill Active only when the sheet does not say which origin is active."""
+    if any(x["Active"] == "Y" for x in group):
+        return
+    if len(group) == 1:
+        group[0]["Active"] = "Y"
+        return
+    want = active_origins.get(group[0]["Parent SKU"].casefold())
+    if want and any(x["Spec-Origin"].casefold() == want for x in group):
+        for x in group:
+            x["Active"] = "Y" if x["Spec-Origin"].casefold() == want else "N"
 
 
 def build_varieties(all_cux_city: list[list]) -> list[dict]:
@@ -101,7 +138,8 @@ def build_varieties(all_cux_city: list[list]) -> list[dict]:
     out: list[dict] = []
     seen: set[tuple] = set()
     last_parent = ""
-    for r in _records(all_cux_city):
+    recs, _ = _records(all_cux_city)
+    for r in recs:
         if not any(r.values()):
             last_parent = ""
             continue

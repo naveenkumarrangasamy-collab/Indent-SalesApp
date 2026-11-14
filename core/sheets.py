@@ -124,8 +124,12 @@ class _Base:
 
     # public API ----------------------------------------------------------
     def read_values(self, tab: str) -> list[list]:
-        """Raw values of any tab (used by the importer for legacy tabs)."""
+        """Raw values of any tab (used for the team's own mapping tabs)."""
         return self._get_values([tab]).get(tab, [])
+
+    def read_values_many(self, tabs: list[str]) -> dict[str, list[list]]:
+        """Raw values of several tabs in one call; missing tabs give []."""
+        return self._get_values(tabs)
 
     def read_many(self, tabs: list[str]) -> dict[str, pd.DataFrame]:
         raw = self._get_values(tabs)

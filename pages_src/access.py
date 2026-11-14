@@ -6,8 +6,7 @@ import streamlit as st
 
 from core import auth, config, importer, masters
 from core.auth import User
-from core.schema import (ACCESS_ACTIVE, ACCESS_REVOKED, ROLE_OWNER,
-                         ROLE_SALES, SKU_MAP, TABS, VARIETIES)
+from core.schema import ACCESS_ACTIVE, ACCESS_REVOKED, ROLE_OWNER, ROLE_SALES, TABS
 from core.sheets import SheetError, get_backend
 from pages_src import common
 
@@ -144,19 +143,21 @@ def _setup(m: masters.Masters | None, me: User) -> None:
         common.flash("success", f"Created: {', '.join(created) or 'nothing (all present)'}.")
         st.rerun()
 
-    st.markdown("**Fill SKU_Map and Varieties from your existing tabs**")
-    st.caption(f"Reads '{importer.MAPPING_WHOLE}' and '{importer.ALL_CUX_CITY}' (unchanged). "
-               "Only fills a tab that is still empty. Active origin is set to Tanzania (Avocado), "
-               "Peru (Blueberry) and RSA (Mandarin); SKUs with one row are marked active.")
-    sku_empty = m is None or m.sku.empty
-    var_empty = m is None or m.varieties.empty
-    has_sources = importer.MAPPING_WHOLE in tabs or importer.ALL_CUX_CITY in tabs
-    if st.button("Import SKU_Map / Varieties", disabled=not (has_sources and (sku_empty or var_empty))):
-        _import(backend, sku_empty, var_empty)
-    if not has_sources:
-        st.caption("Source tabs not found in this sheet.")
-    elif not (sku_empty or var_empty):
-        st.caption("SKU_Map and Varieties already have rows; edit them in the sheet.")
+    if m is not None:
+        st.markdown("**SKU mapping**")
+        st.markdown(f"Source: **{m.sku_source}**. {m.sku['Customer SKU Name'].nunique()} SKU names, "
+                    f"{len(m.varieties)} varieties. Changes in the sheet show within "
+                    f"{config.master_cache_seconds()} s, or at once with ↻ Refresh data.")
+        if m.sku_source.startswith("live"):
+            st.caption(f"SKU names, parents and Apple varieties come from '{importer.ALL_CUX_CITY}'; "
+                       f"origin and size from '{importer.MAPPING_WHOLE}'. Optional columns you can add: "
+                       "'Lot' (or 'UOM') to fix the lot of a SKU, and 'Active' in "
+                       f"'{importer.MAPPING_WHOLE}' (Y) to choose the origin being sourced.")
+        no_lot = sorted({r["Customer SKU Name"] for _, r in m.sku.iterrows()
+                         if not m.lot_for(r["City"], r["Customer"], r["Customer SKU Name"])})
+        if no_lot:
+            st.warning("No lot for these SKU names (no unit in the name and no Lot column). "
+                       "They cannot be added until a Lot is set: " + ", ".join(no_lot))
 
     if m is not None:
         st.markdown("**Master data checks**")
@@ -172,26 +173,3 @@ def _setup(m: masters.Masters | None, me: User) -> None:
         if no_store:
             st.warning("No stores in Store_Map for: " + ", ".join(no_store)
                        + ". Users cannot raise indents for these until stores are added.")
-
-
-def _import(backend, sku_empty: bool, var_empty: bool) -> None:
-    try:
-        backend.ensure_tabs([SKU_MAP, VARIETIES])
-        mw = backend.read_values(importer.MAPPING_WHOLE) if importer.MAPPING_WHOLE in backend.list_tabs() else []
-        ac = backend.read_values(importer.ALL_CUX_CITY) if importer.ALL_CUX_CITY in backend.list_tabs() else []
-        msgs = []
-        if sku_empty:
-            rows = importer.build_sku_map(mw, ac)
-            backend.append_dicts(SKU_MAP, rows)
-            msgs.append(f"{len(rows)} SKU_Map rows")
-        if var_empty:
-            rows = importer.build_varieties(ac)
-            backend.append_dicts(VARIETIES, rows)
-            msgs.append(f"{len(rows)} varieties")
-    except SheetError as e:
-        common.sheet_error(e, "Import failed.")
-        return
-    common.refresh_data()
-    common.flash("success", "Imported " + " and ".join(msgs) + ". Review them in the sheet.")
-    st.rerun()
-
