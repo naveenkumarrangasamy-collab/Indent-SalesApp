@@ -35,7 +35,9 @@ from core.schema import norm_header
 MAPPING_WHOLE = "Mapping Whole"
 ALL_CUX_CITY = "All Cux City"
 CUSTOMER_LIST = "Customer List"
-LEGACY_TABS = [ALL_CUX_CITY, MAPPING_WHOLE, CUSTOMER_LIST]
+PROD_BASE = "New"   # production base, filled by hand: City, Customer, Parent SKU, Customer SKU Name,
+                    # variety, Spec-Repacking, Spec-Size, Spec-Origin (one row per SKU name)
+LEGACY_TABS = [ALL_CUX_CITY, MAPPING_WHOLE, CUSTOMER_LIST, PROD_BASE]
 
 # Origin currently being sourced, per parent (the yellow rows in the spec).
 DEFAULT_ACTIVE_ORIGINS = {"avocado": "tanzania", "blueberry": "peru", "mandarin": "rsa"}
@@ -273,4 +275,18 @@ def build_store_map(customer_list: list[list]) -> list[dict]:
             continue
         seen.add(key)
         out.append({"City": city, "Customer": customer, "Store Name": store})
+    return out
+
+
+def build_prod_base(values: list[list]) -> list[dict]:
+    """Rows of the 'New' tab (the production base), keyed by normalised header."""
+    recs, _ = _records(values)
+    out = []
+    for r in recs:
+        if not (r.get("customerskuname") and r.get("customer")):
+            continue
+        out.append({"City": r.get("city", ""), "Customer": r["customer"], "Parent SKU": r.get("parentsku", ""),
+                    "Customer SKU Name": r["customerskuname"], "Variety": r.get("variety", ""),
+                    "Repacking": r.get("specrepacking") or r.get("repacking", ""),
+                    "Spec-Size": r.get("specsize", ""), "Spec-Origin": r.get("specorigin", "")})
     return out

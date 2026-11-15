@@ -165,7 +165,7 @@ def indent_mail_html(rows: pd.DataFrame, m: Masters | None, day: str, slot_label
              f"(scope: {html.escape(scope)}). {n_ind} indent(s), {waiting} still waiting for a PO. "
              "PDF and Excel copies are attached.</p>",
              "<h3 style='color:#1c6b49'>1. Overall indent (all SKUs)</h3>",
-             _html_table(odf, {"Total Qty"}),
+             _html_table(odf, {"Total"}),
              "<h3 style='color:#1c6b49'>2. Customer-level indent</h3>"]
     if cdf.empty:
         parts.append("<p style='color:#666'>No indents.</p>")
@@ -217,7 +217,7 @@ def production_mail_html(rows: pd.DataFrame, m: Masters | None, rules: list | No
         f"({html.escape(scope)}). {n} indent(s), {waiting} still waiting for a PO. "
         "The same report is attached as PDF and Excel.</p>",
         "<h3 style='color:#1c6b49'>Production sheet</h3>",
-        _html_table(p, {"Total Qty"}),
+        _html_table(p, {"Total"}),
         "<p style='color:#888;font-size:12px'>Sent by the MT Indent app.</p>"])
 
 

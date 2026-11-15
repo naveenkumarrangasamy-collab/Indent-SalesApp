@@ -94,7 +94,7 @@ def test_reports_overall_clubs_customers_and_customer_level_keeps_stores(env):
     from tests.test_indents_flow import _masters
     o = reports.overall_df(rows, _masters())
     assert "Customer SKU Name" not in o.columns and "Customer" not in o.columns
-    assert o[o["Parent SKU"] == "Avocado"]["Total Qty"].sum() == 60   # (split only where the spec differs)
+    assert o[o["Parent SKU"] == "Avocado"]["Qty"].sum() == 60   # (split only where the spec differs)
     c = reports.customer_df(rows)
     assert list(c["Customer"].unique()) == ["Swiggy", "Zepto"] and set(c["Status"]) == {"Waiting for PO"}
     files = reports.production_mail_files(rows, _masters(), [], TODAY, "9:00 AM")

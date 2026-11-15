@@ -143,17 +143,22 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 
 ### Production, batching and tracker (owner + warehouse only)
 
-- **Production sheet** (simplified on 16 Nov after the call with Naveen): all customers together, one row per
-  City + Parent SKU + Variety + Spec + **Repacking** + **Unit**, with Total Qty. Columns:
-  City, Parent SKU, Variety, Spec, Repacking, Total Qty, Unit (City hidden when only one city; Variety hidden when empty).
-  - **No** customer names, Customer SKU Name, Lot, Lot Size or box conversion (Units / Box / Boxes removed). The
-    ground team plans boxes from the repacking spec. Do not add customer-specific logic (e.g. for Swiggy).
-  - **Repacking** = optional `Repacking` column in Mapping Whole (or All Cux City), e.g. Swiggy apples indented in
-    Kg are mapped to "Box": the row shows Repacking Box, 700, Unit Kg. When blank, it comes from the SKU name
-    (lot size + lot, e.g. "2 Pcs Pack"; plain "Kg").
-  - **Unit** = the indent lot (Kg / Pack / Pcs / Box / Tray). Tiles show a total per unit.
-  - Unmapped specs show as "spec not mapped (name)" and are never merged. The page also has a spec mapping list
-    download (now with Repacking). The hourly e-mail uses the same columns.
+- **Production sheet** (16 Nov, second version): its base is the **New** tab of the Google Sheet, filled by hand,
+  one row per SKU name: City, Customer, Parent SKU, Customer SKU Name, variety, Spec-Repacking, Spec-Size,
+  Spec-Origin (matched to indent lines by City + Customer + Customer SKU Name, ignoring case/spaces; a row with
+  no City matches every city). All customers together. Columns:
+  City, Parent SKU, Variety, Spec-Origin, Repacking, Spec-Size, Lot Size, Qty, **Total**
+  (City hidden when only one city; Variety hidden when empty).
+  - One row per City + Parent SKU + Variety + Spec-Origin + Repacking + Spec-Size + Lot Size; Qty is the sum.
+  - **Total** clubs every customer for the same City + Parent SKU + Repacking + Spec-Size + Lot Size, in
+    repacking units, no conversion: 10 + 20 packs of 2 pcs repacked in punnets = "30 Punnet".
+  - Lot Size comes from the SKU name (e.g. "2 Pcs", "1 Kg"), else the lot.
+  - A SKU name missing from New shows Spec-Size "not in New tab (name)", is never clubbed, and is listed in a
+    warning on the page. Variety: New tab first, else the indent's variety.
+  - **No** customer names, Customer SKU Name or box conversion. No customer-specific logic.
+  - Tiles show a total per Repacking. The hourly e-mail uses the same table.
+  - Mapping Whole / spec labels are still used by the Batching sheet and the spec mapping list. A permanent
+    master for production is to be fixed later (user: "take it from New for now").
 - **Batching sheet:** **one table** with columns City, Customer, Delivery point, Parent SKU, **Customer SKU Name**, Variety, Lot, Lot Size, Spec, Qty, Indent. Downloads: PDF/Excel/CSV.
 - **Hourly tracker:** 8 AM–2 PM columns per customer/store row. Changed cells are amber (▲/▼) and unchanged cells green. It has a Status column and a detail dialog when a cell is clicked. Owner and warehouse only.
 - The City/SKU report was removed.
@@ -211,7 +216,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **137 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **141 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 

@@ -12,7 +12,7 @@ from core import config, indents, masters
 from core.auth import User
 from core.pdf_report import sections_pdf, table_pdf
 from core.production_calc import (batching, default_date, delivery_dates,
-                                  filter_lines, production, spec_mapping_list, unmapped)
+                                  filter_lines, not_in_base, production, spec_mapping_list, unmapped)
 from core.sheets import SheetError
 from pages_src import common
 
@@ -88,7 +88,7 @@ def _qty_strip(df: pd.DataFrame, qty: str, lines: pd.DataFrame, unit: str = "Lot
     by_lot = df.groupby(unit)[qty].sum() if not df.empty else pd.Series(dtype=float)
     tiles = [("Indents", lines["indent_id"].nunique(), ""), ("Delivery points", lines["store"].nunique(), ""),
              ("Customers", lines["customer"].nunique(), "")]
-    tiles += [(f"Total {lot}", f"{q:,.0f}", "to prepare") for lot, q in by_lot.items()]
+    tiles += [(f"Total {lot or '(no repacking)'}", f"{q:,.0f}", "to prepare") for lot, q in by_lot.items()]
     st.markdown("<div class='mt-tiles'>" + "".join(
         f"<div class='mt-tile{' good' if sub else ''}'><div class='lbl'>{lbl}</div><div class='val'>{val}</div>"
         f"<div class='sub'>{sub}</div></div>" for lbl, val, sub in tiles) + "</div>", unsafe_allow_html=True)
@@ -107,8 +107,9 @@ def _unmapped_warning(lines: pd.DataFrame, m) -> None:
 def render(user: User) -> None:
     common.show_flash()
     st.markdown("### Production sheet")
-    st.caption("Step 1 · what to produce: the total for **all customers**, per parent SKU, variety, spec and "
-               "repacking. Customers and delivery points are on the **Batching sheet**.")
+    st.caption("Step 1 · what to produce, **all customers together**. Variety, repacking, spec size and origin "
+               "come from the **New** tab of the Google Sheet. Customers and delivery points are on the "
+               "**Batching sheet**.")
     if not _guard(user):
         return
     res = _filtered(user, "ps")
@@ -121,20 +122,27 @@ def render(user: User) -> None:
         common.sheet_error(e)
         return
     prod = production(lines, m)
-    _qty_strip(prod, "Total Qty", lines, unit="Unit")
+    _qty_strip(prod, "Qty", lines, unit="Repacking")
     show = prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"])
     if len(prod["City"].unique()) == 1:
         show = show.drop(columns=["City"])
     st.dataframe(show, hide_index=True, width="stretch",
-                 column_config={"Total Qty": st.column_config.NumberColumn(format="%g"),
-                                "Spec": st.column_config.TextColumn(width="medium")})
-    st.caption("**Repacking** comes from the *Repacking* column of Mapping Whole (e.g. Box); when it is blank, "
-               "the pack in the SKU name is used. **Unit** is what the qty counts (Kg, Pack, Pcs, Box, Tray).")
-    _unmapped_warning(lines, m)
+                 column_config={"Qty": st.column_config.NumberColumn(format="%g"),
+                                "Total": st.column_config.TextColumn(
+                                    help="All customers clubbed for the same parent SKU, repacking, spec size "
+                                         "and lot size, in repacking units (10 + 20 packs of 2 pcs = 30 Punnet)")})
+    st.caption("**Total** = all customers clubbed per parent SKU + repacking + spec size + lot size "
+               "(e.g. 10 + 20 two-piece packs in punnets = 30 Punnet).")
+    gaps = not_in_base(lines, m)
+    if not gaps.empty:
+        with st.expander(f"⚠️ {len(gaps)} SKU name(s) are not in the New tab: they show as "
+                         "\"not in New tab\" and are kept on separate lines", expanded=False):
+            st.caption("Add them to the New tab (City, Customer, Parent SKU, Customer SKU Name, variety, "
+                       "Spec-Repacking, Spec-Size, Spec-Origin). The app re-reads it every few minutes.")
+            st.dataframe(gaps, hide_index=True, width="stretch")
     _downloads("Production sheet", show, f"production_{label}", "ps", lines)
     if user.is_owner:
         _publish("Production sheet", PRODUCTION_TAB, show, lines, user, "ps")
-        _new_tab_preview()
         with st.expander("Spec mapping list (what production uses for every SKU name, and what is missing)"):
             lst = spec_mapping_list(m)
             if lst.empty:
@@ -242,24 +250,3 @@ def _publish(title: str, tab: str, table: pd.DataFrame, lines: pd.DataFrame, use
             return
         c[1].success(f"'{tab}' tab updated ({len(table)} rows).")
 
-
-def _new_tab_preview() -> None:
-    """Owner: raw view of the 'New' tab (the upcoming production base)."""
-    from core.sheets import get_backend
-    with st.expander("New tab (raw preview)"):
-        try:
-            be = get_backend()
-            tabs = be.list_tabs()
-            names = [t for t in tabs if "new" in t.strip().lower()]
-            st.caption("Tabs in the sheet: " + " · ".join(tabs))
-            for t in names:
-                vals = be.read_values(t)
-                st.markdown(f"**{t}**: {max(len(vals) - 1, 0)} rows")
-                if vals:
-                    w = max(len(r) for r in vals)
-                    rows = [list(r) + [""] * (w - len(r)) for r in vals[:60]]
-                    st.code("\n".join(" | ".join(str(c) for c in r) for r in rows), language=None)
-            if not names:
-                st.caption("No tab named 'New' found.")
-        except Exception as e:  # preview only; never break the page
-            st.caption(f"Could not read: {e}")

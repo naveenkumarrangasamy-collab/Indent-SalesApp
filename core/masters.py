@@ -37,6 +37,25 @@ class Masters:
     varieties: pd.DataFrame
     access: pd.DataFrame
     sku_source: str = "SKU_Map tab"
+    prod_base: pd.DataFrame | None = None   # the 'New' tab (production base)
+
+    def prod_info(self, city: str, customer: str, sku_name: str) -> dict | None:
+        """The 'New' tab row for this SKU name (city + customer + name), else None.
+        A row with no City matches every city."""
+        df = self.prod_base
+        if df is None or df.empty:
+            return None
+        hit = df[(df["Customer"].map(_key) == _key(customer))
+                 & (df["Customer SKU Name"].map(_key) == _key(sku_name))]
+        if hit.empty:
+            return None
+        exact = hit[hit["City"].map(_key) == _key(city)]
+        hit = exact if not exact.empty else hit[hit["City"].map(_key) == ""]
+        return None if hit.empty else hit.iloc[0].to_dict()
+
+    @property
+    def has_prod_base(self) -> bool:
+        return self.prod_base is not None and not self.prod_base.empty
 
     # ---------------- lookups used by the screens ----------------
     def _sku_for(self, city: str, customer: str) -> pd.DataFrame:
@@ -275,6 +294,7 @@ def masters_from_frames(frames: dict[str, pd.DataFrame], sku_source: str = "SKU_
         varieties=_clean(frames[VARIETIES]),
         access=_clean(frames[ACCESS]),
         sku_source=sku_source,
+        prod_base=frames.get(importer.PROD_BASE),
     )
 
 
@@ -308,6 +328,9 @@ def frames_from_values(raw: dict[str, list[list]]) -> tuple[dict[str, pd.DataFra
         merged["_k"] = merged["Parent SKU"].map(_key) + "|" + merged["Variety"].map(_key)
         frames[VARIETIES] = merged.drop_duplicates("_k").drop(columns="_k").reset_index(drop=True)
         frames[VARIETIES]["_row"] = 0
+    base = importer.build_prod_base(raw.get(importer.PROD_BASE, []))
+    if base:
+        frames[importer.PROD_BASE] = pd.DataFrame(base)
     stores = importer.build_store_map(raw.get(importer.CUSTOMER_LIST, []))
     if stores:
         live = pd.DataFrame(stores, columns=TABS[STORE_MAP])

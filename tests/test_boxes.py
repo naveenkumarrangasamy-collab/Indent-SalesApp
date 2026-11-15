@@ -45,7 +45,7 @@ def test_production_has_no_box_columns():
     df = _lines([dict(BASE, indent_id="A", version="1", customer="Zepto", store="S1", parent_sku="Avocado",
                       customer_sku_name="1PC - Hass Avocado Imported", qty="440")])
     p = production(df, _masters(), box_rules=[])
-    assert not {"Units", "Box", "Boxes"} & set(p.columns) and p.iloc[0]["Total Qty"] == 440
+    assert not {"Units", "Box", "Boxes"} & set(p.columns) and p.iloc[0]["Qty"] == 440
 
 def test_nan_box_kg_is_ignored():
     assert boxes.convert("Avocado", "22C", 440, 0, 0, float("nan"), [])[1] == "4 kg box (22 pcs)"

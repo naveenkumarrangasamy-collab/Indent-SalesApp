@@ -39,7 +39,9 @@ def _prep(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return df
 
 
-PRODUCTION_COLUMNS = ["City", "Parent SKU", "Variety", "Spec", "Repacking", "Total Qty", "Unit"]
+PRODUCTION_COLUMNS = ["City", "Parent SKU", "Variety", "Spec-Origin", "Repacking", "Spec-Size", "Lot Size", "Qty",
+                      "Total"]
+NOT_IN_BASE = "not in New tab"
 BATCH_COLUMNS = ["City", "Customer", "Delivery point", "Parent SKU", "Customer SKU Name", "Variety", "Lot", "Lot Size",
                  "Spec", "Qty", "Indent"]
 NOT_MAPPED = "spec not mapped"
@@ -94,25 +96,65 @@ def _pack_label(size: str, lot: str) -> str:
 _SORT = lambda s: s.astype(str).str.casefold()  # noqa: E731
 
 
+def _base_rows(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
+    """Indent rows with the production attributes from the 'New' tab
+    (variety, Spec-Repacking, Spec-Size, Spec-Origin). A SKU name missing from
+    the New tab gets Spec-Size 'not in New tab (name)' so it is never clubbed."""
+    df = lines.copy()
+    df["qty"] = df["qty"].map(to_number)
+    df = df[df["qty"] > 0].copy()
+    if df.empty:
+        return df
+    clean = lambda v: " ".join(str(v or "").split())  # noqa: E731
+    info = [masters.prod_info(r.city, r.customer, r.customer_sku_name) if masters is not None else None
+            for r in df.itertuples()]
+    df["City"] = df["city"].map(clean)
+    df["Parent SKU"] = df["parent_sku"].map(clean)
+    df["Variety"] = [clean(i.get("Variety")) if i and clean(i.get("Variety")) else clean(v)
+                     for i, v in zip(info, df["variety"].fillna(""))]
+    df["Spec-Origin"] = [clean(i.get("Spec-Origin")) if i else "" for i in info]
+    df["Repacking"] = [clean(i.get("Repacking")) if i else "" for i in info]
+    df["Spec-Size"] = [(clean(i.get("Spec-Size")) or "-") if i else f"{NOT_IN_BASE} ({clean(n)})"
+                       for i, n in zip(info, df["customer_sku_name"])]
+    df["Lot Size"] = [lot_size(n) or clean(lot) for n, lot in zip(df["customer_sku_name"], df["lot"])]
+    df["_in_base"] = [i is not None for i in info]
+    return df
+
+
 def production(lines: pd.DataFrame, masters: Masters | None,
                box_rules: list | None = None) -> pd.DataFrame:
-    """Production sheet: the total to produce and grade, for ALL customers.
-    One row per City + Parent SKU + Variety + Spec + Repacking + Unit, e.g.
-    Apple / Gala / 90C / 2 Pcs Pack / 120 / Pack, or Swiggy's apples indented
-    in Kg and mapped to Repacking 'Box': ... / Box / 700 / Kg. No customer
-    names, customer SKU names, lot sizes or box conversion. `box_rules` is
-    accepted for older callers and ignored."""
+    """Production sheet (base: the 'New' tab), all customers together.
+    One row per City + Parent SKU + Variety + Spec-Origin + Repacking +
+    Spec-Size + Lot Size with the Qty. 'Total' clubs every customer's qty for
+    the same City + Parent SKU + Repacking + Spec-Size + Lot Size, in repacking
+    units: 10 + 20 packs of 2 pcs repacked in punnets = '30 Punnet'.
+    No customer names. `box_rules` is accepted for older callers and ignored."""
     cols = PRODUCTION_COLUMNS
-    df = _spec_rows(lines, masters) if lines is not None and not lines.empty else None
+    df = _base_rows(lines, masters) if lines is not None and not lines.empty else None
     if df is None or df.empty:
         return pd.DataFrame(columns=cols)
-    keys = ["City", "Parent SKU", "Variety", "Spec", "Repacking", "Unit"]
+    keys = ["City", "Parent SKU", "Variety", "Spec-Origin", "Repacking", "Spec-Size", "Lot Size"]
     g = (df.assign(**{k + "_k": df[k].astype(str).str.casefold() for k in keys})
            .groupby([k + "_k" for k in keys], sort=False)
-           .agg(**{k: (k, "first") for k in keys}, **{"Total Qty": ("qty", "sum")})
+           .agg(**{k: (k, "first") for k in keys}, Qty=("qty", "sum"))
            .reset_index(drop=True))
-    g["Total Qty"] = _whole(g["Total Qty"])
+    club = ["City", "Parent SKU", "Repacking", "Spec-Size", "Lot Size"]
+    tot = g.groupby([g[k].astype(str).str.casefold() for k in club], sort=False)["Qty"].transform("sum")
+    g["Qty"] = _whole(g["Qty"])
+    g["Total"] = [f"{fmt_num(t)} {r}".strip() for t, r in zip(tot, g["Repacking"])]
     return g.sort_values(keys, key=_SORT)[cols].reset_index(drop=True)
+
+
+def not_in_base(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
+    """Customer SKU names in these indents that are missing from the New tab."""
+    df = _base_rows(lines, masters) if lines is not None and not lines.empty else None
+    cols = ["City", "Customer", "Parent SKU", "Customer SKU Name"]
+    if df is None or df.empty:
+        return pd.DataFrame(columns=cols)
+    bad = df[~df["_in_base"]]
+    return (bad[["City", "customer", "Parent SKU", "customer_sku_name"]].drop_duplicates()
+            .rename(columns={"customer": "Customer", "customer_sku_name": "Customer SKU Name"})
+            .reset_index(drop=True))
 
 
 def batching(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
