@@ -131,7 +131,7 @@ def _my_cities(m: Masters) -> list[str]:
     u = st.session_state.get("user") or {}
     cities = m.cities()
     allowed = {c.casefold() for c in (u.get("cities") or [])}
-    if u.get("role") != "owner" and allowed:
+    if u.get("role") not in ("owner", "owner_full") and allowed:
         cities = [c for c in cities if c.casefold() in allowed]
     return cities
 
@@ -203,7 +203,7 @@ def _my_stores(m: Masters, city: str, customer: str) -> list[str]:
     stores = m.stores_for(city, customer) if city and customer else []
     u = st.session_state.get("user") or {}
     allowed = {x.casefold() for x in (u.get("stores") or [])}
-    if u.get("role") != "owner" and allowed:
+    if u.get("role") not in ("owner", "owner_full") and allowed:
         stores = [x for x in stores if " ".join(x.split()).casefold() in allowed]
     return stores
 
@@ -212,7 +212,7 @@ def _my_customers(m: Masters, city: str) -> list[str]:
     """Customers that have at least one store this user may use (all, if unrestricted)."""
     customers = m.customers(city) if city else []
     u = st.session_state.get("user") or {}
-    if u.get("role") != "owner" and u.get("stores"):
+    if u.get("role") not in ("owner", "owner_full") and u.get("stores"):
         customers = [c for c in customers if _my_stores(m, city, c)]
     return customers
 

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 import pandas as pd
 
 from core import config
-from core.schema import (ACCESS, ACCESS_ACTIVE, ACCESS_REVOKED, ROLE_OWNER,
+from core.schema import (ACCESS, ACCESS_ACTIVE, ACCESS_REVOKED, OWNER_ROLES, ROLE_OWNER, ROLE_OWNER_FULL,
                          ROLE_SALES, ROLE_WAREHOUSE)
 
 PIN_RE = re.compile(r"^\d{4,6}$")
@@ -39,7 +39,12 @@ class User:
 
     @property
     def is_owner(self) -> bool:
-        return self.role == ROLE_OWNER
+        return self.role in OWNER_ROLES
+
+    @property
+    def is_full_owner(self) -> bool:
+        """Full owner: also bulk Import indents and Start fresh."""
+        return self.role == ROLE_OWNER_FULL
 
     @property
     def is_warehouse(self) -> bool:
@@ -201,13 +206,14 @@ def resolve_user(access: pd.DataFrame, email: str) -> User | None:
     row = access_row(access, email)
     if email and email == config.owner_email():
         name = row.get("Name", "") if row is not None else ""
-        return User(email=email, name=name, role=ROLE_OWNER)
+        role = str(row.get("Role", "")).strip().lower() if row is not None else ""
+        return User(email=email, name=name, role=role if role in OWNER_ROLES else ROLE_OWNER)
     if row is None or str(row.get("Status", "")).strip().lower() != ACCESS_ACTIVE:
         return None
     role = str(row.get("Role", "")).strip().lower()
-    role = role if role in (ROLE_OWNER, ROLE_WAREHOUSE) else ROLE_SALES
+    role = role if role in OWNER_ROLES + (ROLE_WAREHOUSE,) else ROLE_SALES
     return User(email=email, name=row.get("Name", ""), role=role,
-                cities=parse_cities(row.get("City", "")) if role != ROLE_OWNER else [],
+                cities=parse_cities(row.get("City", "")) if role not in OWNER_ROLES else [],
                 stores=[])   # store-level access is no longer used: cities only
 
 

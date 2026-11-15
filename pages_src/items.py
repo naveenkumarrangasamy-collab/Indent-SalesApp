@@ -431,7 +431,7 @@ def _check(m: Masters) -> list[str]:
                               keep_date=state.keep_date(), zero_ok=state.saved_names())
     u = st.session_state.get("user") or {}
     city = state.header().city
-    if u.get("role") != "owner" and u.get("cities") and \
+    if u.get("role") not in ("owner", "owner_full") and u.get("cities") and \
             city.casefold() not in {c.casefold() for c in u["cities"]}:
         errors.append(f"You can place indents only in {', '.join(u['cities'])}, not {city}.")
     return errors

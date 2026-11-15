@@ -57,10 +57,12 @@ STATUS_SUBMITTED = "Submitted"
 STATUS_FROZEN = "Frozen"
 STATUS_CANCELLED = "Cancelled"   # "deleted" indent: kept in the sheet, ignored elsewhere
 
-ROLE_OWNER = "owner"
+ROLE_OWNER = "owner"               # limited owner: everything except the full-owner tools
+ROLE_OWNER_FULL = "owner_full"     # full owner: also Import indents and Start fresh
+OWNER_ROLES = (ROLE_OWNER, ROLE_OWNER_FULL)
 ROLE_SALES = "sales"
 ROLE_WAREHOUSE = "warehouse"   # production / batching only, no indents
-ROLES = [ROLE_SALES, ROLE_WAREHOUSE, ROLE_OWNER]
+ROLES = [ROLE_SALES, ROLE_WAREHOUSE, ROLE_OWNER, ROLE_OWNER_FULL]
 ACCESS_ACTIVE = "active"
 ACCESS_REVOKED = "revoked"
 

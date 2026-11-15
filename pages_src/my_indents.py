@@ -96,6 +96,8 @@ def render(user: User) -> None:
     })
     if user.is_owner or user.city_scoped:
         show["Created by"] = view["created_by"].values
+    from pages_src import bulk_download
+    bulk_download.render(user, df, list(view["indent_id"]), "mi_bulk")
     st.caption(f"{len(view)} indent(s). Click a row to open it.")
     sel = st.dataframe(show, hide_index=True, width="stretch", on_select="rerun",
                        selection_mode="single-row", key="mi_table",

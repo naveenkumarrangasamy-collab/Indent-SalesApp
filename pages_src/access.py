@@ -6,7 +6,8 @@ import streamlit as st
 
 from core import auth, config, importer, masters
 from core.auth import User
-from core.schema import ACCESS_ACTIVE, ACCESS_REVOKED, ROLE_OWNER, ROLE_SALES, ROLE_WAREHOUSE, ROLES, TABS
+from core.schema import (ACCESS_ACTIVE, ACCESS_REVOKED, OWNER_ROLES, ROLE_OWNER, ROLE_OWNER_FULL, ROLE_SALES,
+                         ROLE_WAREHOUSE, ROLES, TABS)
 from core.sheets import SheetError, get_backend
 from pages_src import common
 
@@ -24,17 +25,20 @@ def render(user: User) -> None:
         m = None
 
     from pages_src import mail_admin
-    t_users, t_mail, t_import, t_setup = st.tabs(["Users & PINs", "E-mails", "Import indents",
-                                                   "Sheet setup & checks"])
+    names = ["Users & PINs", "E-mails"] + (["Import indents"] if user.is_full_owner else []) \
+        + ["Sheet setup & checks"]
+    tabs = dict(zip(names, st.tabs(names)))
+    t_users, t_mail, t_setup = tabs["Users & PINs"], tabs["E-mails"], tabs["Sheet setup & checks"]
     with t_users:
         if m is not None:
             _users(m, user)
     with t_mail:
         if m is not None:
             mail_admin.emails_tab(m, user)
-    with t_import:
-        from pages_src import import_indents
-        import_indents.render(m, user)
+    if "Import indents" in tabs:
+        with tabs["Import indents"]:
+            from pages_src import import_indents
+            import_indents.render(m, user)
     with t_setup:
         _setup(m, user)
 
@@ -43,14 +47,30 @@ def render(user: User) -> None:
 
 ROLE_HELP = {ROLE_SALES: "sales: create indents, upload POs (no production)",
              ROLE_WAREHOUSE: "warehouse: production + batching sheets only",
-             ROLE_OWNER: "owner: everything"}
+             ROLE_OWNER: "owner (limited): everything except Import indents and Start fresh",
+             ROLE_OWNER_FULL: "owner (full): everything"}
+
+
+def _no_full_owner(acc: pd.DataFrame) -> bool:
+    if acc.empty:
+        return True
+    active = acc[acc["Status"].str.lower() == ACCESS_ACTIVE]
+    return not (active["Role"].str.strip().str.lower() == ROLE_OWNER_FULL).any()
+
+
+def _roles_for(me: User, acc: pd.DataFrame) -> list[str]:
+    """Only a full owner can make someone a full owner (any owner may, until
+    the first full owner exists)."""
+    if me.is_full_owner or _no_full_owner(acc):
+        return ROLES
+    return [r for r in ROLES if r != ROLE_OWNER_FULL]
 
 def _users(m: masters.Masters, me: User) -> None:
     acc = m.access
     if not acc.empty:
         show = pd.DataFrame({"Email": acc["Email"], "Name": acc["Name"], "Role": acc["Role"],
                              "Status": acc["Status"],
-                             "City": [("all cities" if str(r).lower() == "owner" else
+                             "City": [("all cities" if str(r).lower() in OWNER_ROLES else
                                        (c or ("all cities" if str(r).lower() == "warehouse" else "— (own indents only)")))
                                       for r, c in zip(acc["Role"], acc["City"])],
                              "PIN set": acc["PIN_Hash"].map(lambda v: "yes" if v else "no"),
@@ -65,7 +85,7 @@ def _users(m: masters.Masters, me: User) -> None:
         st.markdown("**Add a user**")
         email = st.text_input("Work email")
         name = st.text_input("Name")
-        role = st.selectbox("Role", ROLES, format_func=ROLE_HELP.get)
+        role = st.selectbox("Role", _roles_for(me, acc), format_func=ROLE_HELP.get)
         cities = st.multiselect("City", m.cities(), placeholder="Choose one or more cities",
                                 help="Sales: places indents only in these cities and can see and edit "
                                      "every indent there (empty: own indents only). Warehouse: production "
@@ -82,8 +102,9 @@ def _users(m: masters.Masters, me: User) -> None:
             else:
                 _save(lambda: auth.upsert_access(email_n, by=me.email, name=name, role=role,
                                                  status=ACCESS_ACTIVE, pin=pin,
-                                                 cities=cities if role != ROLE_OWNER else [], stores=[]),
-                      f"{email_n} added as {role}" + (f" for {', '.join(cities)}" if cities and role != ROLE_OWNER else "")
+                                                 cities=cities if role not in OWNER_ROLES else [], stores=[]),
+                      f"{email_n} added as {role}" + (f" for {', '.join(cities)}" if cities and role not in OWNER_ROLES
+                                                      else "")
                       + ". Share the PIN with them privately.")
 
     with c2:
@@ -97,12 +118,15 @@ def _users(m: masters.Masters, me: User) -> None:
         is_secret_owner = auth.norm_email(target) == config.owner_email()
         role_now = str(row.get("Role", "")).lower()
         role_now = role_now if role_now in ROLES else ROLE_SALES
-        locked = is_secret_owner or target == me.email
+        locked = (is_secret_owner and not me.is_full_owner) or target == me.email \
+            or (role_now == ROLE_OWNER_FULL and not me.is_full_owner)
+        locked = locked and not (_no_full_owner(acc) and target != me.email)
+        choices = ROLES if locked else _roles_for(me, acc)
         with st.form(f"role_{target}"):
-            new_role = st.selectbox("Role", ROLES, index=ROLES.index(role_now), format_func=ROLE_HELP.get,
+            new_role = st.selectbox("Role", choices, index=choices.index(role_now), format_func=ROLE_HELP.get,
                                     disabled=locked,
-                                    help="You cannot change your own role or the owner from the app secrets."
-                                    if locked else None)
+                                    help="You cannot change your own role. Only a full owner can change the "
+                                         "owner from the app secrets or a full owner." if locked else None)
             current = auth.parse_cities(row.get("City", ""))
             options = list(dict.fromkeys(m.cities() + current))
             new_cities = st.multiselect("City", options, default=current,
@@ -112,10 +136,10 @@ def _users(m: masters.Masters, me: User) -> None:
             if st.form_submit_button("Save role and city", icon=":material/save:", type="primary"):
                 role_set = None if locked else new_role
                 _save(lambda: auth.upsert_access(target, by=me.email, role=role_set,
-                                                 cities=new_cities if (role_set or role_now) != ROLE_OWNER else [],
+                                                 cities=new_cities if (role_set or role_now) not in OWNER_ROLES else [],
                                                  stores=[]),
                       f"{target}: {role_set or role_now}"
-                      + (f", cities {', '.join(new_cities) or 'none'}" if (role_set or role_now) != ROLE_OWNER
+                      + (f", cities {', '.join(new_cities) or 'none'}" if (role_set or role_now) not in OWNER_ROLES
                          else ", all cities") + ".")
         with st.form("reset_pin", clear_on_submit=True):
             new_pin = st.text_input("New PIN for this user", type="password", max_chars=6)
@@ -192,7 +216,8 @@ def _setup(m: masters.Masters | None, me: User) -> None:
     else:
         st.markdown(f"**Local mode**: data lives in CSV files in `{backend.sheet_url()}`.")
 
-    _start_fresh(me)
+    if me.is_full_owner:
+        _start_fresh(me)
 
     try:
         tabs = backend.list_tabs()

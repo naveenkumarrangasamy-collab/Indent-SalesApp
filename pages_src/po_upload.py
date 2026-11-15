@@ -171,6 +171,8 @@ def render(user: User) -> None:
                       rows[rows["_w"] == 1].sort_values(["_d", "customer", "store"],
                                                         ascending=[False, True, True])])
 
+    from pages_src import bulk_download
+    bulk_download.render(user, df, list(rows["indent_id"]), "po_bulk", po)
     recs = list(rows.itertuples())
     for i in range(0, len(recs), 2):
         pair = st.columns(2)

@@ -37,8 +37,8 @@ BASE = dict(status="Submitted", delivery_date="2026-11-15", city="Bangalore", lo
 
 
 
-def test_production_is_for_all_customers_without_customer_names():
-    """Same parent / variety / lot / lot size / spec in a city -> one line, any customer or SKU name."""
+def test_production_is_for_all_customers_one_row_per_sku_name():
+    """All customers together, one line per customer SKU name (no customer names)."""
     df = _lines([
         dict(BASE, indent_id="A", version="1", customer="Zepto", store="S1", parent_sku="Avocado",
              customer_sku_name="1PC - Hass Avocado Imported", qty="30"),
@@ -48,9 +48,11 @@ def test_production_is_for_all_customers_without_customer_names():
              customer_sku_name="1PC - Hass Avocado Imported", qty="5", city="Chennai"),
     ])
     p = production(df, _masters())
-    assert list(p.columns) == ["City", "Parent SKU", "Variety", "Lot", "Lot Size", "Spec", "Total Qty"]
+    assert list(p.columns) == ["City", "Parent SKU", "Customer SKU Name", "Variety", "Lot", "Lot Size", "Spec",
+                               "Total Qty"]
     blr = p[p["City"] == "Bangalore"]
-    assert len(blr) == 1 and blr.iloc[0]["Total Qty"] == 40 and blr.iloc[0]["Spec"] == "20C, 22C"
+    assert list(blr["Customer SKU Name"]) == ["1PC - Hass Avocado Imported", "1PC - Nectar Avocado"]
+    assert list(blr["Total Qty"]) == [30, 10] and set(blr["Spec"]) == {"20C, 22C"}
     assert p[p["City"] == "Chennai"].iloc[0]["Total Qty"] == 5
 
 

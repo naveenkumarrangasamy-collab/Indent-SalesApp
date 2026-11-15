@@ -72,7 +72,7 @@ if user is None:
 # from the plain role text, so the menu never depends on newer User properties
 _role = str(getattr(user, "role", "") or "").lower()
 makes_indents = _role != "warehouse"
-sees_production = _role in ("owner", "warehouse")
+sees_production = _role in ("owner", "owner_full", "warehouse")
 
 pages = {
     "home": st.Page(lambda: home.render(user), title="Home", icon="🏠", url_path="home",

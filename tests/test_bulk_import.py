@@ -131,3 +131,31 @@ def test_pasted_rows_and_single_store(backend):
 def test_pipe_separated():
     rows = bulk_import.read_pasted("Delivery date|Customer|Store|Item|Qty\n2026-11-16|Zepto|Z1|1Pc - A|5")
     assert rows.iloc[0]["item"] == "1Pc - A" and rows.iloc[0]["delivery_date"] == "2026-11-16"
+
+
+def test_bulk_download_excel(backend):
+    import openpyxl as ox
+    from pages_src import bulk_download
+    rows = bulk_import.read_rows(_xlsx(ROWS))
+    groups = bulk_import.plan(rows, _masters(backend), city="PTP Bangalore", price=1)
+    bulk_import.add_to_master(backend, *bulk_import.master_additions(groups))
+    groups = bulk_import.plan(rows, _masters(backend), city="PTP Bangalore", price=1)
+    ids = [indents.submit_new(g.header, g.lines, "o@x.com") for g in groups if not g.errors]
+    data = bulk_download.build_xlsx(indents.read_lines(fresh=True), ids, {"IN-002": {"po_number": "PO9"}})
+    wb = ox.load_workbook(io.BytesIO(data))
+    s = [r for r in wb["Indents"].iter_rows(values_only=True)]
+    assert s[0][:3] == ("Indent", "Status", "Delivery date") and len(s) == 3
+    assert any(r[0] == "IN-002" and r[9] == "PO9" for r in s[1:])
+    lines = [r for r in wb["Lines"].iter_rows(values_only=True)]
+    assert lines[0][:2] == ("Delivery date", "Customer") and len(lines) == 5
+    assert "Customer SKU Name" in lines[0]
+
+
+def test_full_and_limited_owner_roles():
+    import pandas as pd
+    from core import auth
+    acc = pd.DataFrame([{"Email": "a@x.com", "Name": "", "Role": "owner_full", "Status": "active", "City": ""},
+                        {"Email": "b@x.com", "Name": "", "Role": "owner", "Status": "active", "City": "X"}])
+    a, b = auth.resolve_user(acc, "a@x.com"), auth.resolve_user(acc, "b@x.com")
+    assert a.is_owner and a.is_full_owner and a.sees_production and not a.cities
+    assert b.is_owner and not b.is_full_owner and not b.cities
