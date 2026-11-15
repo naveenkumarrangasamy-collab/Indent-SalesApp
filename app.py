@@ -19,11 +19,12 @@ def _drop_stale_modules() -> None:
         reg = types.ModuleType("_mt_loaded")
         reg.times = {}
         sys.modules["_mt_loaded"] = reg
-    names = [n for n in sys.modules if n.split(".")[0] in ("core", "pages_src")]
+    # list(...) copies the keys: other sessions may import modules at the same moment
+    names = [n for n in list(sys.modules) if n.split(".")[0] in ("core", "pages_src")]
     now = time.time()
     stale = first and bool(names)
     for name in names:
-        path = getattr(sys.modules[name], "__file__", "") or ""
+        path = getattr(sys.modules.get(name), "__file__", "") or ""
         if name not in reg.times:    # imported later in a run (inside a function)
             reg.times[name] = now
             continue
@@ -33,14 +34,14 @@ def _drop_stale_modules() -> None:
             stale = True
     if stale:
         for name in names:
-            del sys.modules[name]
+            sys.modules.pop(name, None)
         reg.times = {}
 
 
 def _remember_modules() -> None:
     reg = sys.modules["_mt_loaded"]
     now = time.time()
-    for name in sys.modules:
+    for name in list(sys.modules):
         if name.split(".")[0] in ("core", "pages_src"):
             reg.times.setdefault(name, now)
 
