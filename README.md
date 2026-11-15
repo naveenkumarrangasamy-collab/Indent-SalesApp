@@ -92,14 +92,13 @@ These tabs are created on the first submit (or with **Access → Create missing 
    3. Stores come from the **Customer List** tab; add a row there for every new store.
    4. Add the sales users under **Users & PINs**, and share each PIN privately.
 
-## Hourly e-mail setup (one time)
+## Hourly e-mail (automatic)
 
-A Streamlit Cloud app sleeps when nobody has it open, so the hourly e-mail is sent by a GitHub schedule in this repository (`.github/workflows/hourly-indent-mail.yml` → `scripts/hourly_mail.py`), every hour from 8 AM to 2 PM IST.
+A Streamlit Cloud app sleeps when nobody has it open, so a GitHub schedule in this repository (`.github/workflows/hourly-indent-mail.yml` → `scripts/wake_and_send.py`) opens the live app with `?hourly=run` every hour from 8 AM to 2 PM IST, waking it if needed. The app then sends that hour's e-mail with its own Streamlit secrets, so **no secrets are stored in GitHub**.
 
-1. GitHub → this repository → **Settings → Secrets and variables → Actions → New repository secret**.
-2. Name `STREAMLIT_SECRETS`; value: **the same text** as in Streamlit Cloud → Manage app → Settings → Secrets (sheet, service-account key, `smtp_user`, `smtp_password`, …).
-3. **Actions** tab → *Hourly indent e-mail* → **Run workflow** (tick *force*) to test once.
-4. Add the addresses on **Access → E-mails → Indent e-mails**.
+- Each hour goes out once (Mail_Log), and the trigger never sends outside 8 AM-2 PM, so opening that address by hand is harmless.
+- Add the addresses on **Access → E-mails → Indent e-mails**; until then the run reports "no active recipients".
+- **Actions** tab → *Hourly indent e-mail* → **Run workflow** for a test run. `scripts/hourly_mail.py` still works for a run from a computer that has `.streamlit/secrets.toml`.
 
 GitHub may start a scheduled run a few minutes late; it still sends that hour once. **Access → E-mails → Send sample** sends one by hand at any time.
 

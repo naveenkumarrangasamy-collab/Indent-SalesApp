@@ -53,6 +53,19 @@ from pages_src import access, common, home, indent, login, my_indents, po_upload
 
 _remember_modules()
 
+# Hourly e-mail trigger: GitHub Actions opens the app with ?hourly=run every hour
+# 8 AM-2 PM. This only sends what the schedule would send anyway (never forced:
+# outside the window it does nothing, and each hour goes out once - Mail_Log).
+if st.query_params.get("hourly") == "run":
+    from core import hourly as _hourly
+    try:
+        _res = _hourly.run()
+        _txt = "; ".join(f"{r['status']} {r['to']} {r.get('detail', '')}".strip() for r in _res)
+    except Exception as _e:  # noqa: BLE001 - reported back to the workflow log
+        _txt = f"error {type(_e).__name__}: {_e}"
+    st.text(f"HOURLY-RESULT: {_txt or 'nothing to do'}")
+    st.stop()
+
 common.inject_css()
 common.connection_banner()
 user = common.current_user()

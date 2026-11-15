@@ -139,13 +139,12 @@ def _team(team: str, m: masters.Masters, me: User, people: list[Recipient]) -> N
             for name, data, mime in st.session_state.get("hm_files", []):
                 st.download_button(name, data, file_name=name, mime=mime, key=f"dl_{name}",
                                    icon=":material/download:")
-        with st.expander("Automatic sending every hour (one-time GitHub setup)"):
+        with st.expander("Automatic sending every hour"):
             st.markdown(
-                "A Streamlit Cloud app sleeps when nobody has it open, so the hourly e-mail is sent by a "
-                "schedule in the GitHub repository.\n"
-                "1. GitHub → repository → **Settings → Secrets and variables → Actions → New repository "
-                "secret**.\n2. Name `STREAMLIT_SECRETS`; value: the same text as Streamlit Cloud → Settings → "
-                "Secrets.\n3. **Actions** → *Hourly indent e-mail* → **Run workflow** (tick *force*) once.")
+                "A Streamlit Cloud app sleeps when nobody has it open, so a schedule in the GitHub repository "
+                "opens the app every hour from 8 AM to 2 PM (waking it if needed) and the app sends that hour's "
+                "e-mail. Nothing to set up; each hour goes out once. Test: GitHub → **Actions** → "
+                "*Hourly indent e-mail* → **Run workflow**.")
 
 
 def _sample(team: str, to: str, scope: Recipient | None, me: User) -> tuple[bool, str]:
