@@ -6,8 +6,8 @@ import streamlit as st
 
 from core import auth, config, importer, masters
 from core.auth import User
-from core.schema import (ACCESS_ACTIVE, ACCESS_REVOKED, OWNER_ROLES, ROLE_OWNER, ROLE_OWNER_FULL, ROLE_SALES,
-                         ROLE_WAREHOUSE, ROLES, TABS, role_name)
+from core.schema import (ACCESS_ACTIVE, ACCESS_REVOKED, OWNER_ROLES, ROLE_OWNER_FULL, ROLE_SALES,
+                         ROLES, TABS, role_name)
 from core.sheets import SheetError, get_backend
 from pages_src import common
 
@@ -45,10 +45,7 @@ def render(user: User) -> None:
 
 # ------------------------------------------------------------------ users
 
-ROLE_HELP = {ROLE_SALES: "sales: create indents, upload POs (no production)",
-             ROLE_WAREHOUSE: "warehouse: production + batching sheets only",
-             ROLE_OWNER: "Owner L: everything except Import indents and Start fresh",
-             ROLE_OWNER_FULL: "Owner (full): everything"}
+ROLE_HELP = {r: role_name(r) for r in ROLES}   # just the name in the role pickers
 
 
 def _no_full_owner(acc: pd.DataFrame) -> bool:
