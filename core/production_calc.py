@@ -37,7 +37,7 @@ def _prep(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return df
 
 
-PRODUCTION_COLUMNS = ["City", "Parent SKU", "Customer SKU Name", "Variety", "Lot", "Lot Size", "Spec", "Total Qty"]
+PRODUCTION_COLUMNS = ["City", "Parent SKU", "Variety", "Lot", "Lot Size", "Spec", "Total Qty"]
 BOX_OUT = ["Units", "Box", "Boxes"]
 BATCH_COLUMNS = ["City", "Customer", "Delivery point", "Parent SKU", "Customer SKU Name", "Variety", "Lot", "Lot Size",
                  "Spec", "Qty", "Indent"]
@@ -81,15 +81,15 @@ _SORT = lambda s: s.astype(str).str.casefold()  # noqa: E731
 def production(lines: pd.DataFrame, masters: Masters | None,
                box_rules: list | None = None) -> pd.DataFrame:
     """Production sheet: the total to produce and grade, for ALL customers.
-    One row per City + Parent SKU + Customer SKU name + Variety + Lot + Lot
-    size + Spec. No customer names (those are on the batching sheet).
+    One row per City + Parent SKU + Variety + Lot + Lot size + Spec. No
+    customer names or customer SKU names (those are on the batching sheet).
     With box_rules (a list, may be empty) the qty is also converted into
     boxes: Units (pcs / kg), Box, Boxes."""
     cols = PRODUCTION_COLUMNS + (BOX_OUT if box_rules is not None else [])
     df = _spec_rows(lines, masters) if lines is not None and not lines.empty else None
     if df is None or df.empty:
         return pd.DataFrame(columns=cols)
-    keys = ["City", "Parent SKU", "Customer SKU Name", "Variety", "Lot", "Lot Size", "Spec"]
+    keys = ["City", "Parent SKU", "Variety", "Lot", "Lot Size", "Spec"]
     g = (df.assign(**{k + "_k": df[k].astype(str).str.casefold() for k in keys})
            .groupby([k + "_k" for k in keys], sort=False)
            .agg(**{k: (k, "first") for k in keys}, **{"Total Qty": ("qty", "sum")},

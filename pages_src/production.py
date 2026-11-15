@@ -108,7 +108,7 @@ def render(user: User) -> None:
     common.show_flash()
     st.markdown("### Production sheet")
     st.caption("Step 1 · what to produce and grade: the total for **all customers**, per city, parent SKU, "
-               "customer SKU name, variety, lot, lot size and spec. Customers and delivery points are on the **Batching sheet**.")
+               "variety, lot, lot size and spec. Customers and delivery points are on the **Batching sheet**.")
     if not _guard(user):
         return
     res = _filtered(user, "ps")
@@ -127,7 +127,6 @@ def render(user: User) -> None:
     st.dataframe(show, hide_index=True, width="stretch",
                  column_config={"Total Qty": st.column_config.NumberColumn(format="%g"),
                                 "Spec": st.column_config.TextColumn(width="medium"),
-                                "Customer SKU Name": st.column_config.TextColumn(width="large"),
                                 "Boxes": st.column_config.TextColumn(help="Boxes to prepare (a range when the "
                                                                           "spec has two counts)")})
     st.caption("**Boxes**: count specs (22C = 22 pieces per box) and kg / gram lots are converted using "
