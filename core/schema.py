@@ -60,7 +60,7 @@ STATUS_CANCELLED = "Cancelled"   # "deleted" indent: kept in the sheet, ignored 
 ROLE_OWNER = "owner"               # limited owner: everything except the full-owner tools
 ROLE_OWNER_FULL = "owner_full"     # full owner: also Import indents and Start fresh
 OWNER_ROLES = (ROLE_OWNER, ROLE_OWNER_FULL)
-ROLE_NAMES = {ROLE_OWNER: "Owner L", ROLE_OWNER_FULL: "Owner (full)"}   # shown on screen
+ROLE_NAMES = {ROLE_OWNER: "Owner L", ROLE_OWNER_FULL: "Owner"}   # shown on screen
 
 
 def role_name(role: str) -> str:
