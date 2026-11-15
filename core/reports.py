@@ -187,8 +187,6 @@ def production_view(rows: pd.DataFrame, m: Masters | None, rules: list | None) -
     p = production_calc.production(rows, m)
     if not p.empty and not p["Variety"].astype(bool).any():
         p = p.drop(columns=["Variety"])
-    if not p.empty and len(p["City"].unique()) == 1:
-        p = p.drop(columns=["City"])
     return p
 
 

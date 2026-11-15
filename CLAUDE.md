@@ -148,7 +148,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   Spec-Origin (matched to indent lines by City + Customer + Customer SKU Name, ignoring case/spaces; a row with
   no City matches every city). All customers together. Columns:
   City, Parent SKU, Variety, Spec-Origin, Repacking, Spec-Size, Lot Size, Qty, **Total**
-  (City hidden when only one city; Variety hidden when empty).
+  (City always shown; Variety hidden when empty).
   - One row per City + Parent SKU + Variety + Spec-Origin + Repacking + Spec-Size + Lot Size; Qty is the sum.
   - **Total** clubs every customer for the same City + Parent SKU + Repacking + Spec-Size + Lot Size, in
     repacking units, no conversion: 10 + 20 packs of 2 pcs repacked in punnets = "30 Punnet".

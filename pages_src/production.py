@@ -124,8 +124,6 @@ def render(user: User) -> None:
     prod = production(lines, m)
     _qty_strip(prod, "Qty", lines, unit="Repacking")
     show = prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"])
-    if len(prod["City"].unique()) == 1:
-        show = show.drop(columns=["City"])
     st.dataframe(show, hide_index=True, width="stretch",
                  column_config={"Qty": st.column_config.NumberColumn(format="%g"),
                                 "Total": st.column_config.TextColumn(
