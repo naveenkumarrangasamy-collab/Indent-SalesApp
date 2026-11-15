@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import pandas as pd
 
+from core import boxes
 from core.lots import lot_size
 from core.masters import Masters
 from core.models import fmt_num, to_number
 
-
-CITY_SKU_COLUMNS = ["City", "Customer", "Parent SKU", "Customer SKU Name", "Variety", "Lot",
-                    "Lot Size", "Spec-Size", "Qty", "Indents", "Stores"]
 
 
 
@@ -40,6 +38,7 @@ def _prep(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
 
 
 PRODUCTION_COLUMNS = ["City", "Parent SKU", "Variety", "Lot", "Lot Size", "Spec", "Total Qty"]
+BOX_OUT = ["Units", "Box", "Boxes"]
 BATCH_COLUMNS = ["City", "Customer", "Delivery point", "Parent SKU", "Variety", "Lot", "Lot Size",
                  "Spec", "Qty", "Indent"]
 NOT_MAPPED = "spec not mapped"
@@ -65,26 +64,44 @@ def _spec_rows(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     df["City"] = df["city"].map(lambda v: " ".join(str(v).split()))
     df["Parent SKU"] = df["parent_sku"].map(lambda v: " ".join(str(v).split()))
     df["Lot"] = df["lot"]
+    # what the qty means physically (for the box conversion)
+    unit = [boxes.per_lot(lot, size) for lot, size in zip(df["lot"], df["Lot Size"])]
+    df["_pcs"] = [q * n if u == "pcs" else 0.0 for (u, n), q in zip(unit, df["qty"])]
+    df["_kg"] = [q * n if u == "kg" else 0.0 for (u, n), q in zip(unit, df["qty"])]
+    df["_box"] = [q if u == "box" else 0.0 for (u, _), q in zip(unit, df["qty"])]
+    df["_boxkg"] = ([masters.box_kg(r.city, r.customer, r.customer_sku_name) for r in df.itertuples()]
+                    if masters is not None else None)
     return df
 
 
 _SORT = lambda s: s.astype(str).str.casefold()  # noqa: E731
 
 
-def production(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
+def production(lines: pd.DataFrame, masters: Masters | None,
+               box_rules: list | None = None) -> pd.DataFrame:
     """Production sheet: the total to produce and grade, for ALL customers.
     One row per City + Parent SKU + Variety + Lot + Lot size + Spec. No
-    customer names or customer SKU names (those are on the batching sheet)."""
+    customer names or customer SKU names (those are on the batching sheet).
+    With box_rules (a list, may be empty) the qty is also converted into
+    boxes: Units (pcs / kg), Box, Boxes."""
+    cols = PRODUCTION_COLUMNS + (BOX_OUT if box_rules is not None else [])
     df = _spec_rows(lines, masters) if lines is not None and not lines.empty else None
     if df is None or df.empty:
-        return pd.DataFrame(columns=PRODUCTION_COLUMNS)
+        return pd.DataFrame(columns=cols)
     keys = ["City", "Parent SKU", "Variety", "Lot", "Lot Size", "Spec"]
     g = (df.assign(**{k + "_k": df[k].astype(str).str.casefold() for k in keys})
            .groupby([k + "_k" for k in keys], sort=False)
-           .agg(**{k: (k, "first") for k in keys}, **{"Total Qty": ("qty", "sum")})
+           .agg(**{k: (k, "first") for k in keys}, **{"Total Qty": ("qty", "sum")},
+                _pcs=("_pcs", "sum"), _kg=("_kg", "sum"), _box=("_box", "sum"),
+                _boxkg=("_boxkg", lambda s: next((float(v) for v in s if v and v == v), 0.0)))
            .reset_index(drop=True))
     g["Total Qty"] = _whole(g["Total Qty"])
-    return g.sort_values(keys, key=_SORT)[PRODUCTION_COLUMNS].reset_index(drop=True)
+    if box_rules is not None:
+        conv = [boxes.convert(r["Parent SKU"], r["Spec"], r["_pcs"], r["_kg"], r["_box"], r["_boxkg"] or None,
+                              box_rules)
+                for r in g.to_dict("records")]
+        g["Units"], g["Box"], g["Boxes"] = zip(*conv) if conv else ([], [], [])
+    return g.sort_values(keys, key=_SORT)[cols].reset_index(drop=True)
 
 
 def batching(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
@@ -151,27 +168,6 @@ def filter_lines(current: pd.DataFrame, *, delivery_date: str | None, city: str 
     if allowed_ids is not None:
         df = df[df["indent_id"].isin(allowed_ids)]
     return df
-
-
-def city_sku_report(lines: pd.DataFrame, masters: Masters | None = None) -> pd.DataFrame:
-    """City > Customer > Parent SKU > Customer SKU name (+ variety, lot,
-    lot size) with total qty, from current-version indent rows."""
-    if lines is None or lines.empty:
-        return pd.DataFrame(columns=CITY_SKU_COLUMNS)
-    df = _prep(lines, masters)
-    if df.empty:
-        return pd.DataFrame(columns=CITY_SKU_COLUMNS)
-    g = (df.groupby(["city", "customer", "parent_sku", "customer_sku_name", "variety", "lot",
-                     "Lot Size", "Spec-Size"], dropna=False)
-           .agg(Qty=("qty", "sum"), Indents=("indent_id", "nunique"), Stores=("store", "nunique"))
-           .reset_index()
-           .rename(columns={"city": "City", "customer": "Customer", "parent_sku": "Parent SKU",
-                            "customer_sku_name": "Customer SKU Name", "variety": "Variety",
-                            "lot": "Lot"}))
-    g["Qty"] = _whole(g["Qty"])
-    g = g.sort_values(["City", "Customer", "Parent SKU", "Customer SKU Name"],
-                      key=lambda s: s.astype(str).str.casefold())
-    return g[CITY_SKU_COLUMNS].reset_index(drop=True)
 
 
 def delivery_dates(current: pd.DataFrame) -> list[str]:

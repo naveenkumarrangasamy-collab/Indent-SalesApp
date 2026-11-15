@@ -1,186 +1,182 @@
-"""Access page (owner): e-mail recipients and e-mail sending."""
+"""Access page (owner): the E-mails tab.
+
+1. Mail server   - is sending set up, the last error in plain words, a test.
+2. Ground team   - hourly production e-mail (8 AM-2 PM): address -> cities / customers.
+3. Central team  - PO e-mail on every PO upload:      address -> cities / customers.
+"""
 from __future__ import annotations
 
 import pandas as pd
 import streamlit as st
 
-from core import config, hourly, mailer, masters, recipients
+from core import config, hourly, indents, mailer, masters, recipients
 from core.auth import User
-from core.recipients import TEAMS, Recipient
+from core.recipients import Recipient
 from core.sheets import SheetError
 from pages_src import common
 
-NEW = "➕ New recipient"
+TEAMS = {
+    "Ground": ("Ground team · hourly production e-mail",
+               "Every hour from 8 AM to 2 PM: the production report (all customers clubbed, with boxes) "
+               "for today's deliveries in the mapped cities / customers, as PDF + Excel."),
+    "Central": ("Central team · PO e-mail",
+                "The moment a PO is uploaded (any time): the customer's PO plus the SO details as PDF + "
+                "Excel, for the mapped cities / customers."),
+}
 
 
-# ------------------------------------------------------------------ recipients
+def _hint(detail: str) -> str:
+    d = detail.lower()
+    if "not set up" in d:
+        return "Add `smtp_user` and `smtp_password` to the Streamlit secrets."
+    if "refused the login" in d or "535" in d or "534" in d or "username and password" in d:
+        return ("The mailbox refused the password. For Gmail you need a 16-character **App password** "
+                "(Google Account → Security → 2-Step Verification on → App passwords), not the normal "
+                "password. A company @ninjacart.com (Google Workspace) mailbox may have App passwords "
+                "switched off by the admin; then use a separate Gmail account as the sender, or ask IT.")
+    if "could not reach" in d or "timed out" in d or "connection" in d:
+        return "The mail server could not be reached / closed the connection. Check `smtp_host` / `smtp_port`."
+    return ""
 
-def recipients_tab(m: masters.Masters, me: User) -> None:
+
+def _server(me: User) -> None:
+    s = mailer.settings()
+    pw = s["password"]
+    checks = [
+        ("Sender mailbox (smtp_user)", bool(s["user"]) and "@" in s["user"], s["user"] or "missing"),
+        ("App password (smtp_password)", len(pw) == 16,
+         "missing" if not pw else ("set (16 characters)" if len(pw) == 16
+                                   else f"set, but {len(pw)} characters (a Gmail App password has 16)")),
+        ("Mail server", True, f"{s['host']}:{s['port']}"),
+    ]
+    rows = "".join(f"<div>{'✅' if ok else '❌'} <b>{lbl}</b> · {v}</div>" for lbl, ok, v in checks)
+    st.markdown(rows, unsafe_allow_html=True)
+    try:
+        log = recipients.read_log()
+    except SheetError:
+        log = pd.DataFrame()
+    if not log.empty:
+        last = log.iloc[-1]
+        ok = last.get("status") == "sent"
+        when = str(last.get("sent_at", ""))[:16].replace("T", " ")
+        (st.success if ok else st.error)(
+            f"Last e-mail ({last.get('kind')}, {when}) to {last.get('to')}: "
+            + ("sent." if ok else f"**failed** — {last.get('detail')}"))
+        if not ok and _hint(str(last.get("detail", ""))):
+            st.info(_hint(str(last.get("detail", ""))))
+    c = st.columns([2, 1])
+    to = c[0].text_input("Send a test e-mail to", value=me.email, key="mail_test_to")
+    if c[1].button("Send test", icon=":material/send:", width="stretch", key="mail_test_btn",
+                   disabled=not mailer.configured()):
+        with st.spinner("Sending…"):
+            ok, msg = mailer.send_test_mail(me.email, to=to.strip())
+        (st.success if ok else st.error)(msg)
+        if not ok and _hint(msg):
+            st.info(_hint(msg))
+
+
+def _team(team: str, m: masters.Masters, me: User, people: list[Recipient]) -> None:
+    title, what = TEAMS[team]
+    st.markdown(f"#### {title}")
+    st.caption(what)
+    mine = [r for r in people if (r.hourly if team == "Ground" else r.so)]
+    if mine:
+        for r in mine:
+            c = st.columns([2.2, 2.6, 0.6], vertical_alignment="center")
+            c[0].markdown(f"**{r.email}**" + (f"<br><span class='mt-muted'>{r.name}</span>" if r.name else "")
+                          + ("" if r.active else " <span class='mt-muted'>(paused)</span>"),
+                          unsafe_allow_html=True)
+            c[1].markdown(f"<span class='mt-muted'>Cities:</span> {', '.join(r.cities) or 'all'}<br>"
+                          f"<span class='mt-muted'>Customers:</span> {', '.join(r.customers) or 'all'}",
+                          unsafe_allow_html=True)
+            if c[2].button("", icon=":material/delete:", key=f"rm_{team}_{r.email}", help="Remove this address"):
+                recipients.remove(r.email, team)
+                common.flash("success", f"{r.email} removed from the {team.lower()} team e-mail.")
+                st.rerun()
+    else:
+        st.info("Nobody yet. Add the first address below.")
+
+    with st.form(f"add_{team}", clear_on_submit=True, border=True):
+        st.markdown("**Add or change an address**")
+        c = st.columns([1.4, 1])
+        email = c[0].text_input("E-mail", placeholder="name@company.com")
+        name = c[1].text_input("Name (optional)")
+        cities = st.multiselect("Cities (empty = all)", m.cities())
+        customers = st.multiselect("Customers (empty = all)", sorted({cu for ci in m.cities()
+                                                                      for cu in m.customers(ci)}, key=str.casefold))
+        if st.form_submit_button("Save", icon=":material/person_add:", type="primary"):
+            e = email.strip().lower()
+            if "@" not in e or "." not in e.split("@")[-1]:
+                st.error("Enter a valid e-mail address.")
+            else:
+                try:
+                    recipients.upsert(Recipient(e, name.strip(), team, hourly=team == "Ground",
+                                                so=team == "Central", cities=cities, customers=customers),
+                                      by=me.email)
+                except SheetError as err:
+                    st.error(f"Not saved. {err}")
+                else:
+                    common.flash("success", f"{e} saved for the {team.lower()} team "
+                                            f"({', '.join(cities) or 'all cities'}; "
+                                            f"{', '.join(customers) or 'all customers'}).")
+                    st.rerun()
+
+    # see exactly what this list receives
+    c = st.columns([2, 1])
+    who = c[0].selectbox("Send a sample of this e-mail to", [me.email] + [r.email for r in mine],
+                         key=f"sample_to_{team}", accept_new_options=True,
+                         help="Uses that address's cities / customers when it is on the list")
+    if c[1].button("Send sample", icon=":material/forward_to_inbox:", width="stretch",
+                   key=f"sample_btn_{team}", disabled=not mailer.configured()):
+        scope = next((r for r in mine if r.email == who), None)
+        with st.spinner("Building and sending…"):
+            ok, msg = _sample(team, who, scope, me)
+        (st.success if ok else st.error)(msg)
+        if not ok and _hint(msg):
+            st.info(_hint(msg))
+    if team == "Ground":
+        with st.expander("Download today's production e-mail files"):
+            if st.button("Build PDF + Excel", key="hm_build"):
+                st.session_state["hm_files"] = hourly.preview(config.now_ist().date().isoformat())
+            for name, data, mime in st.session_state.get("hm_files", []):
+                st.download_button(name, data, file_name=name, mime=mime, key=f"dl_{name}",
+                                   icon=":material/download:")
+        with st.expander("Automatic sending every hour (one-time GitHub setup)"):
+            st.markdown(
+                "A Streamlit Cloud app sleeps when nobody has it open, so the hourly e-mail is sent by a "
+                "schedule in the GitHub repository.\n"
+                "1. GitHub → repository → **Settings → Secrets and variables → Actions → New repository "
+                "secret**.\n2. Name `STREAMLIT_SECRETS`; value: the same text as Streamlit Cloud → Settings → "
+                "Secrets.\n3. **Actions** → *Hourly indent e-mail* → **Run workflow** (tick *force*) once.")
+
+
+def _sample(team: str, to: str, scope: Recipient | None, me: User) -> tuple[bool, str]:
+    if team == "Ground":
+        return hourly.send_sample(to, scope)
+    # Central: the latest PO-frozen indent in scope (else the latest indent) as an example
+    df = indents.read_lines()
+    summ = indents.summary(df)
+    if scope is not None and not summ.empty:
+        summ = summ[[scope.sees(r.city, r.customer, r.store) for r in summ.itertuples()]]
+    if summ.empty:
+        return False, "No indent to use as a sample yet."
+    pick = summ[summ["status"] == "Frozen"]
+    pick = (pick if not pick.empty else summ).sort_values("last_edited_at").iloc[-1]
+    cur = indents.snapshot(df, pick["indent_id"])
+    return mailer.send_so_mail(cur, "", b"", me.email, po_number="SAMPLE", to_override=[to], sample=True)
+
+
+def emails_tab(m: masters.Masters, me: User) -> None:
+    st.markdown("#### Mail server")
+    _server(me)
     try:
         people = recipients.read_all()
     except SheetError as e:
         common.sheet_error(e)
         return
-    st.caption("Who gets which e-mail, and which cities / customers / stores they see in it. "
-               "**Ground team**: the hourly indent e-mail (8 AM–2 PM). **Central team**: the SO / PO "
-               "e-mail the moment a PO is uploaded. Leave cities, customers or stores empty for *all*.")
-    if people:
-        st.dataframe(pd.DataFrame([{
-            "Name": r.name, "Email": r.email, "Team": r.team,
-            "Hourly indent": "✓" if r.hourly else "", "SO / PO": "✓" if r.so else "",
-            "Cities": ", ".join(r.cities) or "all", "Customers": ", ".join(r.customers) or "all",
-            "Stores": ", ".join(r.stores) or "all", "Active": "yes" if r.active else "paused"}
-            for r in people]), hide_index=True, width="stretch")
-    else:
-        st.info("No recipients yet. Add the ground team and the central team below.")
-
-    by_email = {r.email: r for r in people}
-    pick = st.selectbox("Add or change", [NEW] + list(by_email), key="rc_pick",
-                        format_func=lambda e: e if e == NEW else f"{by_email[e].name or e} · {e}")
-    cur = by_email.get(pick) or Recipient(email="")
-    k = f"rc_{pick}"
-    with st.container(border=True):
-        c = st.columns([1.4, 1.2, 1])
-        email = c[0].text_input("E-mail", value=cur.email, key=f"{k}_email", disabled=pick != NEW,
-                                placeholder="name@company.com")
-        name = c[1].text_input("Name", value=cur.name, key=f"{k}_name")
-        team = c[2].segmented_control("Team", TEAMS, default=cur.team if cur.team in TEAMS else TEAMS[0],
-                                      key=f"{k}_team", required=True) or TEAMS[0]
-        is_new = pick == NEW
-        t = st.columns(3)
-        hourly_on = t[0].toggle("Hourly indent e-mail (8 AM–2 PM)", key=f"{k}_hourly",
-                                value=cur.hourly if not is_new else team == "Ground")
-        so_on = t[1].toggle("SO / PO e-mail (on PO upload)", key=f"{k}_so",
-                            value=cur.so if not is_new else team == "Central")
-        active = t[2].toggle("Active", value=cur.active, key=f"{k}_active",
-                             help="Pause e-mails without removing the person")
-
-        all_cities = m.cities()
-        cities = st.multiselect("Cities (empty = all)", all_cities,
-                                default=[x for x in all_cities if x.casefold() in {c.casefold() for c in cur.cities}],
-                                key=f"{k}_cities")
-        city_scope = cities or all_cities
-        all_customers = sorted({cu for ci in city_scope for cu in m.customers(ci)}, key=str.casefold)
-        customers = st.multiselect("Customers (empty = all)", all_customers,
-                                   default=[x for x in all_customers if x.casefold() in {c.casefold() for c in cur.customers}],
-                                   key=f"{k}_customers")
-        cust_scope = customers or all_customers
-        idx = m.store_index()
-        all_stores = sorted({s for ci in city_scope for cu in cust_scope for s in m.stores_for(ci, cu)},
-                            key=str.casefold)
-        stores = st.multiselect("Stores / facilities (empty = all)", all_stores,
-                                default=[x for x in all_stores if x.casefold() in {c.casefold() for c in cur.stores}],
-                                key=f"{k}_stores", format_func=lambda s: f"{s} — {idx.get(s, '')}")
-        scope = Recipient("x", cities=cities, customers=customers, stores=stores).scope_text()
-        st.caption(f"Sees: **{scope}**")
-
-        b = st.columns([1, 1, 2])
-        if b[0].button("Save recipient", icon=":material/save:", type="primary", width="stretch",
-                       key=f"{k}_save"):
-            e = email.strip().lower()
-            if "@" not in e or "." not in e.split("@")[-1]:
-                st.error("Enter a valid e-mail address.")
-            elif not (hourly_on or so_on):
-                st.error("Turn on at least one e-mail for this person.")
-            else:
-                try:
-                    recipients.upsert(Recipient(e, name.strip(), team, hourly_on, so_on, cities, customers,
-                                                stores, active), by=me.email)
-                except SheetError as err:
-                    st.error(f"Not saved. {err}")
-                else:
-                    st.session_state.pop("rc_pick", None)
-                    common.flash("success", f"Saved {e} ({team} team; sees {scope}).")
-                    st.rerun()
-        if pick != NEW:
-            confirm = st.session_state.get("rc_remove") == pick
-            if b[1].button("Yes, remove" if confirm else "Remove", icon=":material/person_remove:",
-                           width="stretch", key=f"{k}_rm", type="primary" if confirm else "secondary"):
-                if confirm:
-                    recipients.remove(pick)
-                    st.session_state.pop("rc_remove", None)
-                    st.session_state.pop("rc_pick", None)
-                    common.flash("success", f"{pick} removed from the e-mails.")
-                else:
-                    st.session_state["rc_remove"] = pick
-                st.rerun()
-            if confirm:
-                b[2].warning(f"Remove {pick} from all e-mails? Press **Yes, remove**.")
-
-
-# ------------------------------------------------------------------ sending
-
-def sending_tab(me: User) -> None:
-    st.markdown("**Mail server**")
-    st.caption(mailer.status_text().split(" · to:")[0])
-    if not mailer.configured():
-        st.warning("E-mail is not set up. Add `smtp_user` and `smtp_password` to the app secrets.")
-    with st.expander("How to get the Gmail App password"):
-        st.markdown(
-            "Turn on **2-Step Verification** on the sending Google account, then open **Google Account → "
-            "Security → App passwords**, create one (any name), and paste the 16-character code as "
-            "`smtp_password`. The normal Gmail password does not work. A company (Workspace) mailbox may "
-            "need the admin to allow App passwords.")
-    if st.button("Send test e-mail", icon=":material/send:", disabled=not mailer.configured()):
-        with st.spinner("Sending…"):
-            ok, msg = mailer.send_test_mail(me.email)
-        (st.success if ok else st.error)(msg)
-
     st.divider()
-    first, last = hourly.hours()
-    days = ", ".join({0: "today", 1: "tomorrow"}.get(d, f"+{d} days") for d in hourly.delivery_offsets())
-    st.markdown("**Hourly indent e-mail**")
-    st.caption(f"Every hour from {first}:00 to {last - 12 if last > 12 else last}:00 "
-               f"{'PM' if last >= 12 else 'AM'} IST, for delivery {days}, to each active recipient with "
-               "*Hourly indent e-mail* on, showing only their cities / customers / stores. Body: overall "
-               "SKU indent + customer-level indent. Attached: 2 PDF + 2 Excel.")
-    try:
-        people = recipients.hourly_list()
-    except SheetError:
-        people = []
-    c = st.columns([1.3, 1.3, 2])
-    target = c[0].selectbox("Send to", ["Everyone on the hourly list"] + [r.email for r in people],
-                            key="hm_target")
-    if c[1].button("Send now", icon=":material/schedule_send:", type="primary", width="stretch",
-                   disabled=not people or not mailer.configured(),
-                   help="Sends this hour's e-mail now, even outside 8 AM–2 PM"):
-        with st.spinner("Building and sending…"):
-            res = hourly.run(force=True, only=None if target.startswith("Everyone") else target)
-        for r in res:
-            (st.success if r["status"] == "sent" else st.warning)(f"{r['status']}: {r['to']} {r.get('detail', '')}")
-    if not people:
-        c[2].caption("Add recipients with the hourly e-mail on the **E-mail recipients** tab.")
-
-    with st.expander("Preview the 4 files (today's delivery)"):
-        scope_pick = st.selectbox("As seen by", ["everyone"] + [r.email for r in people], key="hm_prev")
-        if st.button("Build files", key="hm_build"):
-            who = next((r for r in people if r.email == scope_pick), None)
-            st.session_state["hm_files"] = hourly.preview(config.now_ist().date().isoformat(), who)
-        for name, data, mime in st.session_state.get("hm_files", []):
-            st.download_button(name, data, file_name=name, mime=mime, key=f"dl_{name}",
-                               icon=":material/download:")
-
-    with st.expander("Automatic sending (GitHub schedule) — one-time setup"):
-        st.markdown(
-            "The hourly e-mail is sent by a schedule in the GitHub repository "
-            "(`.github/workflows/hourly-indent-mail.yml`), because a Streamlit Cloud app sleeps when "
-            "nobody has it open. One-time setup:\n"
-            "1. GitHub → the repository → **Settings → Secrets and variables → Actions → New repository "
-            "secret**.\n"
-            "2. Name: `STREAMLIT_SECRETS`. Value: paste **exactly the same text** as in Streamlit Cloud → "
-            "Manage app → Settings → Secrets (sheet, service-account key, smtp settings).\n"
-            "3. **Actions** tab → *Hourly indent e-mail* → **Run workflow** once to test (tick *force*).\n"
-            "After that it runs by itself every hour from 8 AM to 2 PM IST. GitHub sometimes starts a "
-            "scheduled run a few minutes late.")
-
-    st.divider()
-    st.markdown("**E-mail log** (latest first)")
-    try:
-        log = recipients.read_log()
-    except SheetError:
-        log = pd.DataFrame()
-    if log.empty:
-        st.caption("Nothing sent yet.")
-    else:
-        show = log.drop(columns=["_row"], errors="ignore").iloc[::-1].head(50)
-        st.dataframe(show, hide_index=True, width="stretch")
+    t1, t2 = st.tabs(["Ground team (hourly production)", "Central team (PO e-mail)"])
+    with t1:
+        _team("Ground", m, me, people)
+    with t2:
+        _team("Central", m, me, people)

@@ -33,21 +33,23 @@ def _hdr(store, customer="Zepto", city="Bangalore"):
     return IndentHeader(TODAY, city, customer, store, "10:30")
 
 
-def test_recipient_scope_and_upsert(env):
+def test_two_lists_scope_and_upsert(env):
     recipients.upsert(Recipient("G@x.com", "Ground A", "Ground", hourly=True, cities=["Bangalore"],
                                 customers=["Zepto"]), by="o")
-    recipients.upsert(Recipient("c@x.com", "Central", "Central", so=True, stores=["Store A"]), by="o")
+    recipients.upsert(Recipient("c@x.com", "Central", "Central", so=True, customers=["Zepto"]), by="o")
     recipients.upsert(Recipient("g@x.com", "Ground A2", "Ground", hourly=True, cities=["Bangalore"]), by="o")
-    allr = recipients.read_all()
-    assert [r.email for r in allr] == ["g@x.com", "c@x.com"]        # same e-mail updated, not added
-    g = allr[0]
+    recipients.upsert(Recipient("g@x.com", "Same person", "Central", so=True), by="o")   # in both lists
+    assert [r.email for r in recipients.ground()] == ["g@x.com"]                # same address+team updated
+    g = recipients.ground()[0]
     assert g.name == "Ground A2" and g.customers == [] and g.sees("bangalore", "Swiggy", "x")
-    assert [r.email for r in recipients.so_list("Bangalore", "Zepto", "Store A")] == ["c@x.com"]
-    assert recipients.so_list("Bangalore", "Zepto", "Store B") == []
-    assert recipients.remove("c@x.com") and [r.email for r in recipients.read_all()] == ["g@x.com"]
+    assert sorted(r.email for r in recipients.central()) == ["c@x.com", "g@x.com"]
+    assert [r.email for r in recipients.so_list("Bangalore", "Zepto", "Store A")] == ["c@x.com", "g@x.com"]
+    assert [r.email for r in recipients.so_list("Bangalore", "Swiggy", "S")] == ["g@x.com"]
+    assert recipients.remove("g@x.com", "Central")
+    assert [r.email for r in recipients.central()] == ["c@x.com"] and recipients.ground()
 
 
-def test_hourly_mail_per_scope_with_four_files_and_no_repeat(env):
+def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
     b, sent = env
     indents.submit_new(_hdr("Store A"), [HASS, KIWI], "s@x.com")
     indents.submit_new(_hdr("Store S", "Swiggy"), [HASS], "s@x.com")
@@ -58,19 +60,21 @@ def test_hourly_mail_per_scope_with_four_files_and_no_repeat(env):
     assert [r["status"] for r in res] == ["sent", "sent"]
     by_to = {m["To"]: m for m in sent}
     z = by_to["z@x.com"]
-    names = [p.get_filename() for p in z.iter_attachments()]
-    assert len(names) == 4 and sum(n.endswith(".pdf") for n in names) == 2 \
-        and sum(n.endswith(".xlsx") for n in names) == 2
+    names = sorted(p.get_filename() for p in z.iter_attachments())
+    assert len(names) == 2 and names[0].startswith("Production_") and names[0].endswith(".pdf") \
+        and names[1].endswith(".xlsx")
     body = z.get_body(("html",)).get_content()
-    assert "Overall indent" in body and "Customer-level indent" in body
-    assert "Store A" in body and "Store S" not in body                 # scope: Zepto only
-    assert "Store S" in by_to["all@x.com"].get_body(("html",)).get_content()
+    assert "Production sheet" in body and "Customer-level" not in body and "Store A" not in body
+    assert z["Subject"].startswith("Production ") and "1 indent" in z["Subject"]      # scope: Zepto only
+    assert "2 indent" in by_to["all@x.com"]["Subject"]
     # same hour again: nothing new; outside the window: skipped
     assert {r["status"] for r in hourly.run(now=at9.replace(minute=40))} == {"skipped"}
     assert hourly.run(now=at9.replace(hour=19))[0]["status"] == "skipped"
     assert len(sent) == 2
     log = recipients.read_log()
     assert set(log["kind"]) == {"hourly"} and set(log["status"]) == {"sent"}
+    ok, msg = hourly.send_sample("me@x.com")
+    assert ok and sent[-1]["To"] == "me@x.com" and sent[-1]["Subject"].startswith("[SAMPLE] Production")
 
 
 def test_hourly_slot_window():
@@ -92,8 +96,8 @@ def test_reports_overall_clubs_customers_and_customer_level_keeps_stores(env):
     assert o[o["Parent SKU"] == "Avocado"]["Total Qty"].sum() == 60   # (split only where the spec differs)
     c = reports.customer_df(rows)
     assert list(c["Customer"].unique()) == ["Swiggy", "Zepto"] and set(c["Status"]) == {"Waiting for PO"}
-    files = reports.indent_mail_files(rows, _masters(), TODAY, "9:00 AM")
-    assert all(data[:4] in (b"%PDF", b"PK\x03\x04") for _, data, _ in files)
+    files = reports.production_mail_files(rows, _masters(), [], TODAY, "9:00 AM")
+    assert [d[:4] for _, d, _ in files] == [b"%PDF", b"PK\x03\x04"]
 
 
 def test_state_at_shows_each_hour(env):
@@ -121,3 +125,5 @@ def test_so_mail_goes_to_central_team_in_scope(env):
     assert m["Subject"].startswith("Zepto - SO placed - Store A") and "PO 77" in m["Subject"]
     assert sorted(p.get_filename() for p in m.iter_attachments()) == sorted(
         ["po.pdf", f"SO_{iid}.pdf", f"SO_{iid}.xlsx"])
+    ok, _ = mailer.send_so_mail(cur, "", b"", "s@x.com", po_number="SAMPLE", to_override=["me@x.com"], sample=True)
+    assert ok and sent[-1]["To"] == "me@x.com" and sent[-1]["Subject"].startswith("[SAMPLE] Zepto")

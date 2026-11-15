@@ -75,39 +75,73 @@ def _pivot(states: dict, keys: list[str]) -> pd.DataFrame:
     return p.sort_values(keys, key=lambda s: s.astype(str).str.casefold()).reset_index(drop=True)
 
 
+CHANGED = "background-color:#fff1c2;color:#7d4e00;font-weight:700"
+SAME = "background-color:#dafbe1;color:#116329"
+
+
 def _with_change(p: pd.DataFrame, hours: list[str]) -> pd.DataFrame:
-    vals = p[hours].apply(pd.to_numeric, errors="coerce")
-    first = vals.bfill(axis=1).iloc[:, 0] if len(hours) else 0
-    last = vals.ffill(axis=1).iloc[:, -1] if len(hours) else 0
+    """Adds Status (changed / no change since the first hour it appeared) and
+    Change (last qty minus first qty)."""
+    vals = p[hours].apply(pd.to_numeric, errors="coerce") if len(hours) else pd.DataFrame(index=p.index)
+    status, change = [], []
+    for i in p.index:
+        seq = [v for v in vals.loc[i].tolist()] if len(hours) else []
+        n, prev, first, last = 0, None, None, None
+        for v in seq:
+            if pd.notna(v):
+                if first is None:
+                    first = v
+                elif prev is None or pd.isna(prev) or v != prev:
+                    n += 1
+                last = v
+            elif prev is not None and pd.notna(prev):
+                n += 1                       # indent went away
+            prev = v
+        status.append("No change" if n == 0 else f"Changed ×{n}" if n > 1 else "Changed")
+        change.append(0 if first is None or last is None else last - first)
     p = p.copy()
-    p["Change"] = (last - first).fillna(0)
+    at = list(p.columns).index(hours[0]) if hours and hours[0] in p.columns else len(p.columns)
+    p.insert(at, "Status", status)        # right after the customer / store names
+    p["Change"] = change
     return p
 
 
 def _style(p: pd.DataFrame, hours: list[str]):
-    """Green where the qty went up since the previous hour, red where it went down,
-    blue where the indent first appears. Hours without an indent show '–'."""
+    """Amber with ▲/▼ where the qty changed since the previous hour, green
+    where it stayed the same. Hours without an indent show '–'."""
     num = p.copy()
     for c in hours + ["Change"]:
         if c in num.columns:
             num[c] = pd.to_numeric(num[c], errors="coerce")
     css = pd.DataFrame("", index=p.index, columns=p.columns)
-    for i in p.index:
-        prev = None
-        for c in hours:
-            v = num.at[i, c]
-            if pd.notna(v) and prev is not None and pd.notna(prev) and v != prev:
-                css.at[i, c] = ("background-color:#dafbe1;color:#116329;font-weight:600" if v > prev
-                                else "background-color:#ffebe9;color:#a40e26;font-weight:600")
-            elif pd.notna(v) and (prev is None or pd.isna(prev)) and c != hours[0]:
-                css.at[i, c] = "background-color:#ddf4ff;color:#0a3069;font-weight:600"
-            prev = v
-        if "Change" in p.columns and pd.notna(num.at[i, "Change"]) and num.at[i, "Change"]:
-            css.at[i, "Change"] = ("color:#116329;font-weight:700" if num.at[i, "Change"] > 0
-                                   else "color:#a40e26;font-weight:700")
     shown = p.copy()
     for c in hours:
-        shown[c] = num[c].map(lambda v: "–" if pd.isna(v) else f"{v:,.0f}")
+        shown[c] = shown[c].astype(object)
+    for i in p.index:
+        prev, seen = None, False
+        for c in hours:
+            v = num.at[i, c]
+            if pd.isna(v):
+                shown.at[i, c] = "–"
+            else:
+                txt = f"{v:,.0f}"
+                if not seen:
+                    css.at[i, c] = SAME
+                elif prev is None or pd.isna(prev) or v != prev:
+                    arrow = "▲" if prev is None or pd.isna(prev) or v > prev else "▼"
+                    css.at[i, c] = CHANGED
+                    txt = f"{arrow} {txt}"
+                else:
+                    css.at[i, c] = SAME
+                shown.at[i, c] = txt
+                seen = True
+            prev = v
+        if "Status" in p.columns:
+            css.at[i, "Status"] = (SAME if p.at[i, "Status"] == "No change" else CHANGED) + ";font-weight:600"
+        if "Change" in p.columns:
+            ch = num.at[i, "Change"]
+            css.at[i, "Change"] = "" if pd.isna(ch) or not ch else (
+                "color:#116329;font-weight:700" if ch > 0 else "color:#a40e26;font-weight:700")
     if "Change" in shown.columns:
         shown["Change"] = num["Change"].map(lambda v: "" if pd.isna(v) or not v else f"{v:+,.0f}")
     for c in hours + ["Change"]:
@@ -130,7 +164,7 @@ def render(user: User) -> None:
     first, last = hourly.hours()
     st.caption(f"Each store's indent qty at every hour from {_hour_label(first)} to {_hour_label(last)} "
                "on the delivery day (the hours of the indent e-mail). "
-               "🟩 went up · 🟥 went down · 🟦 indent placed. Click a customer or store to see what changed.")
+               "🟨 ▲▼ the indent changed that hour · 🟩 no change. Click a customer or store to see what changed.")
 
     # ---- the three filters
     today = config.now_ist().date()

@@ -96,6 +96,21 @@ _CSS = f"""
   .mt-crow .chips {{ flex:1; }}
   .mt-legend {{ margin:.2rem 0 .1rem; }}
 
+  /* ---- Home: one line per customer ---- */
+  .mt-line {{ display:flex; align-items:center; gap:.6rem; padding:.45rem .7rem; margin:0 0 .35rem;
+             border:1px solid #e3e8e5; border-left:5px solid #e3b341; border-radius:10px; background:#fff;
+             white-space:nowrap; min-height:38px; }}
+  .mt-line.done {{ border-left-color:#2da44e; }}
+  .mt-line .nm {{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; }}
+  .mt-line .ct {{ color:#6e7781; font-size:.85rem; }}
+  .mt-line .cnt {{ color:#57606a; font-size:.82rem; font-variant-numeric:tabular-nums; }}
+  .mt-line .st {{ border-radius:999px; padding:.15rem .6rem; font-size:.8rem; font-weight:600; }}
+  .mt-line .st.done {{ background:#dafbe1; color:#116329; border:1px solid #4ac26b; }}
+  .mt-line .st.open {{ background:#fff8c5; color:#7d4e00; border:1px solid #d4a72c; }}
+  .mt-tiles.k3 {{ grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom:.5rem; }}
+  .mt-h {{ font-size:1.45rem; font-weight:700; line-height:1.3; }}
+  .mt-h span {{ font-size:.8rem; font-weight:400; color:#6e7781; }}
+
   /* ---- cards (Home "Indents to act on", Upload PO, items on phone) ---- */
   [class*="st-key-mtcard"] {{ border-radius:14px !important; }}
   .mt-card-head {{ font-size:1rem; line-height:1.4; margin-bottom:.15rem; }}
@@ -113,6 +128,20 @@ _CSS = f"""
     .mt-tile .val {{ font-size:1.3rem; }}
     .mt-tile .sub {{ font-size:.72rem; }}
     .mt-tile:last-child:nth-child(odd) {{ grid-column: span 2; }}
+    .mt-tiles.k3 {{ grid-template-columns: repeat(3, minmax(0, 1fr)); gap:6px; }}
+    .mt-tiles.k3 .mt-tile {{ grid-column:auto; padding:.45rem .55rem; }}
+    .mt-tiles.k3 .mt-tile .lbl {{ font-size:.72rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }}
+    .mt-tiles.k3 .mt-tile .val {{ font-size:1.2rem; }}
+    .mt-tiles.k3 .mt-tile .sub {{ display:none; }}
+    /* Home title row: title on its own line, the two buttons side by side under it */
+    .st-key-mtbar_home [data-testid="stHorizontalBlock"] {{ flex-wrap:wrap !important; gap:.4rem !important; }}
+    .st-key-mtbar_home [data-testid="stColumn"]:first-child {{ flex:1 1 100% !important; min-width:100% !important;
+        padding-bottom:.35rem; }}
+    .mt-h {{ font-size:1.3rem; display:block; margin-bottom:.3rem; }}
+    .st-key-mtbar_home [data-testid="stColumn"]:not(:first-child) {{ flex:1 1 0 !important; min-width:0 !important; width:auto !important; }}
+    .st-key-mtbar_filters [data-testid="stHorizontalBlock"] {{ gap:.3rem !important; }}
+    .mt-line {{ padding:.4rem .55rem; gap:.4rem; }}
+    .mt-line .cnt {{ display:none; }}
     button[data-variant="pills"] {{ padding:.35rem .8rem !important; min-height:2.1rem; font-size:.9rem; }}
     [role="radiogroup"]:has(> button[data-variant="segmented_control"]) {{ max-width:100%; overflow-x:auto; }}
     button[data-variant="segmented_control"] {{ padding:.4rem .75rem !important; white-space:nowrap; }}

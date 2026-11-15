@@ -1,7 +1,6 @@
 """Production reports (owner and warehouse; not sales):
 1. Production sheet - total to produce and grade, all customers together.
-2. Batching sheet   - the same stock split per delivery point for dispatch.
-3. City / SKU report."""
+2. Batching sheet   - the same stock split per delivery point for dispatch."""
 from __future__ import annotations
 
 from datetime import date
@@ -9,10 +8,10 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from core import config, indents, masters
+from core import boxes, config, indents, masters
 from core.auth import User
 from core.pdf_report import sections_pdf, table_pdf
-from core.production_calc import (batching, city_sku_report, default_date, delivery_dates,
+from core.production_calc import (batching, default_date, delivery_dates,
                                   filter_lines, production, spec_mapping_list, unmapped)
 from core.sheets import SheetError
 from pages_src import common
@@ -58,7 +57,11 @@ def _filtered(user: User, prefix: str):
                        format_func=lambda x: _fmt_date(x) + (f"  ({counts.get(x, 0)} indents)"
                                                              if x in counts else ""))
     cities = sorted(current["city"].unique())
-    city = c[1].selectbox("City", ["All cities"] + cities, key=f"{prefix}_city")
+    if not user.is_owner and len(user.cities) == 1:
+        city = user.cities[0]               # mapped to one city: no city filter
+        c[1].markdown(f"<span class='mt-muted'>City</span><br><b>{city}</b>", unsafe_allow_html=True)
+    else:
+        city = c[1].selectbox("City", ["All cities"] + cities, key=f"{prefix}_city")
     scope = indents.scope_text(user)
     c[2].caption(f"All customers together · current version of every submitted or PO-frozen indent · "
                  f"{scope}. Only dates that have indents are listed.")
@@ -117,16 +120,46 @@ def render(user: User) -> None:
     except SheetError as e:
         common.sheet_error(e)
         return
-    prod = production(lines, m)
+    rules = boxes.read_rules()
+    prod = production(lines, m, box_rules=rules)
     _qty_strip(prod, "Total Qty", lines)
     show = prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"])
     st.dataframe(show, hide_index=True, width="stretch",
                  column_config={"Total Qty": st.column_config.NumberColumn(format="%g"),
-                                "Spec": st.column_config.TextColumn(width="large")})
+                                "Spec": st.column_config.TextColumn(width="medium"),
+                                "Boxes": st.column_config.TextColumn(help="Boxes to prepare (a range when the "
+                                                                          "spec has two counts)")})
+    st.caption("**Boxes**: count specs (22C = 22 pieces per box) and kg / gram lots are converted using "
+               "Box Kgs in Mapping Whole or the **Box_Conversion** tab; avocado defaults to a 4 kg box up to "
+               "36C and a 10 kg box above (65C = 65 pieces in 10 kg). *not mapped* = no box size known yet.")
     _unmapped_warning(lines, m)
     _downloads("Production sheet", show, f"production_{label}", "ps", lines)
     if user.is_owner:
         _publish("Production sheet", PRODUCTION_TAB, show, lines, user, "ps")
+        with st.expander("Box conversion rules (Box_Conversion tab)"):
+            if rules:
+                st.dataframe(pd.DataFrame([{"Parent SKU": r.parent, "Spec": r.spec, "Box": r.box,
+                                            "Pcs per box": r.pcs, "Kg per box": r.kg} for r in rules]),
+                             hide_index=True, width="stretch")
+            else:
+                st.caption("No Box_Conversion tab yet: Box Kgs from Mapping Whole and the avocado defaults "
+                           "are used.")
+            base = m.sku[["City", "Customer", "Parent SKU", "Customer SKU Name"]].drop_duplicates()
+            specs = [(r["Parent SKU"], m.spec_label(r["City"], r["Customer"], r["Customer SKU Name"]))
+                     for r in base.to_dict("records")]
+            starter = boxes.default_rows(specs)
+            st.caption(f"Create the tab with a starter row for each count in use ({len(starter)} rows: avocado "
+                       "4 kg / 10 kg, other fruit 'box'); then edit Box, Pcs per box and Kg per box in the sheet.")
+            if st.button("Create Box_Conversion tab", icon=":material/add_box:", disabled=bool(rules)
+                         or not starter, help="Only when the tab does not exist or is empty"):
+                from core.sheets import get_backend
+                vals = [boxes.BOX_COLUMNS] + [[r[c] for c in boxes.BOX_COLUMNS] for r in starter]
+                try:
+                    get_backend().replace_tab(boxes.BOX_TAB, vals)
+                except SheetError as e:
+                    st.error(f"Not created. {e}")
+                else:
+                    st.success(f"'{boxes.BOX_TAB}' tab created with {len(starter)} rows.")
         with st.expander("Spec mapping list (what production uses for every SKU name, and what is missing)"):
             lst = spec_mapping_list(m)
             if lst.empty:
@@ -200,32 +233,6 @@ def render_batching(user: User) -> None:
                          mime="text/csv", icon=":material/download:", width="stretch")
     if user.is_owner:
         _publish("Batching sheet", BATCHING_TAB, bat, lines, user, "bs")
-
-
-def render_city_sku(user: User) -> None:
-    common.show_flash()
-    st.markdown("### City / SKU report")
-    st.caption("Total quantity per city and customer SKU, with lot and lot size.")
-    if not _guard(user):
-        return
-    res = _filtered(user, "cs")
-    if res is None:
-        return
-    lines, _, label = res
-    try:
-        m = masters.load_masters()
-    except SheetError:
-        m = None
-    rep = city_sku_report(lines, m)
-    for city, part in rep.groupby("City", sort=False):
-        by_lot = part.groupby("Lot")["Qty"].sum()
-        st.markdown(f"**{city}** · {len(part)} SKUs · "
-                    + " · ".join(f"{q:g} {lot}" for lot, q in by_lot.items()))
-    show = rep if rep["Variety"].astype(bool).any() else rep.drop(columns=["Variety"])
-    st.dataframe(show, hide_index=True, width="stretch",
-                 column_config={"Qty": st.column_config.NumberColumn(format="%g"),
-                                "Customer SKU Name": st.column_config.TextColumn(width="large")})
-    _downloads("City / SKU report", show, f"city_sku_{label}", "cs", lines)
 
 
 def _downloads(title: str, table: pd.DataFrame, fname: str, prefix: str, lines: pd.DataFrame) -> None:

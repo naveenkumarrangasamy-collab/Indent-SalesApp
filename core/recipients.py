@@ -1,9 +1,10 @@
 """E-mail recipients (Mail_Recipients tab) and the e-mail log (Mail_Log tab).
 
-Each recipient has a team (Ground / Central), which e-mails they get
-(hourly indent e-mail, SO / PO e-mail) and a scope: the cities, customers and
-stores they look after. An empty scope field means "all". A recipient only
-ever sees indents inside their scope.
+Two lists:
+  * Ground team  (Hourly_Indent = Y): the hourly production e-mail, 8 AM-2 PM.
+  * Central team (SO_PO = Y): the PO e-mail, sent the moment a PO is uploaded.
+Each address is mapped to cities and, optionally, customers (empty = all);
+it only ever receives indents inside that mapping.
 """
 from __future__ import annotations
 
@@ -79,15 +80,19 @@ def read_all() -> list[Recipient]:
     return out
 
 
-def hourly_list() -> list[Recipient]:
-    return [r for r in read_all() if r.active and r.hourly]
-
-
 def so_list(city: str, customer: str, store: str) -> list[Recipient]:
     return [r for r in read_all() if r.active and r.so and r.sees(city, customer, store)]
 
 
+def _match(df: pd.DataFrame, email: str, team: str | None) -> pd.Index:
+    m = df["Email"].astype(str).str.strip().str.lower() == email.strip().lower()
+    if team is not None and "Team" in df.columns:
+        m &= df["Team"].astype(str).str.strip().str.title().replace("", "Ground") == team.title()
+    return df.index[m]
+
+
 def upsert(rec: Recipient, by: str) -> None:
+    """Add or update one recipient; the same e-mail may be in both teams."""
     backend = get_backend()
     df = backend.read(MAIL_RECIPIENTS)
     values = {"Email": rec.email.strip().lower(), "Name": rec.name, "Team": rec.team,
@@ -96,24 +101,32 @@ def upsert(rec: Recipient, by: str) -> None:
               "Stores": "; ".join(rec.stores), "Active": "Y" if rec.active else "N",
               "Updated_At": config.now_iso(), "Updated_By": by}
     if not df.empty and "Email" in df.columns:
-        hit = df.index[df["Email"].astype(str).str.strip().str.lower() == values["Email"]]
+        hit = _match(df, values["Email"], rec.team)
         if len(hit):
             backend.update_cells(MAIL_RECIPIENTS, int(df.loc[hit[0], "_row"]), values)
             return
     backend.append_dicts(MAIL_RECIPIENTS, [values])
 
 
-def remove(email: str) -> bool:
+def remove(email: str, team: str | None = None) -> bool:
     backend = get_backend()
     df = backend.read(MAIL_RECIPIENTS)
     if df.empty or "Email" not in df.columns:
         return False
-    hit = df.index[df["Email"].astype(str).str.strip().str.lower() == email.strip().lower()]
+    hit = _match(df, email, team)
     if not len(hit):
         return False
     row = int(df.loc[hit[0], "_row"])
     backend.delete_rows(MAIL_RECIPIENTS, row, row)
     return True
+
+
+def ground() -> list[Recipient]:
+    return [r for r in read_all() if r.hourly]
+
+
+def central() -> list[Recipient]:
+    return [r for r in read_all() if r.so]
 
 
 # ------------------------------------------------------------------ log

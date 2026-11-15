@@ -86,8 +86,6 @@ pages = {
                           url_path="production", default=not makes_indents),
     "batching": st.Page(lambda: production.render_batching(user), title="Batching sheet", icon="📦",
                         url_path="batching"),
-    "city_sku": st.Page(lambda: production.render_city_sku(user), title="City / SKU report", icon="📊",
-                        url_path="city-sku-report"),
 }
 if user.is_owner:
     pages["access"] = st.Page(lambda: access.render(user), title="Access", icon="🔑", url_path="access")
@@ -99,7 +97,7 @@ sections = {}
 if makes_indents:
     sections["Indents"] = [pages["home"], pages["indent"], pages["my_indents"], pages["po"], pages["tracker"]]
 if sees_production:
-    sections["Production"] = [pages["production"], pages["batching"], pages["city_sku"]]
+    sections["Production"] = [pages["production"], pages["batching"]]
     if not makes_indents:
         sections["Production"].append(pages["tracker"])
 if user.is_owner:

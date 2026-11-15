@@ -177,21 +177,26 @@ def po_recipients(header) -> list[str]:
 
 
 def send_so_mail(cur, file_name: str, pdf: bytes, uploaded_by: str,
-                 po_number: str = "") -> tuple[bool, str]:
+                 po_number: str = "", to_override: list[str] | None = None,
+                 sample: bool = False) -> tuple[bool, str]:
     """SO placement e-mail with the customer's PO + SO as PDF and Excel."""
     from core import recipients, reports
     s = settings()
-    to = po_recipients(cur.header)
+    to = to_override or po_recipients(cur.header)
     h = cur.header
-    subject = f"{h.customer} - SO placed - {h.store} - {cur.indent_id}" + (f" - PO {po_number}" if po_number else "")
+    subject = (("[SAMPLE] " if sample else "") + f"{h.customer} - SO placed - {h.store} - {cur.indent_id}"
+               + (f" - PO {po_number}" if po_number else ""))
     files = [(file_name or "PO.pdf", pdf, "application/pdf")] if pdf else []
     files += reports.so_files(cur, po_number, file_name, uploaded_by)
     text = (f"SO placed for {h.customer} / {h.store} ({h.city}), delivery {h.delivery_date}. "
             f"Indent {cur.indent_id}, PO {po_number or file_name}. Details attached (PDF and Excel).")
     msg = build_message(to, subject, reports.so_html(cur, po_number, file_name, uploaded_by), text,
                         files, s["cc"])
+    if sample:
+        msg.replace_header("To", ", ".join(to))
+        del msg["Cc"]
     ok, why = deliver(msg)
-    recipients.log("so", cur.indent_id, to + s["cc"], ok, why)
+    recipients.log("sample-so" if sample else "so", cur.indent_id, to + ([] if sample else s["cc"]), ok, why)
     if ok:
         return True, f"SO / PO e-mail sent to {', '.join(to + s['cc'])}."
     return False, f"SO / PO e-mail not sent: {why}"
@@ -207,19 +212,24 @@ def send_po_mail(cur, file_name: str, pdf: bytes, uploaded_by: str) -> tuple[boo
     return False, f"PO e-mail not sent: {why}"
 
 
-def send_test_mail(sent_by: str) -> tuple[bool, str]:
+def send_test_mail(sent_by: str, to: str | None = None) -> tuple[bool, str]:
     s = settings()
     msg = EmailMessage()
     msg["Subject"] = "MT Indent - test e-mail"
     msg["From"] = s["sender"] or s["user"]
-    msg["To"] = ", ".join(s["to"])
-    if s["cc"]:
+    msg["To"] = to or ", ".join(s["to"])
+    if s["cc"] and not to:
         msg["Cc"] = ", ".join(s["cc"])
     msg.set_content(f"This is a test from the MT Indent app, sent by {sent_by}. "
                     "PO e-mails will arrive like this, with the PO PDF attached.")
     ok, why = deliver(msg)
-    return ok, (f"Test e-mail sent to {', '.join(s['to'] + s['cc'])}: {why}." if ok
-                else f"Test e-mail failed: {why}")
+    dest = to or ", ".join(s["to"] + s["cc"])
+    try:
+        from core import recipients
+        recipients.log("test", "", dest, ok, why)
+    except Exception:
+        pass
+    return ok, (f"Test e-mail sent to {dest}: {why}." if ok else f"Test e-mail failed: {why}")
 
 
 def status_text() -> str:

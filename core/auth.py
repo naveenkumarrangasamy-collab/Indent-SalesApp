@@ -208,7 +208,7 @@ def resolve_user(access: pd.DataFrame, email: str) -> User | None:
     role = role if role in (ROLE_OWNER, ROLE_WAREHOUSE) else ROLE_SALES
     return User(email=email, name=row.get("Name", ""), role=role,
                 cities=parse_cities(row.get("City", "")) if role != ROLE_OWNER else [],
-                stores=parse_stores(row.get("Stores", "")) if role == ROLE_SALES else [])
+                stores=[])   # store-level access is no longer used: cities only
 
 
 @dataclass

@@ -181,6 +181,44 @@ def indent_mail_html(rows: pd.DataFrame, m: Masters | None, day: str, slot_label
     return "".join(parts)
 
 
+# ------------------------------------------------------------------ hourly production e-mail
+
+def production_view(rows: pd.DataFrame, m: Masters | None, rules: list | None) -> pd.DataFrame:
+    p = production_calc.production(rows, m, box_rules=rules if rules is not None else [])
+    if not p.empty and not p["Variety"].astype(bool).any():
+        p = p.drop(columns=["Variety"])
+    return p
+
+
+def production_mail_files(rows: pd.DataFrame, m: Masters | None, rules: list | None, day: str,
+                          slot_label: str, scope: str = "everything") -> list[tuple[str, bytes, str]]:
+    """The hourly e-mail attachments: the production report as PDF and Excel."""
+    p = production_view(rows, m, rules)
+    n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
+    sub = [f"Delivery {fmt_day(day)} - as of {slot_label} - {scope}",
+           f"{n} indents - all customers together - boxes from the spec counts / box sizes"]
+    stamp = str(day).replace("-", "")
+    hh = slot_label.split(",")[0].replace(":", "").replace(" ", "")
+    return [(f"Production_{stamp}_{hh}.pdf",
+             table_pdf("Production sheet", sub, p, footer=f"MT Indent - {slot_label}"), "application/pdf"),
+            (f"Production_{stamp}_{hh}.xlsx", xlsx({"Production": p}), XLSX)]
+
+
+def production_mail_html(rows: pd.DataFrame, m: Masters | None, rules: list | None, day: str,
+                         slot_label: str, name: str = "", scope: str = "everything") -> str:
+    p = production_view(rows, m, rules)
+    n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
+    waiting = rows[rows["status"] != STATUS_FROZEN]["indent_id"].nunique() if n else 0
+    return "".join([
+        f"<p>Hello{(' ' + html.escape(name)) if name else ''},</p>",
+        f"<p>Production for delivery on <b>{fmt_day(day)}</b>, as of <b>{slot_label}</b> "
+        f"({html.escape(scope)}). {n} indent(s), {waiting} still waiting for a PO. "
+        "The same report is attached as PDF and Excel.</p>",
+        "<h3 style='color:#1c6b49'>Production sheet</h3>",
+        _html_table(p, {"Total Qty"}),
+        "<p style='color:#888;font-size:12px'>Sent by the MT Indent app.</p>"])
+
+
 # ------------------------------------------------------------------ SO / PO
 
 def so_df(cur) -> pd.DataFrame:
