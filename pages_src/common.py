@@ -27,6 +27,59 @@ _CSS = f"""
   .mt-badge.frz {{ color:#8a5a00; }}
   .mt-badge.cnl {{ color:#b42318; }}
   .mt-muted {{ color: rgba(49,51,63,.6); font-size:.85rem; }}
+
+  /* ---- Pill buttons (customers, stores, cities): dark "hovering" boxes ----
+     Streamlit marks them data-variant="pills"; the chosen one has aria-checked="true". */
+  button[data-variant="pills"] {{
+      border-radius: 999px !important; padding: .42rem 1.05rem !important; min-height: 2.3rem;
+      font-weight: 600 !important; letter-spacing: .1px;
+      background: #1f2328 !important; color: #f1f4f7 !important; border: 1px solid #343a42 !important;
+      box-shadow: 0 2px 6px rgba(15,23,42,.18); transition: transform .12s ease, box-shadow .12s ease;
+  }}
+  button[data-variant="pills"]:hover:not([aria-disabled="true"]):not(:disabled) {{
+      transform: translateY(-2px); box-shadow: 0 8px 18px rgba(15,23,42,.28); border-color: #2f81f7 !important; }}
+  button[data-variant="pills"][aria-checked="true"] {{
+      background: #0d2c4f !important; color: #6cb6ff !important; border: 1px solid #2f81f7 !important;
+      box-shadow: 0 0 0 2px rgba(47,129,247,.25), 0 4px 12px rgba(15,23,42,.25); }}
+  button[data-variant="pills"] p, button[data-variant="pills"] span {{ color: inherit !important; }}
+  button[data-variant="pills"]:disabled, button[data-variant="pills"][aria-disabled="true"] {{ opacity: .45; }}
+  [role="radiogroup"]:has(> button[data-variant="pills"]) {{ gap: .55rem !important; flex-wrap: wrap; }}
+
+  /* ---- Segmented control (delivery day): dark bar, lighter chosen segment ---- */
+  [role="radiogroup"]:has(> button[data-variant="segmented_control"]) {{
+      background: #1f2328; border-radius: 12px; padding: 4px; display: inline-flex; gap: 2px;
+      box-shadow: 0 2px 8px rgba(15,23,42,.2); width: fit-content; }}
+  button[data-variant="segmented_control"] {{
+      border: none !important; border-radius: 9px !important; padding: .45rem 1.1rem !important;
+      font-weight: 600 !important; background: transparent !important; color: #d0d7de !important; }}
+  button[data-variant="segmented_control"]:hover {{ background: #2d333b !important; color: #fff !important; }}
+  button[data-variant="segmented_control"][aria-checked="true"] {{ background: #5b636e !important; color: #fff !important; }}
+  button[data-variant="segmented_control"] p, button[data-variant="segmented_control"] span {{ color: inherit !important; }}
+
+  /* delivery card */
+  .st-key-mt_delivery_card {{ background: linear-gradient(180deg, rgba(28,107,73,.04), rgba(28,107,73,0));
+      border-radius: 14px; }}
+
+  /* ---- Home dashboard tiles ---- */
+  .mt-tiles {{ display:grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap:10px; margin:.4rem 0 1rem; }}
+  .mt-tile {{ background:#1f2328; color:#f1f4f7; border-radius:14px; padding:.8rem 1rem;
+      box-shadow:0 2px 8px rgba(15,23,42,.18); }}
+  .mt-tile .lbl {{ font-size:.8rem; color:#c9d1d9; font-weight:600; }}
+  .mt-tile .val {{ font-size:1.55rem; font-weight:700; font-variant-numeric: tabular-nums; line-height:1.2; }}
+  .mt-tile .sub {{ font-size:.78rem; color:#9da7b1; }}
+  .mt-tile.good .val {{ color:#3fb950; }} .mt-tile.warn .val {{ color:#e3b341; }}
+  .mt-tile.bad .val {{ color:#f85149; }} .mt-tile.info .val {{ color:#6cb6ff; }}
+  .mt-cust {{ border:1px solid #e3e8e5; border-radius:14px; padding:.7rem .9rem; margin-bottom:.8rem;
+      background:#fff; box-shadow:0 1px 4px rgba(15,23,42,.06); }}
+  .mt-cust h4 {{ margin:0 0 .35rem 0; font-size:1rem; }}
+  .mt-chip {{ display:inline-block; border-radius:999px; padding:.2rem .65rem; margin:.15rem .25rem .15rem 0;
+      font-size:.8rem; font-weight:600; border:1px solid transparent; }}
+  .mt-chip.none {{ background:#f2f4f7; color:#57606a; border-color:#d0d7de; }}
+  .mt-chip.open {{ background:#fff8c5; color:#7d4e00; border-color:#e3b341; }}
+  .mt-chip.done {{ background:#dafbe1; color:#116329; border-color:#4ac26b; }}
+  .mt-chip.cnl  {{ background:#ffebe9; color:#a40e26; border-color:#ff8182; text-decoration: line-through; }}
+  .mt-bar {{ height:8px; border-radius:6px; background:#e9edf0; overflow:hidden; display:flex; }}
+  .mt-bar span {{ display:block; height:100%; }}
 </style>
 """
 
@@ -140,8 +193,7 @@ def current_user() -> auth.User | None:
     try:
         m = masters.load_masters()
     except SheetError:
-        return auth.User(**{k: u.get(k) for k in ("email", "name", "role")},
-                         cities=u.get("cities") or [])  # sheet briefly unavailable: keep the session
+        return auth.User.from_dict(u)  # sheet briefly unavailable: keep the session
     user = auth.resolve_user(m.access, u["email"])
     if user is None:
         sign_out(message=f"Access for {u['email']} has been removed.")

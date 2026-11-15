@@ -121,10 +121,10 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
     frozen = cur.status == STATUS_FROZEN or cancelled
     created = indents.created_at(df, indent_id)
     st.session_state["mi_created_at"] = created
-    open_ = indents.can_edit(created)
-    deadline = indents.edit_deadline(created).strftime("%d %b %Y, %I:%M %p") if created else ""
+    open_ = indents.can_edit(cur.header.delivery_date)
+    deadline = indents.deadline_text(cur.header.delivery_date)
     why = (("Deleted" if cancelled else "Frozen with a PO") if frozen
-           else f"Edit window closed at {deadline}") if (frozen or not open_) else ""
+           else f"Editing closed at {deadline}") if (frozen or not open_) else ""
     _line_rows(cur, user, editable=open_ and not frozen, why=why)
     confirm = st.session_state.get("mi_confirm")
     if confirm and confirm[0] == indent_id:
@@ -156,7 +156,7 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
         if frozen:
             c[3].caption("Frozen with a PO: read-only.")
         elif not open_:
-            c[3].caption(f"Edit window closed at {deadline}. A PO can still be uploaded.")
+            c[3].caption(f"Editing closed at {deadline} (delivery-day cutoff). A PO can still be uploaded.")
         else:
             c[3].caption(f"Editable until **{deadline}**.")
 
@@ -311,11 +311,16 @@ def _edit_line_dialog(cur, name: str, user: User) -> None:
     st.markdown(f"**{name}**  \n<span class='mt-muted'>{line.parent_sku} · lot {line.lot}"
                 f"{' · ' + lot_size(name) if lot_size(name) else ''}</span>", unsafe_allow_html=True)
     try:
-        varieties = masters.load_masters().varieties_for(line.parent_sku)
+        mm = masters.load_masters()
+        varieties = mm.varieties_for(line.parent_sku)
+        fixed = mm.variety_from_name(line.parent_sku, name)
     except indents.SheetError:
-        varieties = []
+        varieties, fixed = [], ""
     variety = line.variety
-    if varieties:
+    if fixed:
+        variety = st.selectbox("Variety", [fixed], index=0, disabled=True,
+                               help="Taken from the customer SKU name; cannot be changed")
+    elif varieties:
         opts = varieties if line.variety in varieties or not line.variety else varieties + [line.variety]
         variety = st.selectbox("Variety", opts, index=opts.index(line.variety) if line.variety in opts else None)
     c = st.columns(2)

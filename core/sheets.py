@@ -191,6 +191,15 @@ class _Base:
         if last >= first >= 2:
             self._delete_raw(tab, first, last)
 
+    def replace_tab(self, tab: str, values: list[list]) -> None:
+        """Overwrite a whole tab with these values (creates it if missing).
+        Only for report tabs such as Production_Sheet, never for data tabs."""
+        if tab not in self.list_tabs():
+            self._create_tab(tab, [])
+        self._replace_raw(tab, [[_to_cell(v) for v in row] for row in values])
+
+    def _replace_raw(self, tab: str, values: list[list]) -> None: raise NotImplementedError
+
     def ensure_tabs(self, tabs: list[str] | None = None) -> list[str]:
         """Create any missing app tabs (header row only). Returns created names."""
         created = []
@@ -321,9 +330,21 @@ class GoogleBackend(_Base):
         ws = self._worksheet(tab)
         self._call(ws.delete_rows, first, last)
 
+    def _replace_raw(self, tab, values):
+        ws = self._worksheet(tab)
+        need_rows, need_cols = max(len(values), 1) + 10, max((len(r) for r in values), default=1)
+        if ws.row_count < need_rows:
+            self._call(ws.add_rows, need_rows - ws.row_count)
+        if ws.col_count < need_cols:
+            self._call(ws.add_cols, need_cols - ws.col_count)
+        self._call(ws.clear)
+        if values:
+            self._call(ws.update, range_name="A1", values=values, value_input_option="RAW")
+
     def _create_tab(self, tab, header):
         ws = self._call(self.ss.add_worksheet, title=tab, rows=1000, cols=max(len(header), 8))
-        self._call(ws.update, range_name="A1", values=[header], value_input_option="RAW")
+        if header:
+            self._call(ws.update, range_name="A1", values=[header], value_input_option="RAW")
         try:
             self._call(ws.freeze, rows=1)
         except SheetError:
@@ -433,8 +454,12 @@ class LocalBackend(_Base):
 
     def _create_tab(self, tab, header):
         with self._lock:
-            self._write_file(tab, [header])
+            self._write_file(tab, [header] if header else [])
             self._headers[tab] = list(header)
+
+    def _replace_raw(self, tab, values):
+        with self._lock:
+            self._write_file(tab, values)
 
     def _set_header(self, tab, header):
         with self._lock:

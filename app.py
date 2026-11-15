@@ -3,7 +3,7 @@ import streamlit as st
 
 st.set_page_config(page_title="MT Indent", page_icon="🧾", layout="wide")
 
-from pages_src import access, common, indent, login, my_indents, production  # noqa: E402
+from pages_src import access, common, home, indent, login, my_indents, production  # noqa: E402
 
 common.inject_css()
 common.connection_banner()
@@ -16,8 +16,8 @@ if user is None:
     st.stop()
 
 pages = {
-    "indent": st.Page(lambda: indent.render(user), title="Indent", icon="📝",
-                      url_path="indent", default=True),
+    "home": st.Page(lambda: home.render(user), title="Home", icon="🏠", url_path="home", default=True),
+    "indent": st.Page(lambda: indent.render(user), title="Create indent", icon="📝", url_path="indent"),
     "my_indents": st.Page(lambda: my_indents.render(user), title="All indents" if user.is_owner else "My indents",
                           icon="📋", url_path="indents"),
     "production": st.Page(lambda: production.render(user), title="Production sheet", icon="🏭",
@@ -30,7 +30,7 @@ if user.is_owner:
 common.PAGES.clear()
 common.PAGES.update(pages)
 
-sections = {"Indents": [pages["indent"], pages["my_indents"]],
+sections = {"Indents": [pages["home"], pages["indent"], pages["my_indents"]],
             "Production": [pages["production"], pages["city_sku"]]}
 if user.is_owner:
     sections["Admin"] = [pages["access"]]

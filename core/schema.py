@@ -26,7 +26,7 @@ TABS: dict[str, list[str]] = {
     STORE_MAP: ["City", "Customer", "Store Name"],
     VARIETIES: ["Parent SKU", "Variety"],
     # Access is edited from the app's Access page (owner only).
-    ACCESS: ["Email", "Name", "Role", "Status", "PIN_Hash", "Updated_At", "Updated_By", "City"],
+    ACCESS: ["Email", "Name", "Role", "Status", "PIN_Hash", "Updated_At", "Updated_By", "City", "Stores"],
     # Output tabs (written by the app, append-only).
     INDENT_LINES: ["indent_id", "version", "status", "submitted_at", "submitted_by",
                    "delivery_date", "city", "customer", "store", "expected_time",

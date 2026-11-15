@@ -41,6 +41,7 @@ def _users(m: masters.Masters, me: User) -> None:
         show = pd.DataFrame({"Email": acc["Email"], "Name": acc["Name"], "Role": acc["Role"],
                              "Status": acc["Status"],
                              "City": acc["City"].map(lambda v: v or "— (own indents only)"),
+                             "Stores": acc["Stores"].map(lambda v: v or "all"),
                              "PIN set": acc["PIN_Hash"].map(lambda v: "yes" if v else "no"),
                              "Updated": acc["Updated_At"].str[:16].str.replace("T", " "),
                              "By": acc["Updated_By"]})
@@ -58,6 +59,12 @@ def _users(m: masters.Masters, me: User) -> None:
                                 help="The sales person places indents only in these cities and can see, "
                                      "edit and delete every indent there. Leave empty: own indents only. "
                                      "Owners see everything.")
+        sidx = m.store_index()
+        stores = st.multiselect("Stores / facilities (optional)", list(sidx),
+                                format_func=lambda x: f"{x}  —  {sidx.get(x, '')}",
+                                placeholder="All stores of the chosen cities",
+                                help="Limit the sales person to these stores. Leave empty for every store "
+                                     "of the chosen cities.")
         pin = st.text_input("Initial PIN (4–6 digits)", type="password", max_chars=6)
         if st.form_submit_button("Add user", type="primary"):
             email_n = auth.norm_email(email)
@@ -70,7 +77,8 @@ def _users(m: masters.Masters, me: User) -> None:
             else:
                 _save(lambda: auth.upsert_access(email_n, by=me.email, name=name, role=role,
                                                  status=ACCESS_ACTIVE, pin=pin,
-                                                 cities=cities if role == ROLE_SALES else []),
+                                                 cities=cities if role == ROLE_SALES else [],
+                                                 stores=stores if role == ROLE_SALES else []),
                       f"{email_n} added" + (f" for {', '.join(cities)}" if cities and role == ROLE_SALES else "")
                       + ". Share the PIN with them privately.")
 
@@ -86,12 +94,20 @@ def _users(m: masters.Masters, me: User) -> None:
         if str(row.get("Role", "")).lower() != ROLE_OWNER:
             current = auth.parse_cities(row.get("City", ""))
             options = list(dict.fromkeys(m.cities() + current))
+            cur_stores = auth.parse_stores(row.get("Stores", ""))
+            sidx = m.store_index()
+            st_opts = list(dict.fromkeys(list(sidx) + cur_stores))
             with st.form(f"cities_{target}"):
                 new_cities = st.multiselect("City", options, default=current,
                                             help="Empty: the user sees only their own indents.")
-                if st.form_submit_button("Save cities", icon=":material/location_city:"):
-                    _save(lambda: auth.upsert_access(target, by=me.email, cities=new_cities),
-                          f"{target}: cities set to {', '.join(new_cities) or 'none (own indents only)'}.")
+                new_stores = st.multiselect("Stores / facilities", st_opts, default=cur_stores,
+                                            format_func=lambda x: f"{x}  —  {sidx.get(x, '')}",
+                                            placeholder="All stores of the cities",
+                                            help="Empty: every store of the chosen cities.")
+                if st.form_submit_button("Save access", icon=":material/location_city:"):
+                    _save(lambda: auth.upsert_access(target, by=me.email, cities=new_cities, stores=new_stores),
+                          f"{target}: cities {', '.join(new_cities) or 'none (own indents only)'}; "
+                          f"stores {'; '.join(new_stores) or 'all'}.")
         with st.form("reset_pin", clear_on_submit=True):
             new_pin = st.text_input("New PIN for this user", type="password", max_chars=6)
             if st.form_submit_button("Reset PIN"):

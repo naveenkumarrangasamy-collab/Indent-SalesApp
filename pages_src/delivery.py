@@ -1,4 +1,4 @@
-"""Step 2: delivery details (date, city, customer, store, expected time)."""
+"""Delivery choices at the top of the Indent page: day, city, customer, store, time."""
 from __future__ import annotations
 
 from datetime import date, time
@@ -186,88 +186,196 @@ def _duplicate_notice(hdr) -> bool:
     if not dup:
         return False
     cur = indents.snapshot(df, dup)
-    created = indents.created_at(df, dup)
     st.warning(indents.duplicate_message(dup, hdr))
-    if cur is not None and cur.status != "Frozen" and indents.can_edit(created):
+    if cur is not None and cur.status != "Frozen" and indents.can_edit(cur.header.delivery_date):
         st.button(f"Edit {dup}", icon=":material/edit:", on_click=_open_existing, args=(dup,),
                   type="primary",
                   help="Opens the existing indent; anything entered here for a new indent is replaced.")
     else:
-        st.caption(f"{dup} can no longer be edited (frozen with a PO or past its edit window).")
+        st.caption(f"{dup} can no longer be edited (frozen with a PO or past 2 PM on its delivery day).")
     return True
 
 
-def render(m: Masters) -> None:
-    common.show_flash()
+def _my_stores(m: Masters, city: str, customer: str) -> list[str]:
+    """Stores of this city + customer the user may use (store-limited sales users)."""
+    stores = m.stores_for(city, customer) if city and customer else []
+    u = st.session_state.get("user") or {}
+    allowed = {x.casefold() for x in (u.get("stores") or [])}
+    if u.get("role") != "owner" and allowed:
+        stores = [x for x in stores if " ".join(x.split()).casefold() in allowed]
+    return stores
+
+
+def _my_customers(m: Masters, city: str) -> list[str]:
+    """Customers that have at least one store this user may use (all, if unrestricted)."""
+    customers = m.customers(city) if city else []
+    u = st.session_state.get("user") or {}
+    if u.get("role") != "owner" and u.get("stores"):
+        customers = [c for c in customers if _my_stores(m, city, c)]
+    return customers
+
+
+def _date_options() -> list[str]:
+    """Delivery days offered: today (until its 2 PM cutoff) and tomorrow; a
+    correction keeps its own date in the list."""
+    lo, hi = indents.delivery_bounds()
+    days = []
+    d = lo
+    while d <= hi:
+        if indents.can_edit(d.isoformat()):
+            days.append(d.isoformat())
+        d = date.fromordinal(d.toordinal() + 1)
+    keep = state.keep_date()
+    if keep and keep not in days:
+        days = [keep] + days
+    return days
+
+
+def _fmt_day(iso: str) -> str:
+    try:
+        d = date.fromisoformat(iso)
+    except ValueError:
+        return iso
+    today = config.now_ist().date()
+    word = {0: "Today", 1: "Tomorrow", -1: "Yesterday"}.get((d - today).days, d.strftime("%a"))
+    return f"{word} · {d:%a %d %b}"
+
+
+def _on_pick(key: str, field: str) -> None:
+    """Pill / segmented control changed."""
+    new = st.session_state.get(key) or ""
+    hdr = state.header()
+    old = getattr(hdr, field)
+    if new == old:
+        return
+    state.set_header_field(field, new)
+    if field == "city":
+        state.set_header_field("customer", "")
+        state.set_header_field("store", "")
+        _clear_items("City")
+    elif field == "customer":
+        state.set_header_field("store", "")
+        _clear_items("Customer")
+    _bump()
+
+
+def _placed_map(day: str, city: str, customer: str) -> dict[str, tuple[str, str]]:
+    """store -> (indent_id, status) for indents already placed that day."""
+    if not (day and city and customer):
+        return {}
+    try:
+        cur = indents.current_rows(indents.read_lines())
+    except SheetError:
+        return {}
+    if cur.empty:
+        return {}
+    norm = lambda v: " ".join(str(v).split()).casefold()  # noqa: E731
+    sub = cur[(cur["delivery_date"].astype(str) == day) & (cur["city"].map(norm) == norm(city))
+              & (cur["customer"].map(norm) == norm(customer))]
+    out = {}
+    for r in sub.drop_duplicates("indent_id").itertuples():
+        out[norm(r.store)] = (r.indent_id, r.status)
+    return out
+
+
+def render(m: Masters) -> bool:
+    """Delivery choices at the top of the Indent page, as pill buttons.
+    Returns True when date, city, customer and store are chosen and the store
+    has no other indent that day (then the items section is shown)."""
     _drop_stale(m)
     hdr = state.header()
-    st.subheader("Delivery details")
+    ind = state.get()
 
-    c1, c2 = st.columns(2)
-    k = _k("date")
-    min_d, max_d = state.date_bounds()
-    cur_d = date.fromisoformat(hdr.delivery_date) if hdr.delivery_date else None
-    if cur_d and not (min_d <= cur_d <= max_d):  # e.g. an old draft: ask for a new date
-        cur_d = None
-    c1.date_input("Delivery date", value=cur_d, min_value=min_d, max_value=max_d, key=k,
-                  on_change=_on_simple, args=(k, "delivery_date"), format="DD/MM/YYYY",
-                  help=f"Today or tomorrow ({min_d:%d %b} – {max_d:%d %b})")
+    with st.container(border=True, key="mt_delivery_card"):
+        # 1. Delivery day
+        days = _date_options()
+        if hdr.delivery_date and hdr.delivery_date not in days:
+            state.set_header_field("delivery_date", "")
+            hdr = state.header()
+        if not hdr.delivery_date and days and ind["mode"] != "edit":
+            state.set_header_field("delivery_date", days[0])   # first open day, ready to use
+            hdr = state.header()
+        k = _k("day")
+        st.segmented_control("Delivery day", days, default=hdr.delivery_date or None, key=k,
+                             format_func=_fmt_day, on_change=_on_pick, args=(k, "delivery_date"))
+        today = config.now_ist().date()
+        if today.isoformat() not in days:
+            st.caption(f"Orders for today closed at {indents.deadline_text(today.isoformat())[-8:]}. "
+                       "Next delivery day is shown.")
 
-    cities = _my_cities(m)
-    if hdr.city and hdr.city not in cities and state.get()["mode"] == "edit":
-        cities = cities + [hdr.city]
-    u = st.session_state.get("user") or {}
-    if u.get("role") != "owner" and u.get("cities") and not cities:
-        st.warning("None of your cities (" + ", ".join(u["cities"]) + ") is in the Google Sheet yet. "
-                   "Ask the indent owner to check your city on the Access page.")
-    k = _k("city")
-    c2.selectbox("City", cities, index=_index(cities, hdr.city), key=k, placeholder="Choose city",
-                 on_change=_on_city, args=(k,))
+        # 2. City (only asked when the user has more than one)
+        cities = _my_cities(m)
+        if hdr.city and hdr.city not in cities and ind["mode"] == "edit":
+            cities = cities + [hdr.city]
+        if not cities:
+            st.warning("No city is available to you yet. Ask the indent owner to check your access.")
+            return False
+        if len(cities) == 1 and hdr.city != cities[0]:
+            _on_pick_value("city", cities[0])
+            hdr = state.header()
+        if len(cities) > 1:
+            k = _k("city")
+            st.pills("City", cities, default=hdr.city or None, key=k, on_change=_on_pick,
+                     args=(k, "city"))
+        else:
+            st.markdown(f"<span class='mt-muted'>City</span>&nbsp; <b>{cities[0]}</b>",
+                        unsafe_allow_html=True)
 
-    c3, c4 = st.columns(2)
-    customers = m.customers(hdr.city) if hdr.city else []
-    if hdr.customer and hdr.customer not in customers:
-        customers = customers + [hdr.customer]
-    k = _k("customer")
-    c3.selectbox("Customer", customers, index=_index(customers, hdr.customer), key=k,
-                 placeholder="Choose customer" if hdr.city else "Choose a city first",
-                 disabled=not hdr.city, on_change=_on_customer, args=(k,))
+        # 3. Customer
+        customers = _my_customers(m, hdr.city)
+        if hdr.customer and hdr.customer not in customers and ind["mode"] == "edit":
+            customers = customers + [hdr.customer]
+        k = _k("customer")
+        st.pills("Customer", customers, default=hdr.customer or None, key=k, on_change=_on_pick,
+                 args=(k, "customer"), disabled=not hdr.city)
 
-    stores = m.stores_for(hdr.city, hdr.customer) if hdr.city and hdr.customer else []
-    if hdr.store and hdr.store not in stores:
-        stores = stores + [hdr.store]
-    k = _k("store")
-    c4.selectbox("Store name", stores, index=_index(stores, hdr.store), key=k,
-                 placeholder="Choose store" if stores else "No stores mapped",
-                 disabled=not (hdr.city and hdr.customer), on_change=_on_simple, args=(k, "store"))
+        # 4. Store (shows which ones already have an indent that day)
+        if hdr.customer:
+            stores = _my_stores(m, hdr.city, hdr.customer)
+            if hdr.store and hdr.store not in stores and ind["mode"] == "edit":
+                stores = stores + [hdr.store]
+            placed = _placed_map(hdr.delivery_date, hdr.city, hdr.customer)
+            mine = ind["indent_id"] if ind["mode"] == "edit" else ""
 
-    c5, _ = st.columns(2)
-    k = _k("time")
-    slots = TIME_SLOTS if hdr.expected_time in TIME_SLOTS or not hdr.expected_time \
-        else TIME_SLOTS + [hdr.expected_time]
-    c5.selectbox("Expected delivery time", slots, index=_index(slots, hdr.expected_time), key=k,
-                 format_func=fmt_slot, placeholder="Pick a slot or type e.g. 6:45 PM",
-                 accept_new_options=True, on_change=_on_time, args=(k,),
-                 help="Between 10:00 AM and 8:00 PM. Pick a 30-minute slot, or type a time "
-                      "(6:45 PM, 18:45) and press Enter")
+            def store_label(x: str) -> str:
+                info = placed.get(" ".join(x.split()).casefold())
+                if not info or info[0] == mine:
+                    return x
+                return f"{x}  ✓ {'PO done' if info[1] == 'Frozen' else 'placed'}"
 
-    if hdr.city and hdr.customer:
-        pending = []
-        if not m.has_sku_mapping(hdr.city, hdr.customer):
-            pending.append("SKU names (All Cux City)")
-        if not m.stores_for(hdr.city, hdr.customer):
-            pending.append("stores (Customer List)")
-        if pending:
-            st.info(f"Mapping pending for {hdr.customer} in {hdr.city}: " + " and ".join(pending)
-                    + " are not in the sheet yet. Ask the indent owner to add them.")
+            if stores:
+                k = _k("store")
+                st.pills("Store", stores, default=hdr.store or None, key=k, format_func=store_label,
+                         on_change=_on_pick, args=(k, "store"))
+            else:
+                st.info(f"No stores mapped for {hdr.customer} in {hdr.city} (Customer List tab).")
 
-    missing = hdr.missing()
-    if hdr.delivery_date and not indents.date_allowed(hdr.delivery_date, state.keep_date()):
-        missing = missing + [f"a delivery date of {indents.date_rule_text()}"]
+        # 5. Expected delivery time
+        c5, c6 = st.columns([1, 2])
+        k = _k("time")
+        slots = TIME_SLOTS if hdr.expected_time in TIME_SLOTS or not hdr.expected_time \
+            else TIME_SLOTS + [hdr.expected_time]
+        c5.selectbox("Expected delivery time", slots, index=_index(slots, hdr.expected_time), key=k,
+                     format_func=fmt_slot, placeholder="Pick a slot or type e.g. 6:45 PM",
+                     accept_new_options=True, on_change=_on_time, args=(k,),
+                     help="Between 10:00 AM and 8:00 PM. Pick a 30-minute slot, or type a time "
+                          "(6:45 PM, 18:45) and press Enter")
+        if hdr.delivery_date:
+            c6.caption(f"Edits allowed until **{indents.deadline_text(hdr.delivery_date)}** "
+                       "(2 PM on the delivery day).")
+
+    hdr = state.header()
+    if hdr.city and hdr.customer and not m.has_sku_mapping(hdr.city, hdr.customer):
+        st.info(f"Mapping pending for {hdr.customer} in {hdr.city}: no SKU names in 'All Cux City' yet.")
+        return False
+    if not (hdr.delivery_date and hdr.city and hdr.customer and hdr.store):
+        return False
     if _duplicate_notice(hdr):
-        missing = missing + ["a store / date without an indent"]
-    if st.button("Continue →", type="primary", disabled=bool(missing)):
-        state.set_step("items")
-        st.rerun()
-    if missing:
-        st.caption("Required: " + ", ".join(missing))
+        return False
+    return True
+
+
+def _on_pick_value(field: str, value: str) -> None:
+    if getattr(state.header(), field) != value:
+        state.set_header_field(field, value)
+        _bump()

@@ -135,17 +135,18 @@ def show_spec() -> bool:
 
 
 def edit_cutoff_days() -> int:
+    """Days after the DELIVERY date on which editing closes (0 = on the delivery date)."""
     try:
-        return int(get("edit_cutoff_days", 1))
+        return int(get("edit_cutoff_days", 0))
     except (TypeError, ValueError):
-        return 1
+        return 0
 
 
 def edit_cutoff_hour() -> int:
     try:
-        return min(23, max(0, int(get("edit_cutoff_hour", 12))))
+        return min(23, max(0, int(get("edit_cutoff_hour", 14))))
     except (TypeError, ValueError):
-        return 12
+        return 14
 
 
 def owner_email() -> str:

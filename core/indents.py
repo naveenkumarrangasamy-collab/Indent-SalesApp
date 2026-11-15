@@ -81,18 +81,25 @@ def _ist(iso: str) -> datetime:
     return dt.astimezone(config.IST)
 
 
-def edit_deadline(created_iso: str) -> datetime:
-    """Indents can be edited until `edit_cutoff_hour` (12:00) IST on the day
-    after they were created (`edit_cutoff_days` = 1)."""
-    d = _ist(created_iso).date() + timedelta(days=config.edit_cutoff_days())
+def edit_deadline(delivery_date: str) -> datetime:
+    """An indent can be edited / deleted until `edit_cutoff_hour` (2:00 PM) IST
+    on its DELIVERY date (`edit_cutoff_days` = 0)."""
+    d = date.fromisoformat(str(delivery_date)[:10]) + timedelta(days=config.edit_cutoff_days())
     return datetime(d.year, d.month, d.day, config.edit_cutoff_hour(), tzinfo=config.IST)
 
 
-def can_edit(created_iso: str, now: datetime | None = None) -> bool:
+def can_edit(delivery_date: str, now: datetime | None = None) -> bool:
     try:
-        return (now or config.now_ist()) < edit_deadline(created_iso)
+        return (now or config.now_ist()) < edit_deadline(delivery_date)
     except (TypeError, ValueError):
         return False
+
+
+def deadline_text(delivery_date: str) -> str:
+    try:
+        return edit_deadline(delivery_date).strftime("%d %b %Y, %I:%M %p")
+    except (TypeError, ValueError):
+        return ""
 
 
 def delivery_bounds(keep: str | None = None) -> tuple[date, date]:
@@ -109,16 +116,20 @@ def delivery_bounds(keep: str | None = None) -> tuple[date, date]:
 
 
 def date_allowed(delivery_date: str, keep: str | None = None) -> bool:
+    """T or T+1, and not after that date's cutoff (2 PM). A correction may keep
+    its own date (its cutoff is checked separately)."""
     if keep and delivery_date == keep:
         return True
     lo, hi = delivery_bounds()
-    return lo.isoformat() <= str(delivery_date) <= hi.isoformat()
+    return lo.isoformat() <= str(delivery_date) <= hi.isoformat() and can_edit(delivery_date)
 
 
 def date_rule_text() -> str:
     lo, hi = delivery_bounds()
-    return f"today ({lo:%d %b}) or tomorrow ({hi:%d %b})" if (hi - lo).days == 1 \
-        else f"{lo:%d %b} to {hi:%d %b}"
+    base = (f"today ({lo:%d %b}) or tomorrow ({hi:%d %b})" if (hi - lo).days == 1
+            else f"{lo:%d %b} to {hi:%d %b}")
+    return base + f", before {config.edit_cutoff_hour() % 12 or 12}:00 " \
+        + ("PM" if config.edit_cutoff_hour() >= 12 else "AM") + " on the delivery day"
 
 
 def creator_of(df: pd.DataFrame, indent_id: str) -> str:
@@ -202,7 +213,7 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
                    last_edited_by=("submitted_by", "first")))
     out = agg.join(first).reset_index()
     out["total_amount"] = out["total_amount"].round(2)
-    out["can_edit"] = (out["created_at"].map(can_edit)
+    out["can_edit"] = (out["delivery_date"].map(can_edit)
                        & ~out["status"].isin([STATUS_FROZEN, STATUS_CANCELLED]))
     return open_first(out[cols])
 
@@ -229,8 +240,11 @@ def visible_to(summ: pd.DataFrame, user) -> pd.DataFrame:
     if summ is None or summ.empty or user.is_owner:
         return summ
     if user.cities:
-        cities = {c.casefold() for c in user.cities}
-        return summ[summ["city"].astype(str).str.strip().str.casefold().isin(cities)]
+        norm = lambda col: summ[col].astype(str).map(lambda v: " ".join(v.split()).casefold())  # noqa: E731
+        out = summ[norm("city").isin({c.casefold() for c in user.cities})]
+        if user.stores:
+            out = out[norm("store").loc[out.index].isin({x.casefold() for x in user.stores})]
+        return out
     return summ[summ["created_by"].astype(str).str.lower() == user.email]
 
 
@@ -238,7 +252,8 @@ def scope_text(user) -> str:
     if user.is_owner:
         return "all indents"
     if user.cities:
-        return "all indents in " + ", ".join(user.cities)
+        return ("indents of " + ", ".join(user.stores) if user.stores
+                else "all indents in " + ", ".join(user.cities))
     return "indents you created"
 
 
@@ -307,7 +322,10 @@ def validate(header: IndentHeader, lines: list[IndentLine], m: Masters,
             errors.append(f"'{name}' is not mapped under {line.parent_sku} for "
                           f"{header.customer} in {header.city}.")
         varieties = m.varieties_for(line.parent_sku)
-        if varieties and line.variety not in varieties:
+        fixed = m.variety_from_name(line.parent_sku, name)
+        if fixed and line.variety != fixed:
+            errors.append(f"Variety for '{name}' must be {fixed} (it is in the SKU name).")
+        elif varieties and line.variety not in varieties:
             errors.append(f"Choose a variety for '{name}'.")
         if line.lot not in LOTS:
             errors.append(f"Choose a lot for '{name}'.")
@@ -448,10 +466,10 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
     df = prepare(backend.read(INDENT_LINES))
     cur = snapshot(df, indent_id)
     _check_editable(cur, indent_id, base_version)
-    created = created_at(df, indent_id)
-    if not can_edit(created):
-        raise CutoffError(f"{indent_id} can no longer be edited: the edit window closed at "
-                          f"{edit_deadline(created):%d %b %Y, %I:%M %p}.")
+    saved_date = cur.header.delivery_date
+    if not can_edit(saved_date):
+        raise CutoffError(f"{indent_id} can no longer be edited: editing closed at "
+                          f"{deadline_text(saved_date)} (delivery day cutoff).")
     if not date_allowed(header.delivery_date, keep=cur.header.delivery_date):
         raise SheetError(f"The delivery date must be {date_rule_text()}.")
     dup = find_duplicate(df, header, exclude_id=indent_id)
@@ -510,7 +528,7 @@ def freeze(indent_id: str, base_version: int, po_file_name: str, user: str,
     return new_v
 
 
-__all__ = ["find_duplicate", "DuplicateError", "edit_deadline", "can_edit", "delivery_bounds", "date_allowed", "created_at", "CutoffError", "read_lines", "current_rows", "summary", "versions", "snapshot", "validate",
+__all__ = ["find_duplicate", "DuplicateError", "edit_deadline", "can_edit", "deadline_text", "delivery_bounds", "date_allowed", "created_at", "CutoffError", "read_lines", "current_rows", "summary", "versions", "snapshot", "validate",
            "submit_new", "submit_update", "freeze", "next_indent_id", "build_rows",
            "ConflictError", "FrozenError", "NothingChangedError", "fmt_num"]
 
@@ -523,10 +541,9 @@ def cancel(indent_id: str, base_version: int, user: str) -> int:
     df = prepare(backend.read(INDENT_LINES))
     cur = snapshot(df, indent_id)
     _check_editable(cur, indent_id, base_version)
-    created = created_at(df, indent_id)
-    if not can_edit(created):
-        raise CutoffError(f"{indent_id} can no longer be deleted: the edit window closed at "
-                          f"{edit_deadline(created):%d %b %Y, %I:%M %p}.")
+    if not can_edit(cur.header.delivery_date):
+        raise CutoffError(f"{indent_id} can no longer be deleted: editing closed at "
+                          f"{deadline_text(cur.header.delivery_date)}.")
     new_v = cur.version + 1
     stamp = config.now_iso()
     rows = build_rows(indent_id, new_v, STATUS_CANCELLED, stamp, user, cur.header, cur.lines,

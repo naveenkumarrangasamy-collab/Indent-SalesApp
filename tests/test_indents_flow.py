@@ -134,7 +134,7 @@ def test_validate_rules():
     m = _masters()
     assert indents.validate(H, [HASS], m) == []
     apple = IndentLine("Apple", "2PC - Apple Queen Imported", "", "Pcs", 1, 1)
-    assert any("variety" in e for e in indents.validate(H, [apple], m))
+    assert any("must be Queen" in e for e in indents.validate(H, [apple], m))
     assert indents.validate(H, [IndentLine(**{**apple.to_dict(), "variety": "Queen"})], m) == []
     errs = indents.validate(H, [HASS, HASS], m)
     assert any("more than once" in e for e in errs)
@@ -156,37 +156,41 @@ def test_store_and_customer_lists():
 
 
 
-def test_edit_deadline_is_next_day_noon():
-    d = indents.edit_deadline("2026-11-14T18:20:05+05:30")
-    assert d.isoformat() == "2026-11-15T12:00:00+05:30"
+def test_edit_deadline_is_2pm_on_delivery_day():
+    """The user's example: at 6:53 PM on 15 Nov the 15th is locked, the 16th is open until 2 PM."""
     ist = config.IST
-    assert indents.can_edit("2026-11-14T18:20:05+05:30", datetime(2026, 11, 15, 11, 59, tzinfo=ist))
-    assert not indents.can_edit("2026-11-14T18:20:05+05:30", datetime(2026, 11, 15, 12, 0, tzinfo=ist))
-    assert indents.can_edit("2026-11-14T00:05:00+05:30", datetime(2026, 11, 14, 23, 0, tzinfo=ist))
+    now = datetime(2026, 11, 15, 18, 53, tzinfo=ist)
+    assert indents.edit_deadline("2026-11-16").isoformat() == "2026-11-16T14:00:00+05:30"
+    assert not indents.can_edit("2026-11-15", now)
+    assert indents.can_edit("2026-11-16", now)
+    assert indents.can_edit("2026-11-16", datetime(2026, 11, 16, 13, 59, tzinfo=ist))
+    assert not indents.can_edit("2026-11-16", datetime(2026, 11, 16, 14, 0, tzinfo=ist))
 
 
 def test_update_blocked_after_cutoff(backend, monkeypatch):
     iid = indents.submit_new(H, [HASS], "s@x.com")
     later = config.now_ist() + timedelta(days=2)
     monkeypatch.setattr(indents.config, "now_ist", lambda: later)
-    with pytest.raises(indents.CutoffError, match="edit window closed"):
+    with pytest.raises(indents.CutoffError, match="editing closed"):
         indents.submit_update(iid, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 99})], "s@x.com")
 
 
-def test_delivery_date_today_or_tomorrow(backend):
-    today = config.now_ist().date()
+def test_delivery_date_today_or_tomorrow(backend, monkeypatch):
+    morning = datetime.combine(config.now_ist().date(), datetime.min.time(), tzinfo=config.IST) + timedelta(hours=9)
+    monkeypatch.setattr(indents.config, "now_ist", lambda: morning)
+    today = morning.date()
     day_after = (today + timedelta(days=2)).isoformat()
     with pytest.raises(indents.SheetError, match="today"):
         indents.submit_new(IndentHeader(**{**H.to_dict(), "delivery_date": day_after}), [HASS], "s@x.com")
     yesterday = (today - timedelta(days=1)).isoformat()
     assert not indents.date_allowed(yesterday) and indents.date_allowed(today.isoformat())
     assert indents.date_allowed(yesterday, keep=yesterday)        # a correction keeps its own date
-    iid = indents.submit_new(IndentHeader(**{**H.to_dict(), "delivery_date": today.isoformat()}), [HASS], "s@x.com")
-    assert iid
-    m = _masters()
-    errs = indents.validate(IndentHeader(**{**H.to_dict(), "delivery_date": day_after}), [HASS], m,
-                            check_date=True)
-    assert any("Delivery date must be today" in e for e in errs)
+    assert indents.submit_new(IndentHeader(**{**H.to_dict(), "delivery_date": today.isoformat()}), [HASS], "s@x.com")
+    # after 2 PM, today is closed for new indents
+    afternoon = morning + timedelta(hours=6)
+    monkeypatch.setattr(indents.config, "now_ist", lambda: afternoon)
+    assert not indents.date_allowed(today.isoformat())
+    assert indents.date_allowed((today + timedelta(days=1)).isoformat())
 
 
 def test_summary_marks_editable(backend):
@@ -290,3 +294,13 @@ def test_open_indents_first_and_city_scope(backend):
     owner = User("o@x.com", "", "owner")
     assert len(indents.visible_to(s, owner)) == 3
     assert blr.can_work_on("Bangalore", "a@x.com") and not blr.can_work_on("Chennai", "b@x.com")
+
+
+
+def test_apple_variety_from_name():
+    m = _masters()
+    assert m.variety_from_name("Apple", "2PC - Apple Royal Gala Imported") == "Gala"
+    assert m.variety_from_name("Apple", "2PC - Apple Queen Imported") == "Queen"
+    assert m.variety_from_name("Apple", "2PC - Apple Snacky") == ""          # user picks
+    snacky = IndentLine("Apple", "2PC - Apple Queen Imported", "Gala", "Pcs", 1, 1)
+    assert any("must be Queen" in e for e in indents.validate(H, [snacky], m))

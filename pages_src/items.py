@@ -64,7 +64,7 @@ def _add_line(m: Masters) -> None:
         errors.append("Choose a parent SKU.")
     if not sku:
         errors.append("Choose a customer SKU name.")
-    if parent and m.needs_variety(parent) and not variety:
+    if parent and m.needs_variety(parent) and not variety and not m.variety_from_name(parent, sku or ""):
         errors.append("Choose a variety.")
     if not lot:
         errors.append("No lot is mapped for this SKU name. Ask the indent owner to add a "
@@ -82,7 +82,8 @@ def _add_line(m: Masters) -> None:
         s["add_errors"] = errors
         return
     current.append(IndentLine(parent_sku=parent, customer_sku_name=sku,
-                              variety=variety if m.needs_variety(parent) else "",
+                              variety=(m.variety_from_name(parent, sku) or variety)
+                              if m.needs_variety(parent) else "",
                               lot=lot, qty=qty, price=price))
     state.set_lines(current, structural=True)
     s["a_rev"] = _arev() + 1  # fresh, empty add-line widgets
@@ -107,8 +108,13 @@ def _add_form(m: Masters) -> None:
                              placeholder=placeholder, disabled=not names,
                              on_change=_on_sku, args=(m,))
         varieties = m.varieties_for(parent) if parent else []
-        if varieties:
-            c[2].selectbox("Variety", varieties, index=None, key=_ak("variety"), placeholder="Choose")
+        fixed = m.variety_from_name(parent, sku) if (parent and sku) else ""
+        if fixed:
+            c[2].selectbox("Variety", [fixed], index=0, disabled=True, key=_ak(f"variety_fixed_{fixed}"),
+                           help="Taken from the customer SKU name; cannot be changed")
+        elif varieties:
+            c[2].selectbox("Variety", varieties, index=None, key=_ak("variety"), placeholder="Choose",
+                           help="The SKU name does not say which variety; please choose")
         else:
             c[2].selectbox("Variety", ["Not needed"], index=0, disabled=True, key=_ak("variety_na"))
         lot_now = m.lot_for(hdr.city, hdr.customer, sku) if sku else ""
@@ -189,8 +195,12 @@ def _edit_item(m: Masters) -> None:
     st.markdown(f"**{name}**  \n<span class='mt-muted'>{line.parent_sku} · lot {line.lot}"
                 f"{' · ' + size if size else ''}</span>", unsafe_allow_html=True)
     varieties = m.varieties_for(line.parent_sku)
+    fixed = m.variety_from_name(line.parent_sku, name)
     variety = ""
-    if varieties:
+    if fixed:
+        variety = st.selectbox("Variety", [fixed], index=0, disabled=True,
+                               help="Taken from the customer SKU name; cannot be changed")
+    elif varieties:
         variety = st.selectbox("Variety", varieties,
                                index=varieties.index(line.variety) if line.variety in varieties else None,
                                placeholder="Choose")
@@ -330,7 +340,21 @@ def _review(m: Masters, user: User) -> None:
 
 # ------------------------------------------------------------ actions
 
+def _fill_fixed_varieties(m: Masters) -> None:
+    """Apple SKUs whose name says the variety: set it (older lines may be blank)."""
+    lines = state.lines()
+    changed = False
+    for x in lines:
+        fixed = m.variety_from_name(x.parent_sku, x.customer_sku_name)
+        if fixed and x.variety != fixed:
+            x.variety = fixed
+            changed = True
+    if changed:
+        state.set_lines(lines, structural=False)
+
+
 def _check(m: Masters) -> list[str]:
+    _fill_fixed_varieties(m)
     errors = indents.validate(state.header(), state.lines(), m, check_date=True,
                               keep_date=state.keep_date())
     u = st.session_state.get("user") or {}
@@ -392,16 +416,9 @@ def render(m: Masters, user: User) -> None:
     hdr = state.header()
     ind = state.get()
     s = st.session_state
-
-    strip = st.columns([6, 1])
-    strip[0].markdown(
-        "<div class='mt-strip'>"
-        f"<span><b>Date</b>{_fmt_date(hdr.delivery_date)}</span><span><b>City</b>{hdr.city}</span>"
-        f"<span><b>Customer</b>{hdr.customer}</span><span><b>Store</b>{hdr.store}</span>"
-        f"<span><b>Time</b>{fmt_slot(hdr.expected_time)}</span></div>", unsafe_allow_html=True)
-    if strip[1].button("Edit", width="stretch", help="Change delivery details"):
-        state.set_step("delivery")
-        st.rerun()
+    st.markdown(f"#### Items for {hdr.store}")
+    st.caption(f"{_fmt_date(hdr.delivery_date)} · {hdr.customer} · {hdr.city}"
+               + (f" · {fmt_slot(hdr.expected_time)}" if hdr.expected_time else " · choose the delivery time above"))
 
     if not m.has_sku_mapping(hdr.city, hdr.customer):
         st.info(f"Mapping pending: no SKU names in 'All Cux City' for {hdr.customer} in {hdr.city}.")
@@ -414,9 +431,9 @@ def render(m: Masters, user: User) -> None:
 
     st.divider()
     if ind["mode"] == "edit":
-        open_ = indents.can_edit(ind.get("created_at") or "")
-        deadline = (indents.edit_deadline(ind["created_at"]).strftime("%d %b %Y, %I:%M %p")
-                    if ind.get("created_at") else "")
+        saved_date = state.keep_date() or ""
+        open_ = indents.can_edit(saved_date)
+        deadline = indents.deadline_text(saved_date)
         changed = state.changed_vs_base()
         c = st.columns([1, 1, 2])
         if c[0].button("Discard changes", width="stretch"):
@@ -432,7 +449,7 @@ def render(m: Masters, user: User) -> None:
                 s["review_open"] = True
                 st.rerun()
         if not open_:
-            st.error(f"The edit window for {ind['indent_id']} closed at {deadline}. "
+            st.error(f"Editing of {ind['indent_id']} closed at {deadline} (2 PM on the delivery day). "
                      "It can no longer be changed.")
         elif not changed:
             c[2].caption(f"Nothing changed yet. Editable until {deadline}.")
@@ -453,7 +470,12 @@ def render(m: Masters, user: User) -> None:
                 s["review_open"] = True
                 st.rerun()
 
-    # Only one dialog at a time.
+    dialogs_only(m, user)
+
+
+def dialogs_only(m: Masters, user: User) -> None:
+    """Open whichever item dialog is pending (only one dialog at a time)."""
+    s = st.session_state
     if s.get("pending_edit"):
         _edit_item(m)
     elif s.get("pending_remove"):

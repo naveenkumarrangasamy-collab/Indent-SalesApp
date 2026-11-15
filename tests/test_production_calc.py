@@ -44,7 +44,7 @@ def test_aggregate_clubs_same_sku_across_stores():
              customer_sku_name="1PC - Nectar Avocado", qty="5"),
     ])
     agg = aggregate(df, _masters(), with_spec=True)
-    assert "Store Names" not in agg.columns and "City" not in agg.columns
+    assert "Store Names" not in agg.columns and "City" in agg.columns
     hass = agg[agg["Customer SKU Name"].str.casefold() == "1pc - hass avocado imported"]
     assert len(hass) == 1
     r = hass.iloc[0]
@@ -148,3 +148,29 @@ def test_pdf_report():
     pdf = table_pdf("Production sheet", ["Delivery: Mon, 16 Nov 2026 → test ₹"], aggregate(df, _masters()))
     assert pdf[:5] == b"%PDF-" and len(pdf) > 1000
     assert table_pdf("Empty", [], aggregate(_lines([]), _masters()))[:5] == b"%PDF-"
+
+
+
+def test_clubbed_per_city_across_customers_when_everything_matches():
+    """Same parent + SKU + variety + spec + lot size in one city -> one line, any customer."""
+    df = _lines([
+        dict(BASE, indent_id="A", version="1", customer="Zepto", store="S1", parent_sku="Avocado",
+             customer_sku_name="1PC - Hass Avocado Imported", qty="30"),
+        dict(BASE, indent_id="B", version="1", customer="Zomato", store="S9", parent_sku="Avocado",
+             customer_sku_name="1PC - Hass Avocado Imported", qty="10"),
+        dict(BASE, indent_id="C", version="1", customer="Zepto", store="S2", parent_sku="Avocado",
+             customer_sku_name="1PC - Hass Avocado Imported", qty="5", city="Chennai"),
+    ])
+    m = _masters()
+    # give Zomato the same spec so everything matches
+    import pandas as pd
+    from core.schema import SKU_MAP
+    m.sku = pd.concat([m.sku, pd.DataFrame([["Bangalore", "Zomato", "Avocado", "1PC - Hass Avocado Imported",
+                                              "Tanzania", "20C, 22C", "Y", "", ""]], columns=TABS[SKU_MAP])])
+    agg = aggregate(df, m)
+    blr = agg[agg["City"] == "Bangalore"]
+    assert len(blr) == 1 and blr.iloc[0]["Total Qty"] == 40 and blr.iloc[0]["Customers"] == "Zepto, Zomato"
+    assert agg[agg["City"] == "Chennai"].iloc[0]["Total Qty"] == 5          # other city stays separate
+    # a different spec for one customer keeps it apart
+    m.sku.loc[m.sku["Customer"] == "Zomato", "Spec-Size"] = "18C"
+    assert len(aggregate(df, m)[lambda d: d["City"] == "Bangalore"]) == 2

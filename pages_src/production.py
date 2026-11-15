@@ -102,6 +102,8 @@ def render(user: User) -> None:
                  column_config={"Total Qty": st.column_config.NumberColumn(format="%g"),
                                 "Customer SKU Name": st.column_config.TextColumn(width="large")})
     _downloads("Production sheet", agg, f"production_{label}", "ps", lines)
+    if user.is_owner:
+        _publish(agg, lines, user)
     with st.expander("Indents included"):
         inc = indents.open_first(summ[summ["indent_id"].isin(set(lines["indent_id"]))],
                                  then=["delivery_date", "customer", "store"], ascending=[True, True, True])
@@ -152,3 +154,30 @@ def _downloads(title: str, table: pd.DataFrame, fname: str, prefix: str, lines: 
         return
     c[1].download_button("PDF", pdf, file_name=f"{fname}.pdf", mime="application/pdf",
                          icon=":material/picture_as_pdf:", width="stretch")
+
+
+PRODUCTION_TAB = "Production_Sheet"
+
+
+def _publish(table: pd.DataFrame, lines: pd.DataFrame, user: User) -> None:
+    """Owner: overwrite the Production_Sheet tab in the Google Sheet with the
+    table on screen (filters + time in the first rows)."""
+    from core.sheets import get_backend
+
+    c = st.columns([1.6, 4])
+    if c[0].button("Write to Google Sheet", icon=":material/table_view:", width="stretch",
+                   help=f"Replaces the '{PRODUCTION_TAB}' tab with this production sheet"):
+        now = config.now_ist().strftime("%d %b %Y, %I:%M %p")
+        values = [["Production sheet"],
+                  [st.session_state.get("ps_desc", "")],
+                  [f"{lines['indent_id'].nunique()} indents · {len(lines)} lines · generated {now} IST "
+                   f"by {user.email}"],
+                  [],
+                  list(table.columns)] + table.astype(object).where(table.notna(), "").values.tolist()
+        try:
+            with st.spinner("Writing to the Google Sheet…"):
+                get_backend().replace_tab(PRODUCTION_TAB, values)
+        except SheetError as e:
+            c[1].error(f"Not written. {e}")
+            return
+        c[1].success(f"'{PRODUCTION_TAB}' tab updated ({len(table)} rows).")

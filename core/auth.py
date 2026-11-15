@@ -35,6 +35,7 @@ class User:
     name: str
     role: str
     cities: list[str] = field(default_factory=list)
+    stores: list[str] = field(default_factory=list)   # empty = every store of the cities
 
     @property
     def is_owner(self) -> bool:
@@ -46,14 +47,19 @@ class User:
         return not self.is_owner and bool(self.cities)
 
     def in_my_cities(self, city: str) -> bool:
-        return str(city or "").strip().casefold() in {c.casefold() for c in self.cities}
+        return " ".join(str(city or "").split()).casefold() in {c.casefold() for c in self.cities}
 
-    def can_work_on(self, city: str, created_by: str) -> bool:
-        """May this user see / edit / delete an indent of this city and creator?"""
+    def in_my_stores(self, store: str) -> bool:
+        if self.is_owner or not self.stores:
+            return True
+        return " ".join(str(store or "").split()).casefold() in {s.casefold() for s in self.stores}
+
+    def can_work_on(self, city: str, created_by: str, store: str = "") -> bool:
+        """May this user see / edit / delete an indent of this city, store and creator?"""
         if self.is_owner:
             return True
         if self.cities:
-            return self.in_my_cities(city)
+            return self.in_my_cities(city) and (not store or self.in_my_stores(store))
         return str(created_by or "").strip().lower() == self.email
 
     @property
@@ -61,13 +67,24 @@ class User:
         return self.name or self.email
 
     def to_dict(self) -> dict:
-        return {"email": self.email, "name": self.name, "role": self.role, "cities": list(self.cities)}
+        return {"email": self.email, "name": self.name, "role": self.role, "cities": list(self.cities),
+                "stores": list(self.stores)}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> "User":
+        return cls(email=d.get("email", ""), name=d.get("name", ""), role=d.get("role", ""),
+                   cities=list(d.get("cities") or []), stores=list(d.get("stores") or []))
 
 
-def parse_cities(value) -> list[str]:
+def parse_stores(value) -> list[str]:
+    """Stores are separated by ';' or new lines (store names may contain commas)."""
+    return parse_cities(value, seps=r"[;\n]")
+
+
+def parse_cities(value, seps: str = r"[,;\n]") -> list[str]:
     """'PTP Bangalore, Chennai' -> ['PTP Bangalore', 'Chennai']."""
     out = []
-    for part in re.split(r"[,;\n]", str(value or "")):
+    for part in re.split(seps, str(value or "")):
         part = " ".join(part.split())
         if part and part.casefold() not in {c.casefold() for c in out}:
             out.append(part)
@@ -176,8 +193,10 @@ def resolve_user(access: pd.DataFrame, email: str) -> User | None:
         return None
     role = str(row.get("Role", "")).strip().lower()
     role = ROLE_OWNER if role == ROLE_OWNER else ROLE_SALES
+    sales = role == ROLE_SALES
     return User(email=email, name=row.get("Name", ""), role=role,
-                cities=parse_cities(row.get("City", "")) if role == ROLE_SALES else [])
+                cities=parse_cities(row.get("City", "")) if sales else [],
+                stores=parse_stores(row.get("Stores", "")) if sales else [])
 
 
 @dataclass
@@ -256,7 +275,7 @@ def user_from_session_token(access: pd.DataFrame, token: str) -> User | None:
 
 def upsert_access(email: str, *, by: str, name: str | None = None, role: str | None = None,
                   status: str | None = None, pin: str | None = None,
-                  cities: list[str] | None = None) -> None:
+                  cities: list[str] | None = None, stores: list[str] | None = None) -> None:
     """Add or update one row of the Access tab (reads it fresh first)."""
     from core.sheets import get_backend
 
@@ -275,6 +294,8 @@ def upsert_access(email: str, *, by: str, name: str | None = None, role: str | N
         values["PIN_Hash"] = hash_pin(pin)
     if cities is not None:
         values["City"] = ", ".join(cities)
+    if stores is not None:
+        values["Stores"] = "; ".join(stores)
     if row is None:
         values.setdefault("Name", "")
         values.setdefault("Role", ROLE_SALES)

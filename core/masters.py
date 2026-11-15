@@ -56,6 +56,15 @@ class Masters:
                  + list(self.sku.loc[self.sku["City"].map(_key) == _key(city), "Customer"]))
         return _unique_in_order(found) or list(DEFAULT_CUSTOMERS)
 
+    def store_index(self) -> dict[str, str]:
+        """Every store name -> 'Customer · City' (for pickers)."""
+        out: dict[str, str] = {}
+        for city, customer, store in zip(self.stores["City"], self.stores["Customer"], self.stores["Store Name"]):
+            store = " ".join(str(store).split())
+            if store and store not in out:
+                out[store] = f"{customer} · {city or 'all cities'}"
+        return out
+
     def has_sku_mapping(self, city: str, customer: str) -> bool:
         return not self._sku_for(city, customer).empty
 
@@ -113,8 +122,12 @@ class Masters:
         return sizes.pop() if len(sizes) == 1 else ""
 
     def default_variety(self, city: str, customer: str, sku_name: str) -> str:
-        if not self.varieties_for(self.parent_of(city, customer, sku_name)):
+        parent = self.parent_of(city, customer, sku_name)
+        if not self.varieties_for(parent):
             return ""
+        fixed = self.variety_from_name(parent, sku_name)
+        if fixed:
+            return fixed
         df = self._sku_for(city, customer)
         df = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
         vals = [v for v in df.get("Variety", pd.Series(dtype=str)) if v]
@@ -143,6 +156,26 @@ class Masters:
         if not found and _key(parent) == "apple":
             found = list(config.DEFAULT_APPLE_VARIETIES)
         return found
+
+    def variety_from_name(self, parent: str, sku_name: str) -> str:
+        """The variety written in an Apple SKU name ('Royal Gala' -> Gala,
+        'Red Delicious' -> RD, 'Green Imported (Granny Smith)' -> Granny Smith).
+        '' when the name does not say (Apple Snacky, Daily Apple) -> user picks."""
+        varieties = self.varieties_for(parent)
+        if not varieties or not sku_name:
+            return ""
+        import re as _re
+        text = " ".join(str(sku_name).split()).casefold()
+        aliases = {"royal gala": "Gala", "red delicious": "RD", "granny": "Granny Smith"}
+        candidates = [(v.casefold(), v) for v in varieties]
+        candidates += [(a, v) for a, v in aliases.items()
+                       if v in varieties and a not in {c for c, _ in candidates}]
+        best = None
+        for phrase, variety in candidates:
+            m = _re.search(r"(?<![a-z0-9])" + _re.escape(phrase) + r"(?![a-z0-9])", text)
+            if m and (best is None or (m.start(), -len(phrase)) < (best[0], -best[1])):
+                best = (m.start(), len(phrase), variety)
+        return best[2] if best else ""
 
     def needs_variety(self, parent: str) -> bool:
         return bool(self.varieties_for(parent))
