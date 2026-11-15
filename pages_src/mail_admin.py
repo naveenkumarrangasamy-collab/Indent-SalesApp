@@ -1,8 +1,8 @@
 """Access page (owner): the E-mails tab.
 
 1. Mail server   - is sending set up, the last error in plain words, a test.
-2. Ground team   - hourly production e-mail (8 AM-2 PM): address -> cities / customers.
-3. Central team  - PO e-mail on every PO upload:      address -> cities / customers.
+2. Indent e-mails - hourly production e-mail (8 AM-2 PM): address (+ name) -> cities.
+3. PO e-mails     - every PO the moment it is uploaded: address (+ name), all cities / customers.
 """
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ from core.sheets import SheetError
 from pages_src import common
 
 TEAMS = {
-    "Ground": ("Ground team · hourly production e-mail",
+    "Ground": ("Indent e-mails",
                "Every hour from 8 AM to 2 PM: the production report (all customers clubbed, with boxes) "
-               "for today's deliveries in the mapped cities / customers, as PDF + Excel."),
-    "Central": ("Central team · PO e-mail",
-                "The moment a PO is uploaded (any time): the customer's PO plus the SO details as PDF + "
-                "Excel, for the mapped cities / customers."),
+               "for today's deliveries, only for the cities chosen for each address, as PDF + Excel."),
+    "Central": ("PO e-mails",
+                "The moment any PO is uploaded (any time, all cities and customers): the customer's PO plus "
+                "the SO details as PDF + Excel."),
 }
 
 
@@ -86,12 +86,12 @@ def _team(team: str, m: masters.Masters, me: User, people: list[Recipient]) -> N
             c[0].markdown(f"**{r.email}**" + (f"<br><span class='mt-muted'>{r.name}</span>" if r.name else "")
                           + ("" if r.active else " <span class='mt-muted'>(paused)</span>"),
                           unsafe_allow_html=True)
-            c[1].markdown(f"<span class='mt-muted'>Cities:</span> {', '.join(r.cities) or 'all'}<br>"
-                          f"<span class='mt-muted'>Customers:</span> {', '.join(r.customers) or 'all'}",
+            c[1].markdown(f"<span class='mt-muted'>Cities:</span> {', '.join(r.cities) or 'all cities'}"
+                          if team == "Ground" else "<span class='mt-muted'>Every PO · all cities and customers</span>",
                           unsafe_allow_html=True)
             if c[2].button("", icon=":material/delete:", key=f"rm_{team}_{r.email}", help="Remove this address"):
                 recipients.remove(r.email, team)
-                common.flash("success", f"{r.email} removed from the {team.lower()} team e-mail.")
+                common.flash("success", f"{r.email} removed from {TEAMS[team][0].lower()}.")
                 st.rerun()
     else:
         st.info("Nobody yet. Add the first address below.")
@@ -101,9 +101,8 @@ def _team(team: str, m: masters.Masters, me: User, people: list[Recipient]) -> N
         c = st.columns([1.4, 1])
         email = c[0].text_input("E-mail", placeholder="name@company.com")
         name = c[1].text_input("Name (optional)")
-        cities = st.multiselect("Cities (empty = all)", m.cities())
-        customers = st.multiselect("Customers (empty = all)", sorted({cu for ci in m.cities()
-                                                                      for cu in m.customers(ci)}, key=str.casefold))
+        cities = (st.multiselect("Cities whose indents go to this address (empty = all cities)", m.cities())
+                  if team == "Ground" else [])
         if st.form_submit_button("Save", icon=":material/person_add:", type="primary"):
             e = email.strip().lower()
             if "@" not in e or "." not in e.split("@")[-1]:
@@ -111,21 +110,20 @@ def _team(team: str, m: masters.Masters, me: User, people: list[Recipient]) -> N
             else:
                 try:
                     recipients.upsert(Recipient(e, name.strip(), team, hourly=team == "Ground",
-                                                so=team == "Central", cities=cities, customers=customers),
-                                      by=me.email)
+                                                so=team == "Central", cities=cities), by=me.email)
                 except SheetError as err:
                     st.error(f"Not saved. {err}")
                 else:
-                    common.flash("success", f"{e} saved for the {team.lower()} team "
-                                            f"({', '.join(cities) or 'all cities'}; "
-                                            f"{', '.join(customers) or 'all customers'}).")
+                    common.flash("success", f"{e} saved for {TEAMS[team][0].lower()}"
+                                            + (f" ({', '.join(cities) or 'all cities'})." if team == "Ground"
+                                               else " (every PO)."))
                     st.rerun()
 
     # see exactly what this list receives
     c = st.columns([2, 1])
     who = c[0].selectbox("Send a sample of this e-mail to", [me.email] + [r.email for r in mine],
                          key=f"sample_to_{team}", accept_new_options=True,
-                         help="Uses that address's cities / customers when it is on the list")
+                         help="Uses that address's cities when it is on the indent e-mail list")
     if c[1].button("Send sample", icon=":material/forward_to_inbox:", width="stretch",
                    key=f"sample_btn_{team}", disabled=not mailer.configured()):
         scope = next((r for r in mine if r.email == who), None)
@@ -156,10 +154,9 @@ def _sample(team: str, to: str, scope: Recipient | None, me: User) -> tuple[bool
     # Central: the latest PO-frozen indent in scope (else the latest indent) as an example
     df = indents.read_lines()
     summ = indents.summary(df)
-    if scope is not None and not summ.empty:
-        summ = summ[[scope.sees(r.city, r.customer, r.store) for r in summ.itertuples()]]
     if summ.empty:
         return False, "No indent to use as a sample yet."
+    # PO e-mails cover every city / customer: any indent can be the sample
     pick = summ[summ["status"] == "Frozen"]
     pick = (pick if not pick.empty else summ).sort_values("last_edited_at").iloc[-1]
     cur = indents.snapshot(df, pick["indent_id"])
@@ -175,7 +172,7 @@ def emails_tab(m: masters.Masters, me: User) -> None:
         common.sheet_error(e)
         return
     st.divider()
-    t1, t2 = st.tabs(["Ground team (hourly production)", "Central team (PO e-mail)"])
+    t1, t2 = st.tabs(["Indent e-mails (hourly)", "PO e-mails"])
     with t1:
         _team("Ground", m, me, people)
     with t2:

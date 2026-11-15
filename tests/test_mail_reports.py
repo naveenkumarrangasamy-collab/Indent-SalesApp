@@ -33,7 +33,7 @@ def _hdr(store, customer="Zepto", city="Bangalore"):
     return IndentHeader(TODAY, city, customer, store, "10:30")
 
 
-def test_two_lists_scope_and_upsert(env):
+def test_two_lists_city_only_and_po_list_gets_everything(env):
     recipients.upsert(Recipient("G@x.com", "Ground A", "Ground", hourly=True, cities=["Bangalore"],
                                 customers=["Zepto"]), by="o")
     recipients.upsert(Recipient("c@x.com", "Central", "Central", so=True, customers=["Zepto"]), by="o")
@@ -41,10 +41,10 @@ def test_two_lists_scope_and_upsert(env):
     recipients.upsert(Recipient("g@x.com", "Same person", "Central", so=True), by="o")   # in both lists
     assert [r.email for r in recipients.ground()] == ["g@x.com"]                # same address+team updated
     g = recipients.ground()[0]
-    assert g.name == "Ground A2" and g.customers == [] and g.sees("bangalore", "Swiggy", "x")
-    assert sorted(r.email for r in recipients.central()) == ["c@x.com", "g@x.com"]
-    assert [r.email for r in recipients.so_list("Bangalore", "Zepto", "Store A")] == ["c@x.com", "g@x.com"]
-    assert [r.email for r in recipients.so_list("Bangalore", "Swiggy", "S")] == ["g@x.com"]
+    assert g.name == "Ground A2" and g.cities == ["Bangalore"] and g.customers == []
+    assert g.sees("bangalore", "Swiggy", "x") and not g.sees("Chennai", "Zepto", "x")
+    # PO e-mails: every address gets every PO, whatever city / customer
+    assert [r.email for r in recipients.so_list("Chennai", "Swiggy", "S")] == ["c@x.com", "g@x.com"]
     assert recipients.remove("g@x.com", "Central")
     assert [r.email for r in recipients.central()] == ["c@x.com"] and recipients.ground()
 
@@ -53,7 +53,8 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
     b, sent = env
     indents.submit_new(_hdr("Store A"), [HASS, KIWI], "s@x.com")
     indents.submit_new(_hdr("Store S", "Swiggy"), [HASS], "s@x.com")
-    recipients.upsert(Recipient("z@x.com", "Zepto team", hourly=True, customers=["Zepto"]), by="o")
+    indents.submit_new(_hdr("Store C", city="Chennai"), [HASS], "s@x.com")
+    recipients.upsert(Recipient("z@x.com", "Bangalore team", hourly=True, cities=["Bangalore"]), by="o")
     recipients.upsert(Recipient("all@x.com", "Everyone", hourly=True), by="o")
     at9 = config.now_ist().replace(hour=9, minute=2)
     res = hourly.run(now=at9)
@@ -64,9 +65,9 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
     assert len(names) == 2 and names[0].startswith("Production_") and names[0].endswith(".pdf") \
         and names[1].endswith(".xlsx")
     body = z.get_body(("html",)).get_content()
-    assert "Production sheet" in body and "Customer-level" not in body and "Store A" not in body
-    assert z["Subject"].startswith("Production ") and "1 indent" in z["Subject"]      # scope: Zepto only
-    assert "2 indent" in by_to["all@x.com"]["Subject"]
+    assert "Production sheet" in body and "Customer-level" not in body and "Chennai" not in body
+    assert z["Subject"].startswith("Production ") and "2 indent" in z["Subject"]      # Bangalore only
+    assert "3 indent" in by_to["all@x.com"]["Subject"] and "Chennai" in by_to["all@x.com"].get_body(("html",)).get_content()
     # same hour again: nothing new; outside the window: skipped
     assert {r["status"] for r in hourly.run(now=at9.replace(minute=40))} == {"skipped"}
     assert hourly.run(now=at9.replace(hour=19))[0]["status"] == "skipped"
@@ -114,13 +115,13 @@ def test_state_at_shows_each_hour(env):
 def test_so_mail_goes_to_central_team_in_scope(env):
     b, sent = env
     iid = indents.submit_new(_hdr("Store A"), [HASS], "s@x.com")
-    recipients.upsert(Recipient("c@x.com", team="Central", so=True, customers=["Zepto"]), by="o")
-    recipients.upsert(Recipient("other@x.com", team="Central", so=True, customers=["Swiggy"]), by="o")
+    recipients.upsert(Recipient("c@x.com", team="Central", so=True), by="o")
+    recipients.upsert(Recipient("other@x.com", team="Central", so=True, cities=["Chennai"]), by="o")
     v = indents.freeze(iid, 1, "po.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 30}, po_number="77")
     cur = indents.snapshot(indents.read_lines(fresh=True), iid)
     assert cur.version == v
     ok, msg = mailer.send_so_mail(cur, "po.pdf", b"%PDF-1.4 test", "s@x.com", po_number="77")
-    assert ok and "c@x.com" in msg and "other@x.com" not in msg
+    assert ok and "c@x.com" in msg and "other@x.com" in msg          # every PO to everyone on the list
     m = sent[-1]
     assert m["Subject"].startswith("Zepto - SO placed - Store A") and "PO 77" in m["Subject"]
     assert sorted(p.get_filename() for p in m.iter_attachments()) == sorted(

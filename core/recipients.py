@@ -1,10 +1,10 @@
 """E-mail recipients (Mail_Recipients tab) and the e-mail log (Mail_Log tab).
 
 Two lists:
-  * Ground team  (Hourly_Indent = Y): the hourly production e-mail, 8 AM-2 PM.
-  * Central team (SO_PO = Y): the PO e-mail, sent the moment a PO is uploaded.
-Each address is mapped to cities and, optionally, customers (empty = all);
-it only ever receives indents inside that mapping.
+  * Indent e-mails (Team Ground, Hourly_Indent = Y): the hourly production
+    e-mail, 8 AM-2 PM, only for the cities chosen for that address (empty = all).
+  * PO e-mails (Team Central, SO_PO = Y): every PO the moment it is uploaded,
+    all cities and customers.
 """
 from __future__ import annotations
 
@@ -74,14 +74,15 @@ def read_all() -> list[Recipient]:
             email=email, name=str(r.get("Name", "") or "").strip(),
             team=str(r.get("Team", "") or "Ground").strip().title() or "Ground",
             hourly=_yes(r.get("Hourly_Indent")), so=_yes(r.get("SO_PO")),
-            cities=_split(r.get("Cities")), customers=_split(r.get("Customers")),
-            stores=_split(r.get("Stores")),
+            # indent e-mails are chosen by city only; customer / store filters are not used
+            cities=_split(r.get("Cities")), customers=[], stores=[],
             active=str(r.get("Active", "Y") or "Y").strip().lower() not in ("n", "no", "false", "0")))
     return out
 
 
-def so_list(city: str, customer: str, store: str) -> list[Recipient]:
-    return [r for r in read_all() if r.active and r.so and r.sees(city, customer, store)]
+def so_list(city: str = "", customer: str = "", store: str = "") -> list[Recipient]:
+    """Everyone on the PO e-mail list gets every PO (all cities and customers)."""
+    return [r for r in read_all() if r.active and r.so]
 
 
 def _match(df: pd.DataFrame, email: str, team: str | None) -> pd.Index:
