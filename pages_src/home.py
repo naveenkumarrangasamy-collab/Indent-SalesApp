@@ -54,7 +54,7 @@ def render(user: User) -> None:
     rows_all = summ
     waiting_all = int((summ["status"] == STATUS_SUBMITTED).sum()) if not summ.empty else 0
     with st.container(key="mtbar_home"):
-        c = st.columns([1.5, 1.7, 1, 1], vertical_alignment="center", gap="small")
+        c = st.columns([1.35, 2.05, 1, 1], vertical_alignment="center", gap="small")
         c[0].markdown(f"<div class='mt-h'>Daily operations<span>{escape(indents.scope_text(user))}</span></div>",
                       unsafe_allow_html=True)
         day = c[1].segmented_control("Delivery day", days, key=k, format_func=_fmt_day, required=True,

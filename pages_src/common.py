@@ -16,7 +16,7 @@ _CSS = f"""
   /* Tabular numbers everywhere numbers line up */
   [data-testid="stMetricValue"], [data-testid="stDataFrame"], [data-testid="stTable"],
   .num {{ font-variant-numeric: tabular-nums; }}
-  .block-container {{ padding-top: 1.6rem; padding-bottom: 3rem; }}
+  .block-container, [data-testid="stMainBlockContainer"] {{ padding-top: 3.6rem; padding-bottom: 3rem; }}
   .mt-strip {{ display:flex; flex-wrap:wrap; gap:.4rem 1.4rem; padding:.55rem .8rem;
       border:1px solid rgba(28,107,73,.25); border-radius:.5rem; background:rgba(28,107,73,.05);
       font-size:.92rem; }}
@@ -112,8 +112,8 @@ _CSS = f"""
   .mt-h span {{ display:block; font-size:.78rem; font-weight:400; color:#6e7781; margin-top:2px; }}
   .st-key-mtbar_home {{ margin-bottom:.35rem; }}
   .st-key-mtbar_home [data-testid="stButtonGroup"] {{ margin:0; }}
-  .st-key-mtbar_home [role="radiogroup"]:has(> button[data-variant="segmented_control"]) {{ width:100%; display:flex; }}
-  .st-key-mtbar_home button[data-variant="segmented_control"] {{ flex:1 1 0; }}
+  .st-key-mtbar_home [role="radiogroup"]:has(> button[data-variant="segmented_control"]) {{ overflow:visible; }}
+  .st-key-mtbar_home button[data-variant="segmented_control"] {{ white-space:nowrap; padding:.42rem .8rem !important; }}
   .st-key-mtbar_home .stButton button {{ min-height:2.6rem; }}
   .mt-bar {{ margin:.1rem 0 .7rem !important; }}
 
@@ -127,7 +127,7 @@ _CSS = f"""
 
   /* ---- phones ---- */
   @media (max-width: 640px) {{
-    .block-container, [data-testid="stMainBlockContainer"] {{ padding:1rem .7rem 3rem !important; }}
+    .block-container, [data-testid="stMainBlockContainer"] {{ padding:3.4rem .7rem 3rem !important; }}
     h3 {{ font-size:1.35rem !important; }}
     .mt-tiles {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; }}
     .mt-tile {{ padding:.6rem .75rem; border-radius:12px; }}
