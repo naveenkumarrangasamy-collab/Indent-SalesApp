@@ -216,7 +216,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **141 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **139 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 
