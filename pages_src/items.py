@@ -1,6 +1,8 @@
 """Step 3: items (parent SKU, customer SKU name, variety, lot, qty, price)."""
 from __future__ import annotations
 
+from html import escape
+
 from datetime import date
 
 import pandas as pd
@@ -156,6 +158,36 @@ def _lines_table(m: Masters) -> None:
         st.info("No items yet. Add the first item above.")
         return
     has_variety = any(m.needs_variety(x.parent_sku) or x.variety for x in lines)
+    with st.container(key="mtdesk_items"):
+        _lines_desktop(m, lines, has_variety)
+    with st.container(key="mtmob_items"):
+        _lines_phone(m, lines)
+
+
+def _lines_phone(m: Masters, lines) -> None:
+    for i, x in enumerate(lines):
+        with st.container(border=True, key=f"mtcard_it_{i}"):
+            needs = m.needs_variety(x.parent_sku)
+            var = x.variety or ("<span style='color:#b42318'>choose variety</span>" if needs else "")
+            size = lot_size(x.customer_sku_name)
+            st.markdown(
+                f"<div class='mt-card-head'><b>{escape(x.customer_sku_name)}</b></div>"
+                f"<div class='mt-muted'>{escape(x.parent_sku)}{' · ' + var if var else ''}"
+                f"{' · ' + escape(size) if size else ''}</div>"
+                f"<div>Qty <b>{fmt_num(x.qty)}</b> {escape(x.lot)} × ₹{x.price:,.2f} = "
+                f"<b>₹{x.amount:,.2f}</b></div>", unsafe_allow_html=True)
+            c = st.columns(2)
+            if c[0].button("Edit", icon=":material/edit:", key=f"it_me_{i}_{x.customer_sku_name}",
+                           width="stretch"):
+                st.session_state["pending_edit"] = x.customer_sku_name
+                st.rerun()
+            if c[1].button("Delete", icon=":material/delete:", key=f"it_md_{i}_{x.customer_sku_name}",
+                           width="stretch"):
+                st.session_state["pending_remove"] = [x.customer_sku_name]
+                st.rerun()
+
+
+def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
     head = st.columns(_ROW_W)
     for col, label in zip(head, ["Parent SKU", "Customer SKU Name", "Variety" if has_variety else "",
                                  "Lot", "Lot Size", "Qty", "Price", "Amount", "", ""]):

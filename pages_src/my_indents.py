@@ -1,6 +1,8 @@
 """My indents: list, open, correct, version history, PO freeze."""
 from __future__ import annotations
 
+from html import escape
+
 from datetime import datetime
 
 import pandas as pd
@@ -248,6 +250,44 @@ _W = [1.0, 2.5, 0.9, 0.6, 0.9, 0.6, 0.8, 0.9, 0.85, 0.95]
 
 
 def _line_rows(cur, user: User, editable: bool, why: str = "") -> None:
+    with st.container(key=f"mtmob_lines_{cur.indent_id}"):
+        for i, x in enumerate(cur.lines):
+            with st.container(border=True, key=f"mtcard_li_{cur.indent_id}_{i}"):
+                size = lot_size(x.customer_sku_name)
+                qty = int(x.qty) if float(x.qty).is_integer() else x.qty
+                st.markdown(
+                    f"<div class='mt-card-head'><b>{escape(x.customer_sku_name)}</b></div>"
+                    f"<div class='mt-muted'>{escape(x.parent_sku)}{' · ' + escape(x.variety) if x.variety else ''}"
+                    f"{' · ' + escape(size) if size else ''}</div>"
+                    f"<div>Qty <b>{qty}</b> {escape(x.lot)} × ₹{x.price:,.2f} = <b>₹{x.amount:,.2f}</b></div>",
+                    unsafe_allow_html=True)
+                b = st.columns(2)
+                if b[0].button("Edit", icon=":material/edit:", key=f"lme_{cur.indent_id}_{i}",
+                               disabled=not editable, width="stretch"):
+                    st.session_state.pop(indent_actions.KEY, None)
+                    st.session_state["mi_line"] = ("edit", cur.indent_id, cur.version, x.customer_sku_name)
+                    st.rerun()
+                if b[1].button("Delete", icon=":material/delete:", key=f"lmd_{cur.indent_id}_{i}",
+                               disabled=not editable, width="stretch"):
+                    st.session_state.pop(indent_actions.KEY, None)
+                    st.session_state["mi_line"] = ("delete", cur.indent_id, cur.version, x.customer_sku_name)
+                    st.rerun()
+    with st.container(key=f"mtdesk_lines_{cur.indent_id}"):
+        _line_table(cur, editable, why)
+    st.caption(f"{len(cur.lines)} item(s) · Total amount ₹ {cur.total_amount:,.2f}"
+               + ("" if editable else " · read-only"))
+    action = st.session_state.get("mi_line")
+    if action and action[1] == cur.indent_id:
+        if action[2] != cur.version:  # someone saved in between
+            st.session_state.pop("mi_line", None)
+            st.warning("This indent changed since you clicked; please try again.")
+        elif action[0] == "edit":
+            _edit_line_dialog(cur, action[3], user)
+        else:
+            _delete_line_dialog(cur, action[3], user)
+
+
+def _line_table(cur, editable: bool, why: str) -> None:
     has_variety = any(x.variety for x in cur.lines)
     head = st.columns(_W)
     labels = ["Parent SKU", "Customer SKU Name", "Variety" if has_variety else "", "Lot", "Lot Size",
@@ -277,17 +317,6 @@ def _line_rows(cur, user: User, editable: bool, why: str = "") -> None:
             st.session_state.pop(indent_actions.KEY, None)
             st.session_state["mi_line"] = ("delete", cur.indent_id, cur.version, x.customer_sku_name)
             st.rerun()
-    st.caption(f"{len(cur.lines)} item(s) · Total amount ₹ {cur.total_amount:,.2f}"
-               + ("" if editable else " · read-only"))
-    action = st.session_state.get("mi_line")
-    if action and action[1] == cur.indent_id:
-        if action[2] != cur.version:  # someone saved in between
-            st.session_state.pop("mi_line", None)
-            st.warning("This indent changed since you clicked; please try again.")
-        elif action[0] == "edit":
-            _edit_line_dialog(cur, action[3], user)
-        else:
-            _delete_line_dialog(cur, action[3], user)
 
 
 def _save_lines(cur, new_lines: list[IndentLine], user: User, what: str) -> None:

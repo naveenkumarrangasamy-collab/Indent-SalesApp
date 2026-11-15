@@ -56,6 +56,11 @@ _CSS = f"""
   button[data-variant="segmented_control"][aria-checked="true"] {{ background: #5b636e !important; color: #fff !important; }}
   button[data-variant="segmented_control"] p, button[data-variant="segmented_control"] span {{ color: inherit !important; }}
 
+  .mt-id {{ font-size:.82rem; white-space:nowrap; font-variant-numeric: tabular-nums; }}
+  /* Upload PO button on Home: blue, next to the green Create indent */
+  .st-key-home_po_btn button {{ background:#0d2c4f !important; border-color:#2f81f7 !important; color:#fff !important; }}
+  .st-key-home_po_btn button:hover {{ background:#164a80 !important; }}
+
   /* delivery card */
   .st-key-mt_delivery_card {{ background: linear-gradient(180deg, rgba(28,107,73,.04), rgba(28,107,73,0));
       border-radius: 14px; }}
@@ -80,6 +85,32 @@ _CSS = f"""
   .mt-chip.cnl  {{ background:#ffebe9; color:#a40e26; border-color:#ff8182; text-decoration: line-through; }}
   .mt-bar {{ height:8px; border-radius:6px; background:#e9edf0; overflow:hidden; display:flex; }}
   .mt-bar span {{ display:block; height:100%; }}
+  /* ---- cards (Home "Indents to act on", Upload PO, items on phone) ---- */
+  [class*="st-key-mtcard"] {{ border-radius:14px !important; }}
+  .mt-card-head {{ font-size:1rem; line-height:1.4; margin-bottom:.15rem; }}
+  .mt-card-head .mt-badge, .mt-card-head span[class*="badge"] {{ margin-left:.3rem; }}
+  [class*="st-key-mtcard"] [data-testid="stHorizontalBlock"] {{ flex-wrap:nowrap !important; gap:.5rem; }}
+  [class*="st-key-mtcard"] [data-testid="stColumn"] {{ min-width:0 !important; flex:1 1 0 !important; width:auto !important; }}
+  [class*="st-key-mtmob"] {{ display:none !important; }}
+
+  /* ---- phones ---- */
+  @media (max-width: 640px) {{
+    .block-container, [data-testid="stMainBlockContainer"] {{ padding:1rem .7rem 3rem !important; }}
+    h3 {{ font-size:1.35rem !important; }}
+    .mt-tiles {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap:8px; }}
+    .mt-tile {{ padding:.6rem .75rem; border-radius:12px; }}
+    .mt-tile .val {{ font-size:1.3rem; }}
+    .mt-tile .sub {{ font-size:.72rem; }}
+    .mt-tile:last-child:nth-child(odd) {{ grid-column: span 2; }}
+    button[data-variant="pills"] {{ padding:.35rem .8rem !important; min-height:2.1rem; font-size:.9rem; }}
+    [role="radiogroup"]:has(> button[data-variant="segmented_control"]) {{ max-width:100%; overflow-x:auto; }}
+    button[data-variant="segmented_control"] {{ padding:.4rem .75rem !important; white-space:nowrap; }}
+    .mt-cust {{ padding:.6rem .7rem; }}
+    .mt-chip {{ font-size:.78rem; }}
+    [class*="st-key-mtdesk"] {{ display:none !important; }}
+    [class*="st-key-mtmob"] {{ display:block !important; }}
+    [data-testid="stTabs"] button[role="tab"] {{ padding:.4rem .5rem; font-size:.9rem; }}
+  }}
 </style>
 """
 

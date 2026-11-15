@@ -16,6 +16,7 @@ import streamlit as st
 
 from core import config, indents, masters
 from core.auth import User
+from core.schema import STATUS_SUBMITTED
 from core.sheets import SheetError
 from pages_src import common, indent_actions, state
 
@@ -78,6 +79,37 @@ def _tile(label: str, value, sub: str = "", tone: str = "") -> str:
             f"<div class='val'>{value}</div><div class='sub'>{escape(sub)}</div></div>")
 
 
+def _act_card(r, ind) -> None:
+    ok = bool(r.can_edit)
+    frozen = r.status in ("Frozen", "Cancelled")
+    why = ("Deleted" if r.status == "Cancelled" else "Frozen with a PO") if frozen \
+        else f"Editing closed at {indents.deadline_text(r.delivery_date)}"
+    with st.container(border=True, key=f"mtcard_hm_{r.indent_id}"):
+        st.markdown(
+            f"<div class='mt-card-head'><b>{escape(r.customer)}</b> · {escape(r.store)} "
+            f"{common.badge(r.status)}</div>"
+            f"<div class='mt-muted'><span class='mt-id'>{escape(r.indent_id)}</span> · {int(r.lines)} items · "
+            f"₹ {r.total_amount:,.0f}</div>", unsafe_allow_html=True)
+        c = st.columns(3)
+        editing = ind["mode"] == "edit" and ind["indent_id"] == r.indent_id
+        if c[0].button("Edit", icon=":material/edit:", key=f"hm_e_{r.indent_id}",
+                       disabled=not ok, width="stretch", help=None if ok else why):
+            if state.has_unsaved_work() and not editing:
+                st.session_state["home_open"] = r.indent_id
+                st.rerun()
+            if not editing:
+                _open(r.indent_id)
+            st.switch_page(common.PAGES["indent"])
+        if c[1].button("Delete", icon=":material/delete:", key=f"hm_d_{r.indent_id}",
+                       disabled=not ok, width="stretch", help=None if ok else why):
+            indent_actions.ask("delete", r.indent_id)
+        if c[2].button("PO" if not frozen else "PO done", icon=":material/upload_file:",
+                       key=f"hm_p_{r.indent_id}", disabled=frozen, width="stretch",
+                       type="primary" if not frozen else "secondary",
+                       help="Upload the customer's PO (PDF) and freeze this indent"):
+            indent_actions.ask("po", r.indent_id)
+
+
 def render(user: User) -> None:
     common.show_flash()
     try:
@@ -90,17 +122,20 @@ def render(user: User) -> None:
     summ = indents.visible_to(indents.summary(df), user)
     today = config.now_ist().date()
 
-    head = st.columns([3, 1.3], vertical_alignment="bottom")
+    head = st.columns([3, 1.2, 1.2], vertical_alignment="bottom")
     head[0].markdown("### Daily operations")
     head[0].caption("What is placed, what is waiting for a PO and which stores have no indent yet. "
                     f"Showing {indents.scope_text(user)}.")
     if head[1].button("Create indent", icon=":material/add_circle:", type="primary", width="stretch"):
         st.switch_page(common.PAGES["indent"])
+    waiting = int((summ["status"] == STATUS_SUBMITTED).sum()) if not summ.empty else 0
+    if head[2].button(f"Upload PO · {waiting} waiting" if waiting else "Upload PO",
+                      icon=":material/upload_file:", type="primary", width="stretch", key="home_po_btn",
+                      help="See every indent and upload the customer's PO"):
+        st.switch_page(common.PAGES["po"])
 
     # ---- filters: delivery day + city
-    base = [(today + timedelta(days=k)).isoformat() for k in (-1, 0, 1)]
-    extra = sorted(set(summ["delivery_date"].astype(str)) - set(base)) if not summ.empty else []
-    days = base + [d for d in extra if d]
+    days = [(today + timedelta(days=k)).isoformat() for k in (0, 1)]
     k = "home_day"
     if k not in st.session_state or st.session_state[k] not in days:
         st.session_state[k] = today.isoformat()
@@ -151,9 +186,6 @@ def render(user: User) -> None:
     n = {s: int((board["state"] == s).sum()) if not board.empty else 0 for s in ("none", "open", "done", "cnl")}
     placed_n = n["open"] + n["done"]
     qty = int(cur["qty"].sum()) if not cur.empty else 0
-    amount = float(cur["amount"].sum()) if not cur.empty else 0.0
-    cutoff = indents.deadline_text(day)
-    edit_open = indents.can_edit(day)
 
     tiles = [
         _tile("Stores placed", f"{placed_n}/{n_total}" if n_total else placed_n,
@@ -162,9 +194,6 @@ def render(user: User) -> None:
         _tile("Waiting for PO", n["open"], "pending", "warn" if n["open"] else ""),
         _tile("Not placed yet", n["none"], "stores without an indent", "bad" if n["none"] else ""),
         _tile("Qty (lots)", f"{qty:,}", f"{len(cur)} lines"),
-        _tile("Amount", f"₹{amount:,.0f}", f"{len(live)} indents"),
-        _tile("Edits", "open" if edit_open else "closed",
-              f"until {cutoff[-8:]}" if edit_open else f"closed {cutoff[-8:]}", "good" if edit_open else "bad"),
     ]
     st.markdown("<div class='mt-tiles'>" + "".join(tiles) + "</div>", unsafe_allow_html=True)
 
@@ -188,8 +217,10 @@ def render(user: User) -> None:
     with t_board:
         order = {"none": 0, "open": 1, "done": 2, "cnl": 3}
         groups = list(board.groupby(["city", "customer"], sort=True))
-        cols = st.columns(2) if len(groups) > 1 else [st.container()]
+        cols = []
         for i, ((c_city, cust), part) in enumerate(groups):
+            if i % 2 == 0:
+                cols = st.columns(2)
             part = part.sort_values(by="state", key=lambda s: s.map(order))
             done = int((part["state"] == "done").sum())
             open_ = int((part["state"] == "open").sum())
@@ -198,7 +229,7 @@ def render(user: User) -> None:
                 f"<span class='mt-chip {r.state}' title='{escape(STATUS_LABEL[r.state])}'>"
                 f"{escape(r.store)}{' · ' + escape(r.indent_id[-4:]) if r.indent_id else ''}</span>"
                 for r in part.itertuples())
-            cols[i % len(cols)].markdown(
+            cols[i % 2].markdown(
                 f"<div class='mt-cust'><h4>{escape(cust)} <span class='mt-muted'>· {escape(c_city)}</span></h4>"
                 f"<div class='mt-muted' style='margin-bottom:.35rem'>{open_ + done}/{total} placed · "
                 f"{done} PO done · {open_} waiting · {total - open_ - done} not placed</div>{chips}</div>",
@@ -240,38 +271,12 @@ def render(user: User) -> None:
             st.caption("No indents for this day yet.")
         else:
             ind = state.get()
-            w = [0.9, 2.0, 1.7, 0.5, 0.9, 0.8, 0.8, 0.9, 1.0]
-            head = st.columns(w)
-            for col, label in zip(head, ["Customer", "Store", "Indent", "Items", "Amount", "Status", "", "", ""]):
-                col.markdown(f"<span class='mt-muted'>{label}</span>", unsafe_allow_html=True)
-            for r in rows.itertuples():
-                c = st.columns(w, vertical_alignment="center")
-                c[0].write(r.customer)
-                c[1].write(r.store)
-                c[2].write(r.indent_id)
-                c[3].write(str(r.lines))
-                c[4].markdown(f"<span class='num'>₹ {r.total_amount:,.0f}</span>", unsafe_allow_html=True)
-                c[5].markdown(common.badge(r.status), unsafe_allow_html=True)
-                ok = bool(r.can_edit)
-                frozen = r.status in ("Frozen", "Cancelled")
-                why = ("Deleted" if r.status == "Cancelled" else "Frozen with a PO") if frozen \
-                    else f"Editing closed at {indents.deadline_text(r.delivery_date)}"
-                editing = ind["mode"] == "edit" and ind["indent_id"] == r.indent_id
-                if c[6].button("Edit", icon=":material/edit:", key=f"hm_e_{r.indent_id}",
-                               disabled=not ok, width="stretch", help=None if ok else why):
-                    if state.has_unsaved_work() and not editing:
-                        st.session_state["home_open"] = r.indent_id
-                        st.rerun()
-                    if not editing:
-                        _open(r.indent_id)
-                    st.switch_page(common.PAGES["indent"])
-                if c[7].button("Delete", icon=":material/delete:", key=f"hm_d_{r.indent_id}",
-                               disabled=not ok, width="stretch", help=None if ok else why):
-                    indent_actions.ask("delete", r.indent_id)
-                if c[8].button("PO" if not frozen else "PO done", icon=":material/upload_file:",
-                               key=f"hm_p_{r.indent_id}", disabled=frozen, width="stretch",
-                               help="Upload the customer's PO (PDF) and freeze this indent"):
-                    indent_actions.ask("po", r.indent_id)
+            recs = list(rows.itertuples())
+            for i in range(0, len(recs), 2):
+                pair = st.columns(2)
+                for col, r in zip(pair, recs[i:i + 2]):
+                    with col:
+                        _act_card(r, ind)
 
     if st.session_state.get("home_open"):
         _confirm_open(st.session_state["home_open"])

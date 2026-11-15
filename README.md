@@ -9,8 +9,9 @@ Built from `MT_INDENT_BUILD_SPEC.md`, with one change: users sign in with their 
 | Screen | Who | What |
 |---|---|---|
 | Sign in | everyone | Email + PIN. Users who are not in `Access` or are revoked are blocked. 5 wrong PINs lock the email for 15 min. |
-| Home (opens first) | everyone | **Daily operations** for a delivery day (Yesterday / Today / Tomorrow): tiles for stores placed, PO received, waiting for PO, not placed yet, qty, amount and whether edits are open; a progress bar; a **Status board** (one card per customer, a chip per store: grey not placed, amber placed and waiting for PO, green PO done, red deleted); a **City × Customer** table; and **Indents to act on** with Edit / Delete / Upload PO. Users see only their cities and stores. |
+| Home (opens first) | everyone | **Daily operations** for **Today or Tomorrow**: **Create indent** and **Upload PO** buttons at the top (Upload PO shows how many indents are waiting); tiles for stores placed, PO received, waiting for PO, not placed yet and qty; a progress bar; a **Status board** (one card per customer, a chip per store: grey not placed, amber placed and waiting for PO, green PO done, red deleted); a **City × Customer** table; and **Indents to act on** (cards with Edit / Delete / PO). Users see only their cities and stores. |
 | Create indent | everyone | The delivery card is the heart of the page: delivery day, then **customer pills**, then **store pills** for that customer ("✓ placed" / "✓ PO done" on stores that already have an indent), then expected time. The items appear below once a store is chosen. Draft autosaves to the `Drafts` tab and is restored at the next sign-in. |
+| Upload PO | everyone | Every indent the user can see, as cards: **waiting for PO first** (oldest delivery first, 🔴 when the delivery date has passed), then PO done with the PO file name, date and who uploaded it. Filter by Waiting / PO done / All, delivery date, city, customer, or search a store or indent number. **Items** shows the lines to check before uploading; **Upload PO** asks for the PDF, confirms customer and store, freezes the indent and e-mails the PDF. A PO can be uploaded after the 2 PM edit cutoff. |
 | My indents (All indents for the owner) | everyone | List, open, correct (new version), last 10 versions with Load, change log, PO upload and freeze. |
 | City / SKU report | everyone | Total qty per City → Customer → SKU with lot, lot size and Spec-Size; PDF and CSV. |
 | Production sheet | everyone | **One row per city** where Parent SKU, Customer SKU name, Variety, Spec-Size, Lot and Lot size match, **clubbed across customers and stores** (Customers and Indents columns show what was added up); filter by delivery date, city, customer; PDF, CSV, and (owner) **Write to Google Sheet** which replaces the `Production_Sheet` tab. |
@@ -19,6 +20,8 @@ Built from `MT_INDENT_BUILD_SPEC.md`, with one change: users sign in with their 
 Every user can change their own PIN from the sidebar.
 
 ### Rules on the Indent screens
+
+- **Phones**: every page works on a phone. Rows of items and indents turn into cards with full-width buttons, tiles go two per row, and the sidebar folds into the » menu.
 
 - **Staying signed in**: after signing in, the browser keeps a signed cookie for 7 days (`session_days`), so a refresh or closing and reopening the tab returns to the same page without the PIN. **Sign out**, a PIN change/reset or revoking access ends it.
 - **Google Sheet data** (SKUs, stores, varieties, access) is re-read every **5 minutes** (`master_refresh_minutes`), or at once with ↻ Refresh data.
