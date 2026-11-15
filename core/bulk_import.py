@@ -80,6 +80,34 @@ def _map_header(row: list) -> dict[str, int]:
     return found
 
 
+def _rows_from_values(values: list[list], name: str) -> pd.DataFrame | None:
+    for h in range(min(10, len(values))):
+        cols = _map_header(values[h])
+        if all(c in cols for c in _REQUIRED):
+            out = []
+            for i, row in enumerate(values[h + 1:], start=h + 2):
+                get = lambda f: row[cols[f]] if f in cols and cols[f] < len(row) else None  # noqa: E731
+                rec = {
+                    "row": i, "sheet": name,
+                    "delivery_date": _date(get("delivery_date")),
+                    "city": _s(get("city")), "customer": _s(get("customer")),
+                    "store": _s(get("store")), "parent": _s(get("parent")),
+                    "item": _s(get("item")), "qty": _num(get("qty")),
+                    "price": _num(get("price")),
+                }
+                if rec["customer"] and rec["item"] and rec["qty"] is not None:
+                    out.append(rec)
+            return pd.DataFrame(out, columns=["row", "sheet", "delivery_date", "city", "customer",
+                                              "store", "parent", "item", "qty", "price"])
+    return None
+
+
+def _missing_cols() -> ImportFileError:
+    need = ", ".join(n.replace("_", " ").title() for n in _REQUIRED)
+    return ImportFileError(f"No sheet has the columns {need} (Item may be 'Item (pack size - name)' "
+                           "or 'Customer SKU Name').")
+
+
 def read_rows(data: bytes) -> pd.DataFrame:
     """Item rows from the first sheet that has the needed headers (first 10 rows
     are searched for the header row). Rows without customer, item or qty
@@ -89,28 +117,21 @@ def read_rows(data: bytes) -> pd.DataFrame:
     except Exception as e:  # noqa: BLE001 - any unreadable file
         raise ImportFileError(f"Could not read the Excel file ({e}).") from e
     for name, raw in sheets.items():
-        values = raw.values.tolist()
-        for h in range(min(10, len(values))):
-            cols = _map_header(values[h])
-            if all(c in cols for c in _REQUIRED):
-                out = []
-                for i, row in enumerate(values[h + 1:], start=h + 2):
-                    get = lambda f: row[cols[f]] if f in cols and cols[f] < len(row) else None  # noqa: E731
-                    rec = {
-                        "row": i, "sheet": name,
-                        "delivery_date": _date(get("delivery_date")),
-                        "city": _s(get("city")), "customer": _s(get("customer")),
-                        "store": _s(get("store")), "parent": _s(get("parent")),
-                        "item": _s(get("item")), "qty": _num(get("qty")),
-                        "price": _num(get("price")),
-                    }
-                    if rec["customer"] and rec["item"] and rec["qty"] is not None:
-                        out.append(rec)
-                return pd.DataFrame(out, columns=["row", "sheet", "delivery_date", "city", "customer",
-                                                  "store", "parent", "item", "qty", "price"])
-    need = ", ".join(n.replace("_", " ").title() for n in _REQUIRED)
-    raise ImportFileError(f"No sheet has the columns {need} (Item may be 'Item (pack size - name)' "
-                          "or 'Customer SKU Name').")
+        df = _rows_from_values(raw.values.tolist(), name)
+        if df is not None:
+            return df
+    raise _missing_cols()
+
+
+def read_pasted(text: str) -> pd.DataFrame:
+    """Rows copied from Excel and pasted as text (tab, | or comma separated, header first)."""
+    lines = [ln for ln in str(text or "").replace("\r\n", "\n").split("\n") if ln.strip()]
+    sep = "\t" if lines and "\t" in lines[0] else ("|" if lines and "|" in lines[0] else ",")
+    values = [ln.split(sep) for ln in lines]
+    df = _rows_from_values(values, "pasted")
+    if df is None:
+        raise _missing_cols()
+    return df
 
 
 @dataclass
@@ -144,7 +165,10 @@ def plan(rows: pd.DataFrame, m: Masters, city: str = "", price: float | None = 1
         c = city or r["city"]
         c = _canon(m.cities(), c)
         customer = _canon(m.customers(c), r["customer"])
-        store = _canon(m.stores_for(c, customer), r["store"])
+        known = m.stores_for(c, customer)
+        store = _canon(known, r["store"])
+        if len(known) == 1 and _key(store) != _key(known[0]):
+            store = known[0]          # the customer's only store in the master
         key = (r["delivery_date"], _key(c), _key(customer), _key(store))
         g = groups.get(key)
         if g is None:

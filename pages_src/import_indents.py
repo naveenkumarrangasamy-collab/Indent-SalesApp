@@ -21,12 +21,15 @@ def render(m: masters.Masters | None, me: User) -> None:
     if m is None:
         st.info("Master data could not be loaded.")
         return
-    up = st.file_uploader("Indent Excel", type=["xlsx", "xls"],
-                          key=f"imp_file_{st.session_state.get('imp_rev', 0)}")
-    if up is None:
+    rev = st.session_state.get("imp_rev", 0)
+    up = st.file_uploader("Indent Excel", type=["xlsx", "xls"], key=f"imp_file_{rev}")
+    pasted = st.text_area("…or paste the rows copied from Excel (header row first)", height=100,
+                          key=f"imp_paste_{rev}")
+    if up is None and not pasted.strip():
         return
     try:
-        rows = bulk_import.read_rows(up.getvalue())
+        rows = (bulk_import.read_rows(up.getvalue()) if up is not None
+                else bulk_import.read_pasted(pasted))
     except bulk_import.ImportFileError as e:
         st.error(str(e))
         return

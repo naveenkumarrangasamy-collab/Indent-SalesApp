@@ -116,3 +116,18 @@ def test_add_to_master_then_create(backend):
     assert ids == ["IN-001", "IN-002"]
     df = indents.read_lines(fresh=True)
     assert indents.find_duplicate(df, groups[0].header) == "IN-001"
+
+
+def test_pasted_rows_and_single_store(backend):
+    text = ("Delivery date\tCity\tCustomer\tStore / delivery point\tParent SKU\tItem (pack size - name)\tQty\n"
+            f"{DAY.isoformat()}\tBangalore\tSwiggy\tSwiggy (store not given)\tKiwi\t1Pc - Green Kiwi\t260\n"
+            "\t\t\t\t\tTotal\t260\n")
+    rows = bulk_import.read_pasted(text)
+    assert len(rows) == 1 and rows.iloc[0]["qty"] == 260
+    g, = bulk_import.plan(rows, _masters(backend), city="PTP Bangalore", price=1)
+    assert g.header.store == "Swiggy WH1" and not g.new_store     # Swiggy's only store
+
+
+def test_pipe_separated():
+    rows = bulk_import.read_pasted("Delivery date|Customer|Store|Item|Qty\n2026-11-16|Zepto|Z1|1Pc - A|5")
+    assert rows.iloc[0]["item"] == "1Pc - A" and rows.iloc[0]["delivery_date"] == "2026-11-16"
