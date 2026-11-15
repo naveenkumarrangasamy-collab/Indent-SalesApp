@@ -184,9 +184,11 @@ def indent_mail_html(rows: pd.DataFrame, m: Masters | None, day: str, slot_label
 # ------------------------------------------------------------------ hourly production e-mail
 
 def production_view(rows: pd.DataFrame, m: Masters | None, rules: list | None) -> pd.DataFrame:
-    p = production_calc.production(rows, m, box_rules=rules if rules is not None else [])
+    p = production_calc.production(rows, m)
     if not p.empty and not p["Variety"].astype(bool).any():
         p = p.drop(columns=["Variety"])
+    if not p.empty and len(p["City"].unique()) == 1:
+        p = p.drop(columns=["City"])
     return p
 
 
@@ -196,7 +198,7 @@ def production_mail_files(rows: pd.DataFrame, m: Masters | None, rules: list | N
     p = production_view(rows, m, rules)
     n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
     sub = [f"Delivery {fmt_day(day)} - as of {slot_label} - {scope}",
-           f"{n} indents - all customers together - boxes from the spec counts / box sizes"]
+           f"{n} indents - all customers together"]
     stamp = str(day).replace("-", "")
     hh = slot_label.split(",")[0].replace(":", "").replace(" ", "")
     return [(f"Production_{stamp}_{hh}.pdf",

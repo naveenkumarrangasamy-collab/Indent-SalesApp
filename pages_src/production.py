@@ -8,7 +8,7 @@ from datetime import date
 import pandas as pd
 import streamlit as st
 
-from core import boxes, config, indents, masters
+from core import config, indents, masters
 from core.auth import User
 from core.pdf_report import sections_pdf, table_pdf
 from core.production_calc import (batching, default_date, delivery_dates,
@@ -84,8 +84,8 @@ def _guard(user: User) -> bool:
     return True
 
 
-def _qty_strip(df: pd.DataFrame, qty: str, lines: pd.DataFrame) -> None:
-    by_lot = df.groupby("Lot")[qty].sum() if not df.empty else pd.Series(dtype=float)
+def _qty_strip(df: pd.DataFrame, qty: str, lines: pd.DataFrame, unit: str = "Lot") -> None:
+    by_lot = df.groupby(unit)[qty].sum() if not df.empty else pd.Series(dtype=float)
     tiles = [("Indents", lines["indent_id"].nunique(), ""), ("Delivery points", lines["store"].nunique(), ""),
              ("Customers", lines["customer"].nunique(), "")]
     tiles += [(f"Total {lot}", f"{q:,.0f}", "to prepare") for lot, q in by_lot.items()]
@@ -107,8 +107,8 @@ def _unmapped_warning(lines: pd.DataFrame, m) -> None:
 def render(user: User) -> None:
     common.show_flash()
     st.markdown("### Production sheet")
-    st.caption("Step 1 · what to produce and grade: the total for **all customers**, per city, parent SKU, "
-               "variety, lot, lot size and spec. Customers and delivery points are on the **Batching sheet**.")
+    st.caption("Step 1 · what to produce: the total for **all customers**, per parent SKU, variety, spec and "
+               "repacking. Customers and delivery points are on the **Batching sheet**.")
     if not _guard(user):
         return
     res = _filtered(user, "ps")
@@ -120,46 +120,20 @@ def render(user: User) -> None:
     except SheetError as e:
         common.sheet_error(e)
         return
-    rules = boxes.read_rules()
-    prod = production(lines, m, box_rules=rules)
-    _qty_strip(prod, "Total Qty", lines)
+    prod = production(lines, m)
+    _qty_strip(prod, "Total Qty", lines, unit="Unit")
     show = prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"])
+    if len(prod["City"].unique()) == 1:
+        show = show.drop(columns=["City"])
     st.dataframe(show, hide_index=True, width="stretch",
                  column_config={"Total Qty": st.column_config.NumberColumn(format="%g"),
-                                "Spec": st.column_config.TextColumn(width="medium"),
-                                "Boxes": st.column_config.TextColumn(help="Boxes to prepare (a range when the "
-                                                                          "spec has two counts)")})
-    st.caption("**Boxes**: count specs (22C = 22 pieces per box) and kg / gram lots are converted using "
-               "Box Kgs in Mapping Whole or the **Box_Conversion** tab; avocado defaults to a 4 kg box up to "
-               "36C and a 10 kg box above (65C = 65 pieces in 10 kg). *not mapped* = no box size known yet.")
+                                "Spec": st.column_config.TextColumn(width="medium")})
+    st.caption("**Repacking** comes from the *Repacking* column of Mapping Whole (e.g. Box); when it is blank, "
+               "the pack in the SKU name is used. **Unit** is what the qty counts (Kg, Pack, Pcs, Box, Tray).")
     _unmapped_warning(lines, m)
     _downloads("Production sheet", show, f"production_{label}", "ps", lines)
     if user.is_owner:
         _publish("Production sheet", PRODUCTION_TAB, show, lines, user, "ps")
-        with st.expander("Box conversion rules (Box_Conversion tab)"):
-            if rules:
-                st.dataframe(pd.DataFrame([{"Parent SKU": r.parent, "Spec": r.spec, "Box": r.box,
-                                            "Pcs per box": r.pcs, "Kg per box": r.kg} for r in rules]),
-                             hide_index=True, width="stretch")
-            else:
-                st.caption("No Box_Conversion tab yet: Box Kgs from Mapping Whole and the avocado defaults "
-                           "are used.")
-            base = m.sku[["City", "Customer", "Parent SKU", "Customer SKU Name"]].drop_duplicates()
-            specs = [(r["Parent SKU"], m.spec_label(r["City"], r["Customer"], r["Customer SKU Name"]))
-                     for r in base.to_dict("records")]
-            starter = boxes.default_rows(specs)
-            st.caption(f"Create the tab with a starter row for each count in use ({len(starter)} rows: avocado "
-                       "4 kg / 10 kg, other fruit 'box'); then edit Box, Pcs per box and Kg per box in the sheet.")
-            if st.button("Create Box_Conversion tab", icon=":material/add_box:", disabled=bool(rules)
-                         or not starter, help="Only when the tab does not exist or is empty"):
-                from core.sheets import get_backend
-                vals = [boxes.BOX_COLUMNS] + [[r[c] for c in boxes.BOX_COLUMNS] for r in starter]
-                try:
-                    get_backend().replace_tab(boxes.BOX_TAB, vals)
-                except SheetError as e:
-                    st.error(f"Not created. {e}")
-                else:
-                    st.success(f"'{boxes.BOX_TAB}' tab created with {len(starter)} rows.")
         with st.expander("Spec mapping list (what production uses for every SKU name, and what is missing)"):
             lst = spec_mapping_list(m)
             if lst.empty:

@@ -48,7 +48,7 @@ def test_production_is_for_all_customers_without_customer_names():
              customer_sku_name="1PC - Hass Avocado Imported", qty="5", city="Chennai"),
     ])
     p = production(df, _masters())
-    assert list(p.columns) == ["City", "Parent SKU", "Variety", "Lot", "Lot Size", "Spec", "Total Qty"]
+    assert list(p.columns) == ["City", "Parent SKU", "Variety", "Spec", "Repacking", "Total Qty", "Unit"]
     blr = p[p["City"] == "Bangalore"]
     assert len(blr) == 1 and blr.iloc[0]["Total Qty"] == 40 and blr.iloc[0]["Spec"] == "20C, 22C"
     assert p[p["City"] == "Chennai"].iloc[0]["Total Qty"] == 5
@@ -105,3 +105,24 @@ def test_pdf_of_production_sheet():
                       customer_sku_name="1PC - Hass Avocado Imported", qty="30")])
     assert table_pdf("Production sheet", ["Delivery: → ₹"], production(df, _masters()))[:5] == b"%PDF-"
     assert table_pdf("Empty", [], production(_lines([]), _masters()))[:5] == b"%PDF-"
+
+
+def test_production_repacking_from_name_or_mapping_and_unit():
+    """Repacking: the mapping's Repacking column when filled (Swiggy Kg -> Box),
+    else the pack in the name. Qty stays in the indent's unit (no box maths)."""
+    sku = pd.DataFrame([
+        ["Bangalore", "Zepto", "Apple", "2PC - Apple Gala Imported", "", "90C", "Y", "Gala", "", ""],
+        ["Bangalore", "Swiggy", "Apple", "Apple Gala Imported (Kg)", "", "90C", "Y", "Gala", "", "Box"],
+    ], columns=TABS[SKU_MAP] + ["Repacking"])
+    empty = {t: pd.DataFrame(columns=TABS[t]) for t in (STORE_MAP, VARIETIES, ACCESS)}
+    m = masters_from_frames({SKU_MAP: sku, **empty})
+    df = _lines([
+        dict(BASE, indent_id="A", version="1", customer="Zepto", store="S1", parent_sku="Apple",
+             customer_sku_name="2PC - Apple Gala Imported", variety="Gala", lot="Pack", qty="120"),
+        dict(BASE, indent_id="B", version="1", customer="Swiggy", store="WH1", parent_sku="Apple",
+             customer_sku_name="Apple Gala Imported (Kg)", variety="Gala", lot="Kg", qty="700"),
+    ])
+    p = production(df, m).set_index("Repacking")
+    assert p.loc["2 Pcs Pack", "Total Qty"] == 120 and p.loc["2 Pcs Pack", "Unit"] == "Pack"
+    assert p.loc["Box", "Total Qty"] == 700 and p.loc["Box", "Unit"] == "Kg"
+    assert set(p["Spec"]) == {"90C"} and "Lot Size" not in p.columns and "Boxes" not in p.columns

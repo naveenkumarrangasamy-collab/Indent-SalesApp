@@ -1,7 +1,9 @@
 """Production and batching.
 
 1. Production sheet: the total quantity to produce and grade for all
-   customers, per City + Parent SKU + Variety + Lot + Lot size + Spec.
+   customers, per City + Parent SKU + Variety + Spec + Repacking + Unit.
+   Kept simple on purpose: no lot / lot size columns and no box conversion
+   (the ground team plans the boxes from the repacking spec).
 2. Batching sheet: the same quantities split per delivery point
    (city > customer > store), to allocate the ready stock and dispatch.
 """
@@ -37,8 +39,7 @@ def _prep(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return df
 
 
-PRODUCTION_COLUMNS = ["City", "Parent SKU", "Variety", "Lot", "Lot Size", "Spec", "Total Qty"]
-BOX_OUT = ["Units", "Box", "Boxes"]
+PRODUCTION_COLUMNS = ["City", "Parent SKU", "Variety", "Spec", "Repacking", "Total Qty", "Unit"]
 BATCH_COLUMNS = ["City", "Customer", "Delivery point", "Parent SKU", "Customer SKU Name", "Variety", "Lot", "Lot Size",
                  "Spec", "Qty", "Indent"]
 NOT_MAPPED = "spec not mapped"
@@ -65,6 +66,10 @@ def _spec_rows(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     df["Parent SKU"] = df["parent_sku"].map(lambda v: " ".join(str(v).split()))
     df["Customer SKU Name"] = df["customer_sku_name"].map(lambda v: " ".join(str(v).split()))
     df["Lot"] = df["lot"]
+    mapped = ([masters.repacking(r.city, r.customer, r.customer_sku_name) for r in df.itertuples()]
+              if masters is not None else [""] * len(df))
+    df["Repacking"] = [m or _pack_label(size, lot) for m, size, lot in zip(mapped, df["Lot Size"], df["lot"])]
+    df["Unit"] = df["lot"].map(lambda v: " ".join(str(v or "").split()))
     # what the qty means physically (for the box conversion)
     unit = [boxes.per_lot(lot, size) for lot, size in zip(df["lot"], df["Lot Size"])]
     df["_pcs"] = [q * n if u == "pcs" else 0.0 for (u, n), q in zip(unit, df["qty"])]
@@ -75,33 +80,38 @@ def _spec_rows(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return df
 
 
+def _pack_label(size: str, lot: str) -> str:
+    """Repacking spec from the SKU name when the mapping has none:
+    '2 Pcs' + Pack -> '2 Pcs Pack', '' + Kg -> 'Kg', '17.5 Kg Box' + Box -> '17.5 Kg Box'."""
+    size, lot = " ".join(str(size or "").split()), " ".join(str(lot or "").split())
+    if not size:
+        return lot
+    if not lot or lot.casefold() in size.casefold().split():
+        return size
+    return f"{size} {lot}"
+
+
 _SORT = lambda s: s.astype(str).str.casefold()  # noqa: E731
 
 
 def production(lines: pd.DataFrame, masters: Masters | None,
                box_rules: list | None = None) -> pd.DataFrame:
     """Production sheet: the total to produce and grade, for ALL customers.
-    One row per City + Parent SKU + Variety + Lot + Lot size + Spec. No
-    customer names or customer SKU names (those are on the batching sheet).
-    With box_rules (a list, may be empty) the qty is also converted into
-    boxes: Units (pcs / kg), Box, Boxes."""
-    cols = PRODUCTION_COLUMNS + (BOX_OUT if box_rules is not None else [])
+    One row per City + Parent SKU + Variety + Spec + Repacking + Unit, e.g.
+    Apple / Gala / 90C / 2 Pcs Pack / 120 / Pack, or Swiggy's apples indented
+    in Kg and mapped to Repacking 'Box': ... / Box / 700 / Kg. No customer
+    names, customer SKU names, lot sizes or box conversion. `box_rules` is
+    accepted for older callers and ignored."""
+    cols = PRODUCTION_COLUMNS
     df = _spec_rows(lines, masters) if lines is not None and not lines.empty else None
     if df is None or df.empty:
         return pd.DataFrame(columns=cols)
-    keys = ["City", "Parent SKU", "Variety", "Lot", "Lot Size", "Spec"]
+    keys = ["City", "Parent SKU", "Variety", "Spec", "Repacking", "Unit"]
     g = (df.assign(**{k + "_k": df[k].astype(str).str.casefold() for k in keys})
            .groupby([k + "_k" for k in keys], sort=False)
-           .agg(**{k: (k, "first") for k in keys}, **{"Total Qty": ("qty", "sum")},
-                _pcs=("_pcs", "sum"), _kg=("_kg", "sum"), _box=("_box", "sum"),
-                _boxkg=("_boxkg", lambda s: next((float(v) for v in s if v and v == v), 0.0)))
+           .agg(**{k: (k, "first") for k in keys}, **{"Total Qty": ("qty", "sum")})
            .reset_index(drop=True))
     g["Total Qty"] = _whole(g["Total Qty"])
-    if box_rules is not None:
-        conv = [boxes.convert(r["Parent SKU"], r["Spec"], r["_pcs"], r["_kg"], r["_box"], r["_boxkg"] or None,
-                              box_rules)
-                for r in g.to_dict("records")]
-        g["Units"], g["Box"], g["Boxes"] = zip(*conv) if conv else ([], [], [])
     return g.sort_values(keys, key=_SORT)[cols].reset_index(drop=True)
 
 
@@ -149,6 +159,8 @@ def spec_mapping_list(masters: Masters) -> pd.DataFrame:
         missing = [w for w, v in (("Spec-Size", size), ("Grade", grade)) if not v]
         rows.append({"City": city, "Customer": cust, "Parent SKU": parent, "Customer SKU Name": name,
                      "Variety": variety, "Lot": masters.lot_for(city, cust, name), "Lot Size": lot_size(name),
+                     "Repacking": masters.repacking(city, cust, name)
+                     or _pack_label(lot_size(name), masters.lot_for(city, cust, name)),
                      "Active origin": origin, "Spec-Size": size, "Grade": grade,
                      "Spec used in production": " - ".join(x for x in (size, grade) if x) or NOT_MAPPED,
                      "To fill in": ", ".join(missing) or "complete"})

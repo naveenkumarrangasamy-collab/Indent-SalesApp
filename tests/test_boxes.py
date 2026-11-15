@@ -38,16 +38,14 @@ def test_box_kgs_from_mapping_and_tab_rules_win():
     assert boxes.convert("Mango", "", 0, 0, 3, None, [])[2] == "3"
 
 
-def test_production_has_box_columns():
+def test_production_has_no_box_columns():
+    """Box conversion was removed from the production sheet (16 Nov call)."""
     from tests.test_production_calc import BASE, _lines, _masters
     from core.production_calc import production
     df = _lines([dict(BASE, indent_id="A", version="1", customer="Zepto", store="S1", parent_sku="Avocado",
                       customer_sku_name="1PC - Hass Avocado Imported", qty="440")])
     p = production(df, _masters(), box_rules=[])
-    r = p.iloc[0]
-    assert r["Units"] == "440 pcs" and r["Box"] == "4 kg box (20–22 pcs)" and r["Boxes"] == "20–22"
-    assert "Units" not in production(df, _masters()).columns
-
+    assert not {"Units", "Box", "Boxes"} & set(p.columns) and p.iloc[0]["Total Qty"] == 440
 
 def test_nan_box_kg_is_ignored():
     assert boxes.convert("Avocado", "22C", 440, 0, 0, float("nan"), [])[1] == "4 kg box (22 pcs)"

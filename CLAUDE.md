@@ -143,10 +143,17 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 
 ### Production, batching and tracker (owner + warehouse only)
 
-- **Production sheet:** all customers together, one row per City + Parent SKU + Variety + Lot + Lot Size + Spec, with Total Qty. There are **no customer names and no Customer SKU Name** (removed on 16 Nov at the user's request).
-  - **Box conversion** adds Units / Box / Boxes. Count specs (22C = 22 pcs per box); avocado up to 36C uses a 4 kg box, otherwise 10 kg (65C = 65 pcs in 10 kg). Box Kgs come from Mapping Whole or Box_Conversion; "not mapped" means unknown.
-  - Unmapped specs show as "spec not mapped (name)" and are never merged.
-  - The page also has a spec mapping list download.
+- **Production sheet** (simplified on 16 Nov after the call with Naveen): all customers together, one row per
+  City + Parent SKU + Variety + Spec + **Repacking** + **Unit**, with Total Qty. Columns:
+  City, Parent SKU, Variety, Spec, Repacking, Total Qty, Unit (City hidden when only one city; Variety hidden when empty).
+  - **No** customer names, Customer SKU Name, Lot, Lot Size or box conversion (Units / Box / Boxes removed). The
+    ground team plans boxes from the repacking spec. Do not add customer-specific logic (e.g. for Swiggy).
+  - **Repacking** = optional `Repacking` column in Mapping Whole (or All Cux City), e.g. Swiggy apples indented in
+    Kg are mapped to "Box": the row shows Repacking Box, 700, Unit Kg. When blank, it comes from the SKU name
+    (lot size + lot, e.g. "2 Pcs Pack"; plain "Kg").
+  - **Unit** = the indent lot (Kg / Pack / Pcs / Box / Tray). Tiles show a total per unit.
+  - Unmapped specs show as "spec not mapped (name)" and are never merged. The page also has a spec mapping list
+    download (now with Repacking). The hourly e-mail uses the same columns.
 - **Batching sheet:** **one table** with columns City, Customer, Delivery point, Parent SKU, **Customer SKU Name**, Variety, Lot, Lot Size, Spec, Qty, Indent. Downloads: PDF/Excel/CSV.
 - **Hourly tracker:** 8 AM–2 PM columns per customer/store row. Changed cells are amber (▲/▼) and unchanged cells green. It has a Status column and a detail dialog when a cell is clicked. Owner and warehouse only.
 - The City/SKU report was removed.

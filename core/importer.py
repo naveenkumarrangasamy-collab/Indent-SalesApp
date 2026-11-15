@@ -12,6 +12,8 @@ Sources in the Google Sheet (read on every master-data refresh, never changed):
 Optional columns the team can add (matched by header name, any position):
 - "Lot" or "UOM" in either tab: fixes the lot for that SKU name
   (Kg, Pcs, Tray, Box, Pack). Without it the lot comes from the SKU name.
+- "Repacking" in Mapping Whole (or All Cux City): the repacking spec shown on
+  the production sheet (e.g. Box). Without it, the pack in the SKU name is used.
 - "Active" in Mapping Whole: Y for the origin being sourced. Without it,
   Tanzania (Avocado), Peru (Blueberry) and RSA (Mandarin) are active, and a
   SKU with a single origin row is active.
@@ -44,6 +46,17 @@ _GRADE_HEADERS = ("grade", "specgrade", "spec", "quality", "specquality", "spect
 
 
 _BOXKG_HEADERS = ("boxkgs", "boxkg", "boxweight", "kgperbox")
+# optional repacking spec: how the item is packed for production, e.g. "Box",
+# "2 Pcs Pack", "Tray" (Swiggy: indent in Kg, repacked in boxes)
+_REPACK_HEADERS = ("repacking", "repackingspec", "specrepacking", "repack", "repackspec", "packing",
+                   "packingspec")
+
+
+def _repack_of(rec: dict) -> str:
+    for h in _REPACK_HEADERS:
+        if rec.get(h):
+            return rec[h]
+    return ""
 
 
 def _boxkg_of(rec: dict) -> str:
@@ -141,7 +154,8 @@ def build_sku_map(mapping_whole: list[list], all_cux_city: list[list],
                           "Spec-Size": sr.get("specsize", ""), "Active": active,
                           "Variety": variety, "Lot": lot,
                           "Spec-Grade": _grade_of(sr) or _grade_of(r),
-                          "Box-Kg": _boxkg_of(sr) or _boxkg_of(r)})
+                          "Box-Kg": _boxkg_of(sr) or _boxkg_of(r),
+                          "Repacking": _repack_of(sr) or _repack_of(r)})
         _default_active(group, active_origins)
         rows.extend(group)
     return rows
