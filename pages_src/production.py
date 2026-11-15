@@ -134,6 +134,7 @@ def render(user: User) -> None:
     _downloads("Production sheet", show, f"production_{label}", "ps", lines)
     if user.is_owner:
         _publish("Production sheet", PRODUCTION_TAB, show, lines, user, "ps")
+        _new_tab_preview()
         with st.expander("Spec mapping list (what production uses for every SKU name, and what is missing)"):
             lst = spec_mapping_list(m)
             if lst.empty:
@@ -240,3 +241,26 @@ def _publish(title: str, tab: str, table: pd.DataFrame, lines: pd.DataFrame, use
             c[1].error(f"Not written. {e}")
             return
         c[1].success(f"'{tab}' tab updated ({len(table)} rows).")
+
+
+def _new_tab_preview() -> None:
+    """Owner: raw view of the 'New' tab (the upcoming production base)."""
+    from core.sheets import get_backend
+    with st.expander("New tab (raw preview)"):
+        try:
+            be = get_backend()
+            tabs = be.list_tabs()
+            names = [t for t in tabs if "new" in t.strip().lower()]
+            st.caption("Tabs in the sheet: " + " · ".join(tabs))
+            for t in names:
+                vals = be.read_values(t)
+                st.markdown(f"**{t}**: {max(len(vals) - 1, 0)} rows")
+                if vals:
+                    w = max(len(r) for r in vals)
+                    rows = [list(r) + [""] * (w - len(r)) for r in vals[:60]]
+                    st.dataframe(pd.DataFrame(rows[1:], columns=[f"{i + 1}: {h}" for i, h in enumerate(rows[0])]),
+                                 hide_index=True, width="stretch")
+            if not names:
+                st.caption("No tab named 'New' found.")
+        except Exception as e:  # preview only; never break the page
+            st.caption(f"Could not read: {e}")
