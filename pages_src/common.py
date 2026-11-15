@@ -85,6 +85,17 @@ _CSS = f"""
   .mt-chip.cnl  {{ background:#ffebe9; color:#a40e26; border-color:#ff8182; text-decoration: line-through; }}
   .mt-bar {{ height:8px; border-radius:6px; background:#e9edf0; overflow:hidden; display:flex; }}
   .mt-bar span {{ display:block; height:100%; }}
+  /* ---- Home: one compact row per customer ---- */
+  .mt-crow {{ display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; padding:.5rem .8rem;
+             border:1px solid #e3e8e5; border-left:5px solid #e3b341; border-radius:10px; margin:.35rem 0;
+             background:#fff; }}
+  .mt-crow.done {{ border-left-color:#2da44e; }}
+  .mt-crow .who {{ min-width:190px; }}
+  .mt-crow .cnt {{ font-size:.85rem; color:#57606a; min-width:120px; }}
+  .mt-crow .cnt .g {{ color:#1a7f37; font-weight:600; }} .mt-crow .cnt .y {{ color:#9a6700; font-weight:600; }}
+  .mt-crow .chips {{ flex:1; }}
+  .mt-legend {{ margin:.2rem 0 .1rem; }}
+
   /* ---- cards (Home "Indents to act on", Upload PO, items on phone) ---- */
   [class*="st-key-mtcard"] {{ border-radius:14px !important; }}
   .mt-card-head {{ font-size:1rem; line-height:1.4; margin-bottom:.15rem; }}

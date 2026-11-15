@@ -20,7 +20,7 @@ import pandas as pd
 
 from core import config
 from core.schema import (ACCESS, ACCESS_ACTIVE, ACCESS_REVOKED, ROLE_OWNER,
-                         ROLE_SALES)
+                         ROLE_SALES, ROLE_WAREHOUSE)
 
 PIN_RE = re.compile(r"^\d{4,6}$")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -40,6 +40,19 @@ class User:
     @property
     def is_owner(self) -> bool:
         return self.role == ROLE_OWNER
+
+    @property
+    def is_warehouse(self) -> bool:
+        return self.role == ROLE_WAREHOUSE
+
+    @property
+    def sees_production(self) -> bool:
+        """Production / batching sheets: owner and warehouse, not sales."""
+        return self.is_owner or self.is_warehouse
+
+    @property
+    def makes_indents(self) -> bool:
+        return not self.is_warehouse
 
     @property
     def city_scoped(self) -> bool:
@@ -192,11 +205,10 @@ def resolve_user(access: pd.DataFrame, email: str) -> User | None:
     if row is None or str(row.get("Status", "")).strip().lower() != ACCESS_ACTIVE:
         return None
     role = str(row.get("Role", "")).strip().lower()
-    role = ROLE_OWNER if role == ROLE_OWNER else ROLE_SALES
-    sales = role == ROLE_SALES
+    role = role if role in (ROLE_OWNER, ROLE_WAREHOUSE) else ROLE_SALES
     return User(email=email, name=row.get("Name", ""), role=role,
-                cities=parse_cities(row.get("City", "")) if sales else [],
-                stores=parse_stores(row.get("Stores", "")) if sales else [])
+                cities=parse_cities(row.get("City", "")) if role != ROLE_OWNER else [],
+                stores=parse_stores(row.get("Stores", "")) if role == ROLE_SALES else [])
 
 
 @dataclass

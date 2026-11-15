@@ -9,16 +9,26 @@ Built from `MT_INDENT_BUILD_SPEC.md`, with one change: users sign in with their 
 | Screen | Who | What |
 |---|---|---|
 | Sign in | everyone | Email + PIN. Users who are not in `Access` or are revoked are blocked. 5 wrong PINs lock the email for 15 min. |
-| Home (opens first) | everyone | **Daily operations** for **Today or Tomorrow**: **Create indent** and **Upload PO** buttons at the top (Upload PO shows how many indents are waiting); tiles for stores placed, PO received, waiting for PO, not placed yet and qty; a progress bar; a **Status board** (one card per customer, a chip per store: grey not placed, amber placed and waiting for PO, green PO done, red deleted); a **City × Customer** table; and **Indents to act on** (cards with Edit / Upload PO). Users see only their cities and stores. |
+| Home (opens first) | sales, owner | **Daily operations** for **Today or Tomorrow**: **Create indent** and **Upload PO** buttons; tiles for indents, PO uploaded, waiting for PO and qty; then **one compact row per customer that has an indent** (customers with nothing that day are not listed) with a chip per store: **green = PO uploaded, yellow = indent placed, PO not uploaded**; below, the indents waiting for a PO with Edit / Upload PO. |
 | Create indent | everyone | The delivery card is the heart of the page: delivery day, then **customer pills**, then **store pills** for that customer ("✓ placed" / "✓ PO done" on stores that already have an indent), then expected time. The items appear below once a store is chosen. Draft autosaves to the `Drafts` tab and is restored at the next sign-in. |
 | Upload PO | everyone | Every indent the user can see, as cards: **waiting for PO first** (oldest delivery first, 🔴 when the delivery date has passed), then PO done with the PO file name, date and who uploaded it. Filter by Waiting / PO done / All, delivery date, city, customer, or search a store or indent number. **Items** shows the lines to check before uploading; **Upload PO** asks for the PO number, the PDF and **the qty of every item as on the PO**. If any item differs, the upload is blocked and **Edit indent to match PO** opens the indent (allowed even after the 2 PM cutoff); after **Update indent** the app comes back to the upload with the PDF and quantities kept. When everything matches, the indent is frozen and the SO / PO e-mail goes out at once. |
 | Hourly tracker | everyone | Filters: delivery date, city, customer. **By customer** and **By store** tables with the total qty at every hour **8 AM–2 PM** on the delivery day (plus *Now* while the day is open): 🟩 went up, 🟥 went down, 🟦 indent placed, and the change since 8 AM. Click a customer or store row to see the qty per item at each hour and every save (who, when, what) up to the hour you pick. Built from the saved versions, so it also works for past days. |
-| My indents (All indents for the owner) | everyone | List, open, correct (new version), last 10 versions with Load, change log, PO upload and freeze. |
-| City / SKU report | everyone | Total qty per City → Customer → SKU with lot, lot size and Spec-Size; PDF and CSV. |
-| Production sheet | everyone | **One row per city** where Parent SKU, Customer SKU name, Variety, Spec-Size, Lot and Lot size match, **clubbed across customers and stores** (Customers and Indents columns show what was added up); filter by delivery date, city, customer; PDF, CSV, and (owner) **Write to Google Sheet** which replaces the `Production_Sheet` tab. |
+| My indents (All indents for the owner) | sales, owner | List, open, correct (new version), last 10 versions with Load, change log, PO upload and freeze. An **Upload PO** button at the top; *Upload PO* is also right under *My indents* in the menu. |
+| City / SKU report | warehouse, owner | Total qty per City → Customer → SKU with lot, lot size and Spec-Size; PDF and CSV. |
+| Production sheet | warehouse, owner | **Step 1, produce and grade.** The total for **all customers** (no customer filter, no customer names or customer SKU names): one row per **City · Parent SKU · Variety · Lot · Lot size · Spec** → Total qty. Filters: delivery date, city. SKU names without a spec stay on their own line as *spec not mapped (name)* so different products are never clubbed by mistake. PDF, CSV, and (owner) **Write to Google Sheet** → `Production_Sheet` tab. Owner: **Spec mapping list** (Excel) of every SKU name with its variety, lot, lot size, spec and what is still missing. |
+| Batching sheet | warehouse, owner | **Step 2, allocate and dispatch.** The same quantities split per **delivery point**: numbered blocks *1) City / Customer / Store* with Parent SKU · Variety · Lot · Lot size · Spec · Qty (or one table). The blocks add up to the production sheet. PDF (one block per delivery point), Excel, CSV, and (owner) **Write to Google Sheet** → `Batching_Sheet` tab. |
 | Access | owner | **Users & PINs** (add users with an initial PIN, reset PINs, revoke/restore, role, cities, stores); **E-mail recipients** (ground / central team, which e-mails, cities / customers / stores they see); **E-mail sending** (mail server test, hourly e-mail *Send now*, preview of the 4 files, the e-mail log); **Sheet setup & checks**. |
 
 Every user can change their own PIN from the sidebar.
+
+**Roles** (Access page): **sales** — Home, Create indent, My indents, Upload PO, Hourly tracker (no production); **warehouse** — Production sheet, Batching sheet, City / SKU report, Hourly tracker (all cities, or the cities given); **owner** — everything plus Access.
+
+### Spec used by production
+
+Production clubs demand across customers by **City + Parent SKU + Variety + Lot + Lot size + Spec**.
+- **Variety**: as entered on the indent (apples), otherwise the mapping's *Classification* when it differs from the parent (e.g. put **Hass** in Classification for Hass avocados).
+- **Spec** = *Spec-Size* of the active origin in **Mapping Whole**, plus an optional **Grade** column there (e.g. `20C, 22C - Regular imported`, `24C, 26C - Mini TRM`). Column names *Grade*, *Spec-Grade*, *Spec* or *Quality* all work.
+- A SKU name with no Spec-Size / Grade shows as *spec not mapped (name)*; the **Spec mapping list** on the Production page lists what to fill in.
 
 ### Rules on the Indent screens
 
@@ -115,7 +125,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Indent_Lines, Change_Log, PO_Freeze**: append-only output, as in the spec. The current version of an indent is its highest `version`. Freezing appends one more version with `status = Frozen`.
 - **Mail_Recipients**: Email, Name, Team (Ground / Central), Hourly_Indent, SO_PO (Y/N), Cities, Customers, Stores (`;`-separated, empty = all), Active. Edited from Access → E-mail recipients.
 - **Mail_Log**: one row per e-mail sent or failed (hourly e-mails are never sent twice for the same hour and person).
-- **Production_Sheet**: written by the owner from the Production page (Write to Google Sheet); replaced each time.
+- **Production_Sheet**, **Batching_Sheet**: written by the owner from the Production / Batching pages (Write to Google Sheet); replaced each time.
 - **Drafts**: one row per user, updated in place. Please don't sort or delete rows in this tab while people are working.
 
 ## Live data and Google quotas

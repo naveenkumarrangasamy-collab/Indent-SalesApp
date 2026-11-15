@@ -339,3 +339,28 @@ def test_po_mail_bad_password_message(monkeypatch):
     ok, msg = mailer.send_po_mail(_po_cur(), "po.pdf", b"%PDF", "a@x.com")
     assert not ok and "App password" in msg and "535" in msg
     assert "14 characters" in mailer.status_text()
+
+
+def test_warehouse_role_sees_production_not_indents(monkeypatch):
+    from core import indents
+    monkeypatch.setattr(auth.config, "owner_email", lambda: "owner@x.com")
+    acc = _access([["wh@x.com", "W", "warehouse", "active", "", "", ""],
+                   ["whb@x.com", "W2", "warehouse", "active", "", "", "", "Bangalore"],
+                   ["s@x.com", "S", "sales", "active", "", "", ""]])
+    wh, whb, s = (auth.resolve_user(acc, e) for e in ("wh@x.com", "whb@x.com", "s@x.com"))
+    assert wh.sees_production and not wh.makes_indents
+    assert s.makes_indents and not s.sees_production
+    summ = pd.DataFrame({"indent_id": ["A", "B"], "city": ["Bangalore", "Chennai"], "store": ["x", "y"],
+                         "created_by": ["a@x.com", "b@x.com"]})
+    assert list(indents.visible_to(summ, wh)["indent_id"]) == ["A", "B"]      # all cities
+    assert list(indents.visible_to(summ, whb)["indent_id"]) == ["A"]          # its city
+    assert indents.visible_to(summ, s).empty                                   # sales: own only
+
+
+def test_importer_reads_optional_grade_column():
+    mw = [["City", "Customer", "Parent SKU", "Customer SKU Name", "Spec-Origin", "Spec-Size", "Grade"],
+          ["Blr", "Zepto", "Avocado", "1PC - Hass Avocado Imported", "Tanzania", "20C, 22C", "Regular imported"]]
+    ac = [["City", "Customer", "Parent SKU", "Classification", "Customer SKU Name"],
+          ["Blr", "Zepto", "Avocado", "Hass", "1PC - Hass Avocado Imported"]]
+    rows = importer.build_sku_map(mw, ac)
+    assert rows[0]["Spec-Grade"] == "Regular imported" and rows[0]["Variety"] == "Hass"

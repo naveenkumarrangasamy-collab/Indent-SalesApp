@@ -245,11 +245,13 @@ def visible_to(summ: pd.DataFrame, user) -> pd.DataFrame:
         if user.stores:
             out = out[norm("store").loc[out.index].isin({x.casefold() for x in user.stores})]
         return out
+    if getattr(user, "is_warehouse", False):
+        return summ                      # warehouse without cities: every city
     return summ[summ["created_by"].astype(str).str.lower() == user.email]
 
 
 def scope_text(user) -> str:
-    if user.is_owner:
+    if user.is_owner or (getattr(user, "is_warehouse", False) and not user.cities):
         return "all indents"
     if user.cities:
         return ("indents of " + ", ".join(user.stores) if user.stores

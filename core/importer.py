@@ -39,6 +39,15 @@ LEGACY_TABS = [ALL_CUX_CITY, MAPPING_WHOLE, CUSTOMER_LIST]
 DEFAULT_ACTIVE_ORIGINS = {"avocado": "tanzania", "blueberry": "peru", "mandarin": "rsa"}
 
 _LOT_HEADERS = ("lot", "uom", "lotuom", "unit")
+# optional grade / quality words of the spec, e.g. "Regular imported", "Mini TRM"
+_GRADE_HEADERS = ("grade", "specgrade", "spec", "quality", "specquality", "spectype")
+
+
+def _grade_of(rec: dict) -> str:
+    for h in _GRADE_HEADERS:
+        if rec.get(h):
+            return rec[h]
+    return ""
 
 
 def _s(v) -> str:
@@ -120,7 +129,8 @@ def build_sku_map(mapping_whole: list[list], all_cux_city: list[list],
             group.append({"City": r["city"], "Customer": r["customer"], "Parent SKU": parent,
                           "Customer SKU Name": r["customerskuname"], "Spec-Origin": origin,
                           "Spec-Size": sr.get("specsize", ""), "Active": active,
-                          "Variety": variety, "Lot": lot})
+                          "Variety": variety, "Lot": lot,
+                          "Spec-Grade": _grade_of(sr) or _grade_of(r)})
         _default_active(group, active_origins)
         rows.extend(group)
     return rows

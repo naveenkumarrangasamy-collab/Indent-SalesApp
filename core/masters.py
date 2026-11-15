@@ -121,6 +121,32 @@ class Masters:
         sizes = {str(v).strip() for v in df["Spec-Size"] if str(v).strip()}
         return sizes.pop() if len(sizes) == 1 else ""
 
+    def spec_grade(self, city: str, customer: str, sku_name: str) -> str:
+        rows = self.active_rows(city, customer, sku_name)
+        if rows.empty:
+            df = self._sku_for(city, customer)
+            rows = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
+        vals = {str(v).strip() for v in rows.get("Spec-Grade", pd.Series(dtype=str)) if str(v).strip()}
+        return sorted(vals)[0] if vals else ""
+
+    def spec_label(self, city: str, customer: str, sku_name: str) -> str:
+        """The agreed spec used to club production: size + grade,
+        e.g. '20C, 22C - Regular imported'. '' when not mapped."""
+        size, grade = self.spec_size(city, customer, sku_name), self.spec_grade(city, customer, sku_name)
+        return " - ".join(x for x in (size, grade) if x)
+
+    def mapped_variety(self, city: str, customer: str, sku_name: str) -> str:
+        """Variety written in the mapping (Classification different from the
+        parent, e.g. Hass for Avocado), or taken from the name for apples."""
+        parent = self.parent_of(city, customer, sku_name)
+        fixed = self.variety_from_name(parent, sku_name) if parent else ""
+        if fixed:
+            return fixed
+        df = self._sku_for(city, customer)
+        df = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
+        vals = [v for v in df.get("Variety", pd.Series(dtype=str)) if v]
+        return vals[0] if vals else ""
+
     def default_variety(self, city: str, customer: str, sku_name: str) -> str:
         parent = self.parent_of(city, customer, sku_name)
         if not self.varieties_for(parent):
@@ -239,7 +265,7 @@ def frames_from_values(raw: dict[str, list[list]]) -> tuple[dict[str, pd.DataFra
     if any(any(str(c).strip() for c in row) for row in raw.get(importer.ALL_CUX_CITY, [])[1:]):
         sku_rows = importer.build_sku_map(raw.get(importer.MAPPING_WHOLE, []),
                                           raw[importer.ALL_CUX_CITY])
-        frames[SKU_MAP] = pd.DataFrame(sku_rows, columns=TABS[SKU_MAP])
+        frames[SKU_MAP] = pd.DataFrame(sku_rows, columns=TABS[SKU_MAP] + ["Spec-Grade"])
         frames[SKU_MAP]["_row"] = 0
         var = pd.DataFrame(importer.build_varieties(raw[importer.ALL_CUX_CITY]),
                            columns=TABS[VARIETIES])

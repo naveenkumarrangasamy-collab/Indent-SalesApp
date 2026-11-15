@@ -1,7 +1,8 @@
 """Report data and files for the e-mails.
 
 Hourly indent e-mail (ground team), per recipient scope:
-  * overall indent  - every SKU, clubbed per city across customers and stores
+  * overall indent  - the production view: total per city, parent SKU, variety,
+                      lot, lot size and spec, across all customers
   * customer level  - customer > store > items
   as HTML in the body plus 4 attachments: 2 PDF + 2 Excel.
 
@@ -25,8 +26,7 @@ from core.schema import STATUS_CANCELLED, STATUS_FROZEN
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 STATUS_WORDS = {"Submitted": "Waiting for PO", "Frozen": "PO received"}
 
-OVERALL_COLS = ["City", "Parent SKU", "Customer SKU Name", "Variety", "Lot", "Lot Size", "Spec-Size",
-                "Total Qty", "Customers", "Indents"]
+OVERALL_COLS = production_calc.PRODUCTION_COLUMNS
 CUSTOMER_COLS = ["Customer", "Store", "City", "Indent", "Status", "Parent SKU", "Customer SKU Name",
                  "Variety", "Lot", "Lot Size", "Qty", "Price", "Amount"]
 
@@ -65,10 +65,7 @@ def state_at(lines: pd.DataFrame, when: datetime) -> pd.DataFrame:
 def overall_df(rows: pd.DataFrame, m: Masters | None) -> pd.DataFrame:
     if rows is None or rows.empty:
         return pd.DataFrame(columns=OVERALL_COLS)
-    agg = production_calc.aggregate(rows, m) if m is not None else pd.DataFrame()
-    if agg.empty:
-        return pd.DataFrame(columns=OVERALL_COLS)
-    return agg[[c for c in OVERALL_COLS if c in agg.columns]].reset_index(drop=True)
+    return production_calc.production(rows, m)
 
 
 def customer_df(rows: pd.DataFrame) -> pd.DataFrame:
@@ -168,7 +165,7 @@ def indent_mail_html(rows: pd.DataFrame, m: Masters | None, day: str, slot_label
              f"(scope: {html.escape(scope)}). {n_ind} indent(s), {waiting} still waiting for a PO. "
              "PDF and Excel copies are attached.</p>",
              "<h3 style='color:#1c6b49'>1. Overall indent (all SKUs)</h3>",
-             _html_table(odf.drop(columns=["Indents"], errors="ignore"), {"Total Qty"}),
+             _html_table(odf, {"Total Qty"}),
              "<h3 style='color:#1c6b49'>2. Customer-level indent</h3>"]
     if cdf.empty:
         parts.append("<p style='color:#666'>No indents.</p>")

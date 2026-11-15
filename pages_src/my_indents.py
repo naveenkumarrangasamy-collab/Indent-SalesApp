@@ -48,11 +48,15 @@ def _request_open(cur, load=None) -> None:
 
 def render(user: User) -> None:
     common.show_flash()
-    st.markdown("### All indents" if user.is_owner or user.city_scoped else "### My indents")
+    head = st.columns([3, 1.3], vertical_alignment="bottom")
+    head[0].markdown("### All indents" if user.is_owner or user.city_scoped else "### My indents")
     if user.city_scoped:
-        st.caption("Indents of every user in " + ", ".join(user.cities) + ". Open (not yet PO) indents are on top.")
+        head[0].caption("Indents of every user in " + ", ".join(user.cities) + ". Open (not yet PO) indents are on top.")
     else:
-        st.caption("Open (not yet PO) indents are on top; PO-frozen and deleted ones follow.")
+        head[0].caption("Open (not yet PO) indents are on top; PO-frozen ones follow.")
+    if head[1].button("Upload PO", icon=":material/upload_file:", type="primary", width="stretch",
+                      key="mi_po_btn", help="Indents waiting for a PO, and the PO upload"):
+        st.switch_page(common.PAGES["po"])
     try:
         df = indents.read_lines()
     except SheetError as e:

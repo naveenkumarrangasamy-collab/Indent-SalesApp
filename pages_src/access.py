@@ -6,7 +6,7 @@ import streamlit as st
 
 from core import auth, config, importer, masters
 from core.auth import User
-from core.schema import ACCESS_ACTIVE, ACCESS_REVOKED, ROLE_OWNER, ROLE_SALES, TABS
+from core.schema import ACCESS_ACTIVE, ACCESS_REVOKED, ROLE_OWNER, ROLE_SALES, ROLE_WAREHOUSE, ROLES, TABS
 from core.sheets import SheetError, get_backend
 from pages_src import common
 
@@ -40,6 +40,10 @@ def render(user: User) -> None:
 
 # ------------------------------------------------------------------ users
 
+ROLE_HELP = {ROLE_SALES: "sales: create indents, upload POs (no production)",
+             ROLE_WAREHOUSE: "warehouse: production + batching sheets only",
+             ROLE_OWNER: "owner: everything"}
+
 def _users(m: masters.Masters, me: User) -> None:
     acc = m.access
     if not acc.empty:
@@ -59,11 +63,11 @@ def _users(m: masters.Masters, me: User) -> None:
         st.markdown("**Add a user**")
         email = st.text_input("Work email")
         name = st.text_input("Name")
-        role = st.selectbox("Role", [ROLE_SALES, ROLE_OWNER])
-        cities = st.multiselect("City (sales)", m.cities(), placeholder="Choose one or more cities",
-                                help="The sales person places indents only in these cities and can see, "
-                                     "edit and delete every indent there. Leave empty: own indents only. "
-                                     "Owners see everything.")
+        role = st.selectbox("Role", ROLES, format_func=ROLE_HELP.get)
+        cities = st.multiselect("City", m.cities(), placeholder="Choose one or more cities",
+                                help="Sales: places indents only in these cities and can see and edit "
+                                     "every indent there (empty: own indents only). Warehouse: production "
+                                     "and batching for these cities (empty: all cities). Owners see everything.")
         sidx = m.store_index()
         stores = st.multiselect("Stores / facilities (optional)", list(sidx),
                                 format_func=lambda x: f"{x}  —  {sidx.get(x, '')}",
@@ -82,9 +86,9 @@ def _users(m: masters.Masters, me: User) -> None:
             else:
                 _save(lambda: auth.upsert_access(email_n, by=me.email, name=name, role=role,
                                                  status=ACCESS_ACTIVE, pin=pin,
-                                                 cities=cities if role == ROLE_SALES else [],
+                                                 cities=cities if role != ROLE_OWNER else [],
                                                  stores=stores if role == ROLE_SALES else []),
-                      f"{email_n} added" + (f" for {', '.join(cities)}" if cities and role == ROLE_SALES else "")
+                      f"{email_n} added as {role}" + (f" for {', '.join(cities)}" if cities and role != ROLE_OWNER else "")
                       + ". Share the PIN with them privately.")
 
     with c2:
@@ -133,11 +137,13 @@ def _users(m: masters.Masters, me: User) -> None:
                 _save(lambda: auth.upsert_access(target, by=me.email, status=ACCESS_ACTIVE),
                       f"{target} can sign in again.")
         role_now = str(row.get("Role", "")).lower()
-        other = ROLE_OWNER if role_now != ROLE_OWNER else ROLE_SALES
-        if b[1].button(f"Make {other}", disabled=is_secret_owner or target == me.email,
-                       width="stretch"):
-            _save(lambda: auth.upsert_access(target, by=me.email, role=other),
-                  f"{target} is now {other}.")
+        role_now = role_now if role_now in ROLES else ROLE_SALES
+        new_role = b[1].selectbox("Role", ROLES, index=ROLES.index(role_now), key=f"role_{target}",
+                                  format_func=ROLE_HELP.get, label_visibility="collapsed",
+                                  disabled=is_secret_owner or target == me.email)
+        if new_role != role_now and b[1].button(f"Make {new_role}", width="stretch", type="primary"):
+            _save(lambda: auth.upsert_access(target, by=me.email, role=new_role),
+                  f"{target} is now {new_role}.")
         if is_secret_owner:
             st.caption("This is the owner email from the app secrets; it is always an active owner.")
 

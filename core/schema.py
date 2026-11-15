@@ -59,6 +59,8 @@ STATUS_CANCELLED = "Cancelled"   # "deleted" indent: kept in the sheet, ignored 
 
 ROLE_OWNER = "owner"
 ROLE_SALES = "sales"
+ROLE_WAREHOUSE = "warehouse"   # production / batching only, no indents
+ROLES = [ROLE_SALES, ROLE_WAREHOUSE, ROLE_OWNER]
 ACCESS_ACTIVE = "active"
 ACCESS_REVOKED = "revoked"
 
