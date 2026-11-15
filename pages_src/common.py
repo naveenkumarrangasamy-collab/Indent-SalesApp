@@ -157,13 +157,41 @@ def show_flash() -> None:
 COOKIE = "mt_indent_session"
 
 
+LS_KEY = "mt_indent_session"
+QP = "s"   # one-time query parameter used to hand the stored sign-in to the server
+
+
 def _set_cookie(value: str, max_age: int) -> None:
-    """Set (or clear, with max_age=0) the sign-in cookie in this browser."""
+    """Remember (or forget, with max_age=0) the sign-in in this browser: a
+    cookie, plus localStorage because some hosts (Streamlit Cloud) do not pass
+    browser cookies through to the app."""
     import json
-    st.html(f"<script>document.cookie = {json.dumps(COOKIE + '=' + value)} + "
-            f"'; path=/; max-age={int(max_age)}; SameSite=Lax' + "
-            "(location.protocol === 'https:' ? '; Secure' : '');</script>",
-            unsafe_allow_javascript=True, width=1)
+    st.html(
+        "<script>(function(){"
+        f"const v={json.dumps(value)}, age={int(max_age)};"
+        f"document.cookie={json.dumps(COOKIE + '=')}+v+'; path=/; max-age='+age+'; SameSite=Lax'"
+        "+(location.protocol==='https:'?'; Secure':'');"
+        f"try{{ if(v && age>0) localStorage.setItem({json.dumps(LS_KEY)}, JSON.stringify({{t:v, exp:Date.now()+age*1000}}));"
+        f" else localStorage.removeItem({json.dumps(LS_KEY)}); }}catch(e){{}}"
+        "})();</script>",
+        unsafe_allow_javascript=True, width=1)
+
+
+def restore_login_script() -> None:
+    """On the sign-in page: if this browser holds a stored sign-in, reload once
+    with it in the URL so the server can sign the user back in."""
+    if st.session_state.get("_cookie_rejected"):
+        return
+    import json
+    st.html(
+        "<script>(function(){try{"
+        f"const raw=localStorage.getItem({json.dumps(LS_KEY)}); if(!raw) return;"
+        "const o=JSON.parse(raw); if(!o.t || !o.exp || o.exp < Date.now()){"
+        f"localStorage.removeItem({json.dumps(LS_KEY)}); return;}}"
+        f"const u=new URL(window.location.href); if(u.searchParams.has({json.dumps(QP)})) return;"
+        f"u.searchParams.set({json.dumps(QP)}, o.t); window.location.replace(u.toString());"
+        "}catch(e){}})();</script>",
+        unsafe_allow_javascript=True, width=1)
 
 
 def remember_login(user: auth.User) -> None:
@@ -172,7 +200,7 @@ def remember_login(user: auth.User) -> None:
 
 
 def flush_cookie() -> None:
-    """Write / clear the cookie on this run if asked (needs a rendered page)."""
+    """Write / clear the stored sign-in on this run if asked (needs a rendered page)."""
     s = st.session_state
     if s.pop("_clear_cookie", False):
         _set_cookie("", 0)
@@ -181,7 +209,17 @@ def flush_cookie() -> None:
             token = auth.make_session_token(masters.load_masters().access, s["user"]["email"])
         except SheetError:
             return
-        _set_cookie(token, 86400 * config.session_days())
+        _set_cookie(token, max(1, auth.session_token_expiry(token) - int(__import__("time").time())))
+
+
+def _query_token() -> str | None:
+    try:
+        tok = st.query_params.get(QP)
+        if tok:
+            del st.query_params[QP]   # never leave the token in the address bar
+        return tok or None
+    except Exception:
+        return None
 
 
 def _cookie_token() -> str | None:
@@ -192,8 +230,9 @@ def _cookie_token() -> str | None:
 
 
 def _from_cookie() -> auth.User | None:
-    token = _cookie_token()
-    if not token or st.session_state.get("_cookie_rejected"):
+    qtok = _query_token()
+    token = qtok or _cookie_token()
+    if not token or (st.session_state.get("_cookie_rejected") and not qtok):
         return None
     try:
         user = auth.user_from_session_token(masters.load_masters().access, token)
@@ -205,7 +244,7 @@ def _from_cookie() -> auth.User | None:
         return None
     from pages_src import state
     sign_in(user)
-    st.session_state["_set_cookie"] = True  # slide the expiry forward
+    # the stored sign-in keeps its original expiry: the PIN is asked again after session_hours
     if state.restore_from_sheet(user.email):
         flash("info", "Welcome back. Your unsaved indent draft was restored.")
     return user

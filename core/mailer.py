@@ -1,4 +1,9 @@
-"""E-mail the customer's PO when it is uploaded (subject = customer name).
+"""E-mails sent by the app.
+
+* SO / PO e-mail: at once when a PO is uploaded, to the central team
+  (Mail_Recipients with SO_PO = Y whose scope covers the store) plus
+  po_mail_to. Subject starts with the customer name.
+* Hourly indent e-mail: see core/hourly.py.
 
 Settings (Streamlit secrets):
     smtp_user      = "sender@gmail.com"          # the mailbox that sends
@@ -135,6 +140,61 @@ def deliver(msg: EmailMessage) -> tuple[bool, str]:
         except (smtplib.SMTPException, OSError) as e:
             tried.append(f"{host}:{port} {mode.upper()} - {_STAGE_HELP[stage]} ({type(e).__name__}: {e})")
     return False, "could not send. Tried " + " | ".join(tried)
+
+
+def build_message(to: list[str], subject: str, html_body: str, text: str,
+                  attachments: list[tuple[str, bytes, str]] | None = None,
+                  cc: list[str] | None = None) -> EmailMessage:
+    s = settings()
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = s["sender"] or s["user"]
+    msg["To"] = ", ".join(to)
+    if cc:
+        msg["Cc"] = ", ".join(cc)
+    msg.set_content(text)
+    msg.add_alternative(html_body, subtype="html")
+    for name, data, mime in attachments or []:
+        main, sub = mime.split("/", 1)
+        msg.add_attachment(data, maintype=main, subtype=sub, filename=name)
+    return msg
+
+
+def po_recipients(header) -> list[str]:
+    """Central team for this city / customer / store, plus po_mail_to.
+    Falls back to the default address when nobody is set up yet."""
+    from core import recipients
+    try:
+        team = [r.email for r in recipients.so_list(header.city, header.customer, header.store)]
+    except Exception:
+        team = []
+    extra = _list(config.get("po_mail_to"))
+    out = []
+    for e in team + extra:
+        if e.lower() not in {x.lower() for x in out}:
+            out.append(e)
+    return out or list(DEFAULT_TO)
+
+
+def send_so_mail(cur, file_name: str, pdf: bytes, uploaded_by: str,
+                 po_number: str = "") -> tuple[bool, str]:
+    """SO placement e-mail with the customer's PO + SO as PDF and Excel."""
+    from core import recipients, reports
+    s = settings()
+    to = po_recipients(cur.header)
+    h = cur.header
+    subject = f"{h.customer} - SO placed - {h.store} - {cur.indent_id}" + (f" - PO {po_number}" if po_number else "")
+    files = [(file_name or "PO.pdf", pdf, "application/pdf")] if pdf else []
+    files += reports.so_files(cur, po_number, file_name, uploaded_by)
+    text = (f"SO placed for {h.customer} / {h.store} ({h.city}), delivery {h.delivery_date}. "
+            f"Indent {cur.indent_id}, PO {po_number or file_name}. Details attached (PDF and Excel).")
+    msg = build_message(to, subject, reports.so_html(cur, po_number, file_name, uploaded_by), text,
+                        files, s["cc"])
+    ok, why = deliver(msg)
+    recipients.log("so", cur.indent_id, to + s["cc"], ok, why)
+    if ok:
+        return True, f"SO / PO e-mail sent to {', '.join(to + s['cc'])}."
+    return False, f"SO / PO e-mail not sent: {why}"
 
 
 def send_po_mail(cur, file_name: str, pdf: bytes, uploaded_by: str) -> tuple[bool, str]:

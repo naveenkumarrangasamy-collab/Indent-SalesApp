@@ -1,0 +1,35 @@
+name: Hourly indent e-mail
+
+# Every hour from 8:00 AM to 2:00 PM IST (02:30-08:30 UTC). GitHub may start a
+# scheduled run a few minutes late; the script still sends that hour's e-mail
+# once (Mail_Log prevents duplicates). "Run workflow" sends one by hand.
+on:
+  schedule:
+    - cron: "30 2-8 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Send even outside 8 AM-2 PM / if already sent"
+        type: boolean
+        default: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: App settings from the STREAMLIT_SECRETS repository secret
+        env:
+          STREAMLIT_SECRETS: ${{ secrets.STREAMLIT_SECRETS }}
+        run: |
+          test -n "$STREAMLIT_SECRETS" || { echo "Add the STREAMLIT_SECRETS repository secret (see README)"; exit 1; }
+          mkdir -p .streamlit
+          printf '%s\n' "$STREAMLIT_SECRETS" > .streamlit/secrets.toml
+      - name: Send
+        run: python scripts/hourly_mail.py ${{ inputs.force && '--force' || '' }}

@@ -29,7 +29,7 @@ BLUE = IndentLine("Blueberry", "1PC - Blueberry Imported", "", "Pcs", 10, 300)
 
 def test_submit_writes_version_1(backend):
     iid = indents.submit_new(H, [HASS, BLUE], "s@x.com")
-    assert iid.startswith("IND-") and iid.endswith("-BAN-0001")
+    assert iid == "IN-001"
     df = indents.read_lines(fresh=True)
     assert len(df) == 2 and set(df["version"]) == {1} and set(df["status"]) == {"Submitted"}
     assert df["amount"].tolist() == [3600, 3000]
@@ -37,7 +37,7 @@ def test_submit_writes_version_1(backend):
     with pytest.raises(indents.DuplicateError):  # same store + date
         indents.submit_new(H, [HASS], "s@x.com")
     other_store = IndentHeader(**{**H.to_dict(), "store": "Store B"})
-    assert indents.submit_new(other_store, [HASS], "s@x.com").endswith("-0002")
+    assert indents.submit_new(other_store, [HASS], "s@x.com") == "IN-002"
 
 
 def test_update_appends_version_and_change_log(backend):
@@ -45,18 +45,21 @@ def test_update_appends_version_and_change_log(backend):
     hass40 = IndentLine(**{**HASS.to_dict(), "qty": 40})
     h2 = IndentHeader(**{**H.to_dict(), "expected_time": "08:00"})
     kiwi = IndentLine("Kiwi", "2PC - Green Kiwi", "", "Pcs", 5, 50)
-    v, log_ok = indents.submit_update(iid, 1, h2, [hass40, kiwi], "o@x.com")
+    blue0 = IndentLine(**{**BLUE.to_dict(), "qty": 0})
+    with pytest.raises(indents.SheetError, match="cannot be removed"):
+        indents.submit_update(iid, 1, h2, [hass40, kiwi], "o@x.com")   # Blueberry dropped
+    v, log_ok = indents.submit_update(iid, 1, h2, [hass40, blue0, kiwi], "o@x.com")
     assert v == 2 and log_ok
     df = indents.read_lines(fresh=True)
-    assert len(df) == 4  # v1 (2 lines) kept, v2 (2 lines) appended
+    assert len(df) == 5  # v1 (2 lines) kept, v2 (3 lines) appended
     cur = indents.snapshot(df, iid)
     assert cur.version == 2 and [x.customer_sku_name for x in cur.lines] == [
-        "1PC - Hass Avocado Imported", "2PC - Green Kiwi"]
+        "1PC - Hass Avocado Imported", "1PC - Blueberry Imported", "2PC - Green Kiwi"]
     log = backend.read(CHANGE_LOG)
     kinds = sorted(zip(log["change_type"], log["field"]))
     assert ("header_changed", "expected_time") in kinds
     assert ("line_changed", "qty") in kinds
-    assert ("line_added", "") in kinds and ("line_removed", "") in kinds
+    assert ("line_added", "") in kinds and ("line_removed", "") not in kinds
     assert set(log["changed_by"]) == {"o@x.com"}
 
 
@@ -101,7 +104,7 @@ def test_lost_race_removes_own_rows_and_retries(backend, monkeypatch):
     monkeypatch.setattr(backend, "append_dicts", racing_append)
     iid = indents.submit_new(H, [HASS], "me@x.com")
     df = indents.read_lines(fresh=True)
-    assert iid.endswith("-0002")
+    assert iid == "IN-002"
     assert df.groupby(["indent_id", "version"]).size().max() == 1  # no duplicates left
     assert set(df["submitted_by"]) == {"other@x.com", "me@x.com"}
 
@@ -227,10 +230,9 @@ def test_one_indent_per_store_per_date_and_update_cannot_collide(backend):
     a = indents.submit_new(H, [HASS], "s@x.com")
     b_hdr = IndentHeader(**{**H.to_dict(), "store": "Store B"})
     b = indents.submit_new(b_hdr, [HASS], "s@x.com")
-    # moving B onto A's store and date is refused; A itself can still be edited
-    with pytest.raises(indents.DuplicateError) as e:
+    # a saved indent cannot be moved to another store (or onto A); A itself can still be edited
+    with pytest.raises(indents.SheetError, match="store of a saved indent cannot be changed"):
         indents.submit_update(b, 1, H, [HASS], "s@x.com")
-    assert e.value.indent_id == a
     v, _ = indents.submit_update(a, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 31})], "s@x.com")
     assert v == 2
     df = indents.read_lines(fresh=True)
@@ -266,13 +268,14 @@ def test_variety_only_for_apple():
 
 def test_change_note_in_indent_lines(backend):
     iid = indents.submit_new(H, [HASS, BLUE], "a@x.com")
-    indents.submit_update(iid, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 40})], "b@x.com")
+    indents.submit_update(iid, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 40}),
+                                      IndentLine(**{**BLUE.to_dict(), "qty": 0})], "b@x.com")
     indents.cancel(iid, 2, "a@x.com")
     raw = backend.read("Indent_Lines")
     notes = raw.groupby("version")["change_note"].first().to_dict()
     assert notes["1"].startswith("Created by a@x.com on ")
     assert notes["2"].startswith("Edited by b@x.com (other user; created by a@x.com) on ")
-    assert "1PC - Hass Avocado Imported: qty 30 → 40" in notes["2"] and "deleted 1PC - Blueberry Imported" in notes["2"]
+    assert "1PC - Hass Avocado Imported: qty 30 → 40" in notes["2"] and "1PC - Blueberry Imported: qty 10 → 0" in notes["2"]
     assert notes["3"].startswith("Deleted by a@x.com (same user) on ")
     assert set(raw[raw["version"] == "2"]["change_note"]) == {notes["2"]}   # same cell text on every row
     v = indents.versions(indents.read_lines(fresh=True), iid)
@@ -304,3 +307,52 @@ def test_apple_variety_from_name():
     assert m.variety_from_name("Apple", "2PC - Apple Snacky") == ""          # user picks
     snacky = IndentLine("Apple", "2PC - Apple Queen Imported", "Gala", "Pcs", 1, 1)
     assert any("must be Queen" in e for e in indents.validate(H, [snacky], m))
+
+
+def test_indent_numbers_run_on_across_days_and_cities():
+    from core.indents import next_indent_id
+    old = ["IND-20261114-PTP-0001", "IND-20261114-PTP-0004"]
+    assert next_indent_id(old) == "IN-001"
+    assert next_indent_id(old + ["IN-001", "IN-002"]) == "IN-003"
+    assert next_indent_id(["IN-999"]) == "IN-1000"
+
+
+def test_qty_zero_only_for_saved_items(backend):
+    m = _masters()
+    zero = IndentLine(**{**HASS.to_dict(), "qty": 0})
+    assert any("greater than 0" in e for e in indents.validate(H, [zero], m))
+    assert not [e for e in indents.validate(H, [zero], m, zero_ok={HASS.customer_sku_name}) if "Qty" in e]
+
+
+def test_po_must_match_indent_per_item(backend):
+    iid = indents.submit_new(H, [HASS, BLUE], "s@x.com")
+    with pytest.raises(indents.POMismatchError) as e:
+        indents.freeze(iid, 1, "po.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 30,
+                                                           BLUE.customer_sku_name: 25})
+    bad = [r for r in e.value.rows if not r["ok"]]
+    assert [(r["customer_sku_name"], r["indent_qty"], r["po_qty"]) for r in bad] == [
+        ("1PC - Blueberry Imported", BLUE.qty, 25)]
+    with pytest.raises(indents.POMismatchError):        # an item missing from the PO entry
+        indents.freeze(iid, 1, "po.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 30})
+    with pytest.raises(indents.POMismatchError):
+        indents.freeze(iid, 1, "po.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 30,
+                                                           BLUE.customer_sku_name: BLUE.qty},
+                       po_has_extra=True)
+    # fix the indent to the PO (allowed as a PO correction), then it freezes
+    v, _ = indents.submit_update(iid, 1, H, [HASS, IndentLine(**{**BLUE.to_dict(), "qty": 25})],
+                                 "s@x.com", po_fix=True)
+    assert indents.freeze(iid, v, "po.pdf", "s@x.com", po_number="PO-77",
+                          po_qty={HASS.customer_sku_name: 30, BLUE.customer_sku_name: 25}) == v + 1
+    po = backend.read("PO_Freeze").iloc[-1]
+    assert po["po_number"] == "PO-77" and float(po["po_total_qty"]) == 55
+    assert "1PC - Blueberry Imported = 25" in po["po_lines"]
+
+
+def test_po_correction_allowed_after_cutoff(backend, monkeypatch):
+    iid = indents.submit_new(H, [HASS], "s@x.com")
+    monkeypatch.setattr(indents, "can_edit", lambda *a, **k: False)
+    with pytest.raises(indents.CutoffError):
+        indents.submit_update(iid, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 31})], "s@x.com")
+    v, _ = indents.submit_update(iid, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 31})], "s@x.com",
+                                 po_fix=True)
+    assert v == 2

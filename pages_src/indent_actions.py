@@ -2,10 +2,12 @@
 Upload PO (freezes the indent) and Delete (marks it Cancelled)."""
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from core import config, indents, mailer
 from core.auth import User
+from core.models import fmt_num
 from core.schema import STATUS_SUBMITTED
 from core.sheets import SheetError, get_backend
 from pages_src import common, state
@@ -38,9 +40,19 @@ def _strip(cur) -> None:
         f"<span><b>Items</b>{len(cur.lines)}</span></div>", unsafe_allow_html=True)
 
 
-@st.dialog("Upload PO", dismissible=False)
+def _prefill(indent_id: str) -> dict:
+    return st.session_state.setdefault("po_prefill", {}).setdefault(indent_id, {})
+
+
+def _clear_po_state(indent_id: str) -> None:
+    st.session_state.get("po_prefill", {}).pop(indent_id, None)
+    st.session_state.get("po_files", {}).pop(indent_id, None)
+    st.session_state.pop("po_mismatch", None)
+
+
+@st.dialog("Upload PO", dismissible=False, width="large")
 def _po_dialog(indent_id: str, user: User) -> None:
-    df = indents.read_lines(fresh=True)
+    df = indents.read_lines()
     cur = indents.snapshot(df, indent_id)
     if cur is None:
         _close()
@@ -58,38 +70,115 @@ def _po_dialog(indent_id: str, user: User) -> None:
             _close()
             st.rerun()
         return
-    to = ", ".join(mailer.settings()["to"])
-    st.caption("Uploading the customer's PO freezes the indent: after confirming, it can no longer "
-               f"be edited or deleted. The PDF is e-mailed to {to} with subject "
-               f"'{cur.header.customer}'.")
-    up = st.file_uploader("PO file (PDF)", type=["pdf"], key=f"po_file_{indent_id}")
+    pre = _prefill(indent_id)
+
+    # 1. the PO file (kept while the indent is being corrected)
+    c = st.columns([1, 1.6])
+    po_number = c[0].text_input("PO number", value=pre.get("po_number", ""), key=f"po_no_{indent_id}",
+                                placeholder="as printed on the PO")
+    up = c[1].file_uploader("PO file (PDF)", type=["pdf"], key=f"po_file_{indent_id}")
+    files = st.session_state.setdefault("po_files", {})   # kept while the indent is corrected
     if up is not None:
-        st.warning(f"Is **{up.name}** the PO for customer **{cur.header.customer}** and store "
-                   f"**{cur.header.store}** (delivery {cur.header.delivery_date})?")
+        files[indent_id] = (up.name, up.getvalue())
+    elif indent_id in files:
+        c[1].caption(f"Using **{files[indent_id][0]}** chosen earlier (choose another file to replace it).")
+    file_name, file_bytes = files.get(indent_id, (None, None))
+
+    # 2. PO quantities, item by item
+    st.markdown("**Quantities on the PO** · type each item's qty exactly as on the customer's PO")
+    if "init" not in pre:   # what the table starts with; fixed while the dialog is open
+        pre["init"] = dict(pre.get("po_qty", {}))
+        st.session_state["po_ed_rev"] = pre["rev"] = st.session_state.get("po_ed_rev", 0) + 1
+    saved = pre["init"]
+    base = pd.DataFrame([{"Customer SKU Name": x.customer_sku_name, "Lot": x.lot,
+                          "Indent qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
+                          "PO qty": saved.get(x.customer_sku_name)} for x in cur.lines])
+    base["PO qty"] = pd.to_numeric(base["PO qty"], errors="coerce")
+    ed = st.data_editor(base, key=f"po_ed_{indent_id}_{pre.get('rev', 0)}", hide_index=True, width="stretch",
+                        disabled=["Customer SKU Name", "Lot", "Indent qty"],
+                        column_config={"PO qty": st.column_config.NumberColumn(min_value=0, step=1,
+                                                                               format="%d")})
+    po_qty = {r["Customer SKU Name"]: (None if pd.isna(r["PO qty"]) else float(r["PO qty"]))
+              for r in ed.to_dict("records")}
+    pre["po_qty"], pre["po_number"] = po_qty, po_number
+    extra = st.checkbox("The PO has items that are not in this indent", key=f"po_extra_{indent_id}")
+    cmp = indents.po_compare(cur.lines, po_qty)
+    missing = [r for r in cmp if r["po_qty"] is None]
+    bad = [r for r in cmp if r["po_qty"] is not None and not r["ok"]]
+    tot_i = sum(r["indent_qty"] for r in cmp)
+    tot_p = sum(r["po_qty"] or 0 for r in cmp)
+    st.caption(f"Indent total **{fmt_num(tot_i)}** · PO total entered **{fmt_num(tot_p)}**"
+               + (f" · {len(missing)} item(s) still to enter" if missing else ""))
+
+    # 3. mismatch: cannot upload, correct the indent first
+    if st.session_state.get("po_mismatch") == indent_id and (bad or extra):
+        with st.container(border=True, key="mt_po_mismatch"):
+            st.error("**The PO does not match the indent, so it cannot be uploaded.** "
+                     "Edit the indent so every item matches the PO, then upload again.")
+            if bad:
+                st.dataframe(pd.DataFrame([{
+                    "Customer SKU Name": r["customer_sku_name"], "Indent qty": fmt_num(r["indent_qty"]),
+                    "PO qty": fmt_num(r["po_qty"]),
+                    "Difference": ("+" if r["diff"] > 0 else "") + fmt_num(r["diff"])} for r in bad]),
+                    hide_index=True, width="stretch")
+            if extra:
+                st.markdown("- The PO has items that are not in this indent: add them with **Add item**.")
+            b = st.columns(2)
+            if b[0].button("Edit indent to match PO", icon=":material/edit:", type="primary",
+                           width="stretch"):
+                fix = {"po_qty": {k: v for k, v in po_qty.items() if v is not None},
+                       "po_number": po_number}
+                state.open_for_edit(cur, None, created_at=indents.created_at(df, indent_id), po_fix=fix)
+                st.session_state.pop("po_mismatch", None)
+                _close()
+                common.flash("warning", f"{indent_id}: change the items to match the PO, then press "
+                                        "**Update indent**.")
+                st.switch_page(common.PAGES["indent"])
+            if b[1].button("Close", width="stretch"):
+                st.session_state.pop("po_mismatch", None)
+                _close()
+                st.rerun()
+        return
+
+    to = ", ".join(mailer.po_recipients(cur.header))
+    st.caption("Uploading freezes the indent: it can no longer be edited. The SO / PO e-mail goes at "
+               f"once to {to or 'nobody yet (add recipients on the Access page)'}.")
     b = st.columns(2)
-    if b[0].button("Confirm and freeze", icon=":material/lock:", type="primary", width="stretch",
-                   disabled=up is None):
+    if b[0].button("Check and upload", icon=":material/fact_check:", type="primary", width="stretch",
+                   disabled=not file_bytes or bool(missing)):
+        if bad or extra:
+            st.session_state["po_mismatch"] = indent_id
+            st.rerun()
         link, note = "", ""
         folder = config.po_drive_folder_id()
         backend = get_backend()
         if folder or backend.mode == "local":
             try:
                 with st.spinner("Saving the PO file…"):
-                    link = backend.upload_pdf(f"{indent_id} - {up.name}", up.getvalue(), folder)
+                    link = backend.upload_pdf(f"{indent_id} - {file_name}", file_bytes, folder)
             except SheetError as e:
                 note = f" The file itself was not stored: {e}"
         try:
-            with st.spinner("Freezing the indent…"):
-                v = indents.freeze(indent_id, cur.version, up.name, user.email, po_file_link=link)
+            with st.spinner("Checking and freezing the indent…"):
+                v = indents.freeze(indent_id, cur.version, file_name, user.email, po_file_link=link,
+                                   po_qty={k: v for k, v in po_qty.items() if v is not None},
+                                   po_number=po_number.strip(), po_has_extra=extra)
+        except indents.POMismatchError:
+            st.session_state["po_mismatch"] = indent_id
+            indents.clear_cache()
+            st.rerun()
         except SheetError as e:
             st.error(f"Not frozen. {e}")
             return
         if state.get()["mode"] == "edit" and state.get()["indent_id"] == indent_id:
             state.start_new()
-        with st.spinner("E-mailing the PO…"):
-            sent, mail_msg = mailer.send_po_mail(cur, up.name, up.getvalue(), user.email)
+        frozen = indents.snapshot(indents.read_lines(fresh=True), indent_id) or cur
+        with st.spinner("E-mailing the SO / PO…"):
+            sent, mail_msg = mailer.send_so_mail(frozen, file_name, file_bytes, user.email,
+                                                 po_number=po_number.strip())
+        _clear_po_state(indent_id)
         _close()
-        common.flash("success", f"{indent_id} is frozen with PO {up.name} (version {v})." + note)
+        common.flash("success", f"{indent_id} is frozen with PO {po_number or file_name} (version {v})." + note)
         common.flash("success" if sent else "warning", mail_msg)
         st.rerun()
     if b[1].button("Cancel", width="stretch"):

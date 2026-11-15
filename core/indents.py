@@ -295,7 +295,11 @@ def snapshot(df: pd.DataFrame, indent_id: str, version: int | None = None) -> In
 # --------------------------------------------------------------- validation
 
 def validate(header: IndentHeader, lines: list[IndentLine], m: Masters,
-             check_date: bool = False, keep_date: str | None = None) -> list[str]:
+             check_date: bool = False, keep_date: str | None = None,
+             zero_ok: set[str] | None = None) -> list[str]:
+    """zero_ok: SKU names (casefolded) already saved on the indent; their qty
+    may be set to 0 (items are never removed from a saved indent)."""
+    zero_ok = {n.strip().casefold() for n in (zero_ok or set())}
     errors: list[str] = []
     missing = header.missing()
     if missing:
@@ -329,8 +333,9 @@ def validate(header: IndentHeader, lines: list[IndentLine], m: Masters,
             errors.append(f"Choose a variety for '{name}'.")
         if line.lot not in LOTS:
             errors.append(f"Choose a lot for '{name}'.")
-        if to_number(line.qty) <= 0:
-            errors.append(f"Qty for '{name}' must be greater than 0.")
+        if to_number(line.qty) < 0 or (to_number(line.qty) == 0 and k not in zero_ok):
+            errors.append(f"Qty for '{name}' must be greater than 0." if k not in zero_ok
+                          else f"Qty for '{name}' cannot be negative.")
         elif not float(to_number(line.qty)).is_integer():
             errors.append(f"Qty for '{name}' must be a whole number (no decimals).")
         if to_number(line.price) <= 0:
@@ -345,14 +350,19 @@ def city_code(city: str) -> str:
     return (letters[:3] or "XXX").ljust(3, "X")
 
 
-def next_indent_id(existing_ids, city: str, on: date) -> str:
+ID_PREFIX = "IN-"
+
+
+def next_indent_id(existing_ids, city: str = "", on: date | None = None) -> str:
+    """One running number for every indent, never reset by day or city:
+    IN-001, IN-002, … IN-999, IN-1000 … (indents saved before this rule keep
+    their old IND-yyyymmdd-CITY-nnnn numbers)."""
     nums = []
     for i in existing_ids:
-        m = re.search(r"-(\d{4,})$", str(i))
+        m = re.fullmatch(r"IN-(\d+)", str(i).strip())
         if m:
             nums.append(int(m.group(1)))
-    n = max(nums, default=0) + 1
-    return f"IND-{on:%Y%m%d}-{city_code(city)}-{n:04d}"
+    return f"{ID_PREFIX}{max(nums, default=0) + 1:03d}"
 
 
 def _who(user: str, creator: str) -> str:
@@ -458,18 +468,33 @@ def _check_editable(cur: IndentSnapshot | None, indent_id: str, base_version: in
                             "re-apply your changes.")
 
 
+LOCKED_FIELDS = ("city", "customer", "store", "delivery_date")
+
+
 def submit_update(indent_id: str, base_version: int, header: IndentHeader,
-                  lines: list[IndentLine], user: str) -> tuple[int, bool]:
+                  lines: list[IndentLine], user: str, po_fix: bool = False) -> tuple[int, bool]:
     """Append version N+1 and its Change_Log rows.
+    Saved indents keep their city, customer, store, delivery date and items
+    (qty may go to 0). po_fix=True: a correction to match the customer's PO,
+    allowed after the edit cutoff.
     Returns (new_version, change_log_saved)."""
     backend = get_backend()
     df = prepare(backend.read(INDENT_LINES))
     cur = snapshot(df, indent_id)
     _check_editable(cur, indent_id, base_version)
     saved_date = cur.header.delivery_date
-    if not can_edit(saved_date):
+    if not po_fix and not can_edit(saved_date):
         raise CutoffError(f"{indent_id} can no longer be edited: editing closed at "
                           f"{deadline_text(saved_date)} (delivery day cutoff).")
+    locked = [f.replace("_", " ") for f in LOCKED_FIELDS
+              if str(getattr(header, f, "")).strip() != str(getattr(cur.header, f, "")).strip()]
+    if locked:
+        raise SheetError(f"The {', '.join(locked)} of a saved indent cannot be changed.")
+    kept = {x.customer_sku_name.strip().casefold() for x in lines}
+    gone = [x.customer_sku_name for x in cur.lines if x.customer_sku_name.strip().casefold() not in kept]
+    if gone:
+        raise SheetError("Items cannot be removed from a saved indent; set their qty to 0 instead: "
+                         + ", ".join(gone) + ".")
     if not date_allowed(header.delivery_date, keep=cur.header.delivery_date):
         raise SheetError(f"The delivery date must be {date_rule_text()}.")
     dup = find_duplicate(df, header, exclude_id=indent_id)
@@ -481,8 +506,9 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
     new_v = cur.version + 1
     stamp = config.now_iso()
     creator = creator_of(df, indent_id)
+    detail = ("to match PO: " if po_fix else "") + summarize_changes(changes)
     rows = build_rows(indent_id, new_v, STATUS_SUBMITTED, stamp, user, header, lines,
-                      note=change_note("Edited", user, creator, stamp, summarize_changes(changes)))
+                      note=change_note("Edited", user, creator, stamp, detail))
     if not _append_verified(backend, rows, indent_id, new_v, stamp, user):
         clear_cache()
         raise ConflictError(f"Someone else saved {indent_id} at the same moment. "
@@ -498,12 +524,47 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
     return new_v, log_ok
 
 
+class POMismatchError(SheetError):
+    def __init__(self, message: str, rows: list[dict]):
+        super().__init__(message)
+        self.rows = rows
+
+
+def po_compare(lines: list[IndentLine], po_qty: dict) -> list[dict]:
+    """One row per indent item: indent qty, PO qty, difference, match."""
+    by = {str(k).strip().casefold(): v for k, v in (po_qty or {}).items()}
+    out = []
+    for x in lines:
+        raw = by.get(x.customer_sku_name.strip().casefold())
+        po = None if raw in (None, "") or (isinstance(raw, float) and raw != raw) else to_number(raw)
+        ind = to_number(x.qty)
+        out.append({"customer_sku_name": x.customer_sku_name, "lot": x.lot, "indent_qty": ind,
+                    "po_qty": po, "diff": None if po is None else po - ind,
+                    "ok": po is not None and abs(po - ind) < 1e-9})
+    return out
+
+
+def po_lines_text(lines: list[IndentLine]) -> str:
+    return "; ".join(f"{x.customer_sku_name} = {fmt_num(x.qty)} {x.lot}" for x in lines)
+
+
 def freeze(indent_id: str, base_version: int, po_file_name: str, user: str,
-           po_file_link: str = "") -> int:
+           po_file_link: str = "", po_qty: dict | None = None, po_number: str = "",
+           po_has_extra: bool = False) -> int:
+    """Freeze with the customer's PO. When po_qty (SKU -> qty on the PO) is
+    given, every indent item must match it, else POMismatchError."""
     backend = get_backend()
     df = prepare(backend.read(INDENT_LINES))
     cur = snapshot(df, indent_id)
     _check_editable(cur, indent_id, base_version)
+    if po_has_extra:
+        raise POMismatchError("The PO has items that are not in this indent. Edit the indent and "
+                              "add them first.", [])
+    if po_qty is not None:
+        cmp = po_compare(cur.lines, po_qty)
+        bad = [r for r in cmp if not r["ok"]]
+        if bad:
+            raise POMismatchError(f"{len(bad)} item(s) on the PO do not match the indent.", cmp)
     new_v = cur.version + 1
     stamp = config.now_iso()
     rows = build_rows(indent_id, new_v, STATUS_FROZEN, stamp, user, cur.header, cur.lines,
@@ -515,7 +576,9 @@ def freeze(indent_id: str, base_version: int, po_file_name: str, user: str,
     backend.append_dicts(PO_FREEZE, [{
         "indent_id": indent_id, "version": new_v, "po_file_name": po_file_name,
         "po_customer": cur.header.customer, "po_store": cur.header.store,
-        "confirmed_by": user, "confirmed_at": stamp, "po_file_link": po_file_link}])
+        "confirmed_by": user, "confirmed_at": stamp, "po_file_link": po_file_link,
+        "po_number": po_number, "po_total_qty": sum(to_number(x.qty) for x in cur.lines),
+        "po_lines": po_lines_text(cur.lines)}])
     try:
         backend.append_dicts(CHANGE_LOG, changelog.to_rows(
             [{"change_type": "header_changed", "customer_sku_name": "", "field": "status",

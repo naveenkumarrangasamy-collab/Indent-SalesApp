@@ -172,12 +172,18 @@ def master_cache_seconds() -> int:
         return 300
 
 
-def session_days() -> int:
-    """How long a browser stays signed in (refresh / closing the tab keeps you in)."""
+def session_hours() -> int:
+    """How long a sign-in lasts (refresh / closing the tab keeps you in); after
+    that the PIN is asked again. `session_hours` (default 24); an old
+    `session_days` setting still works."""
     try:
-        return max(1, int(get("session_days", 7)))
+        if get("session_hours", None) not in (None, ""):
+            return max(1, int(float(get("session_hours"))))
+        if get("session_days", None) not in (None, ""):
+            return max(1, int(float(get("session_days")))) * 24
     except (TypeError, ValueError):
-        return 7
+        pass
+    return 24
 
 
 def now_ist() -> datetime:

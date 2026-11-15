@@ -243,15 +243,24 @@ def _session_sig(email: str, expires: int, pin_hash: str) -> str:
     return base64.urlsafe_b64encode(hmac.new(key, msg, hashlib.sha256).digest()).decode().rstrip("=")
 
 
-def make_session_token(access: pd.DataFrame, email: str, days: int | None = None) -> str:
+def make_session_token(access: pd.DataFrame, email: str, days: float | None = None) -> str:
     """Token kept in a browser cookie so a refresh does not sign the user out.
     It is tied to the user's current PIN: changing or resetting the PIN ends it."""
     email = norm_email(email)
     row = access_row(access, email)
     pin_hash = str(row.get("PIN_Hash", "")) if row is not None else ""
-    expires = int(time.time()) + 86400 * (days or config.session_days())
+    secs = 86400 * days if days is not None else 3600 * config.session_hours()
+    expires = int(time.time() + secs)
     raw = f"{email}|{expires}|{_session_sig(email, expires, pin_hash)}"
     return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+
+
+def session_token_expiry(token: str) -> int:
+    try:
+        raw = base64.urlsafe_b64decode(str(token) + "=" * (-len(str(token)) % 4)).decode()
+        return int(raw.split("|")[1])
+    except (ValueError, IndexError, UnicodeDecodeError):
+        return 0
 
 
 def user_from_session_token(access: pd.DataFrame, token: str) -> User | None:

@@ -16,6 +16,8 @@ INDENT_LINES = "Indent_Lines"
 CHANGE_LOG = "Change_Log"
 PO_FREEZE = "PO_Freeze"
 DRAFTS = "Drafts"
+MAIL_RECIPIENTS = "Mail_Recipients"
+MAIL_LOG = "Mail_Log"
 
 TABS: dict[str, list[str]] = {
     # Input tabs (maintained by the team). Only used when the sheet has no
@@ -35,12 +37,18 @@ TABS: dict[str, list[str]] = {
     CHANGE_LOG: ["changed_at", "indent_id", "from_version", "to_version", "changed_by",
                  "change_type", "customer_sku_name", "field", "old_value", "new_value"],
     PO_FREEZE: ["indent_id", "version", "po_file_name", "po_customer", "po_store",
-                "confirmed_by", "confirmed_at", "po_file_link"],
+                "confirmed_by", "confirmed_at", "po_file_link", "po_number", "po_total_qty",
+                "po_lines"],
     DRAFTS: ["draft_id", "user_email", "updated_at", "payload_json"],
+    # Who gets which e-mail, and which cities / customers / stores they see
+    # (empty = all). Edited from the Access page.
+    MAIL_RECIPIENTS: ["Email", "Name", "Team", "Hourly_Indent", "SO_PO", "Cities", "Customers",
+                      "Stores", "Active", "Updated_At", "Updated_By"],
+    MAIL_LOG: ["sent_at", "kind", "slot", "to", "status", "detail"],
 }
 
 MASTER_TABS = [SKU_MAP, STORE_MAP, VARIETIES, ACCESS]
-OUTPUT_TABS = [INDENT_LINES, CHANGE_LOG, PO_FREEZE, DRAFTS]
+OUTPUT_TABS = [INDENT_LINES, CHANGE_LOG, PO_FREEZE, DRAFTS, MAIL_RECIPIENTS, MAIL_LOG]
 
 DEFAULT_CUSTOMERS = ["Swiggy", "Zomato", "Zepto", "Firstclub", "Namdhari"]
 LOTS = ["Kg", "Pcs", "Tray", "Box", "Pack"]  # "Pack" = gram packs (was "gms")

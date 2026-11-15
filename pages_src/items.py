@@ -149,7 +149,8 @@ def _add_form(m: Masters) -> None:
 
 # ------------------------------------------------------------ lines table
 
-_ROW_W = [1.0, 2.6, 0.9, 0.6, 0.8, 0.6, 0.8, 0.9, 0.85, 0.95]
+_ROW_W = [1.0, 2.5, 0.9, 0.6, 0.8, 0.6, 0.8, 0.9, 1.0, 0.8]
+SAVED_HELP = "Items already saved on the indent cannot be removed. To drop it, set its qty to 0."
 
 
 def _lines_table(m: Masters) -> None:
@@ -181,8 +182,11 @@ def _lines_phone(m: Masters, lines) -> None:
                            width="stretch"):
                 st.session_state["pending_edit"] = x.customer_sku_name
                 st.rerun()
-            if c[1].button("Delete", icon=":material/delete:", key=f"it_md_{i}_{x.customer_sku_name}",
-                           width="stretch"):
+            if state.is_saved_line(x.customer_sku_name):
+                c[1].button("Saved item", icon=":material/lock:", key=f"it_ml_{i}_{x.customer_sku_name}",
+                            disabled=True, width="stretch", help=SAVED_HELP)
+            elif c[1].button("Delete", icon=":material/delete:", key=f"it_md_{i}_{x.customer_sku_name}",
+                             width="stretch"):
                 st.session_state["pending_remove"] = [x.customer_sku_name]
                 st.rerun()
 
@@ -209,8 +213,11 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
                        width="stretch", help="Change qty, price or variety"):
             st.session_state["pending_edit"] = x.customer_sku_name
             st.rerun()
-        if c[9].button("Delete", icon=":material/delete:", key=f"it_d_{i}_{x.customer_sku_name}",
-                       width="stretch", help="Remove this item"):
+        if state.is_saved_line(x.customer_sku_name):
+            c[9].markdown("<span class='mt-muted' title='Saved items cannot be removed; set qty to 0'>"
+                          "🔒 saved</span>", unsafe_allow_html=True)
+        elif c[9].button("Delete", icon=":material/delete:", key=f"it_d_{i}_{x.customer_sku_name}",
+                         width="stretch", help="Remove this item"):
             st.session_state["pending_remove"] = [x.customer_sku_name]
             st.rerun()
 
@@ -228,17 +235,24 @@ def _edit_item(m: Masters) -> None:
                 f"{' · ' + size if size else ''}</span>", unsafe_allow_html=True)
     varieties = m.varieties_for(line.parent_sku)
     fixed = m.variety_from_name(line.parent_sku, name)
+    saved = state.is_saved_line(name)
     variety = ""
     if fixed:
         variety = st.selectbox("Variety", [fixed], index=0, disabled=True,
                                help="Taken from the customer SKU name; cannot be changed")
+    elif saved and line.variety:
+        variety = st.selectbox("Variety", [line.variety], index=0, disabled=True,
+                               help="On a saved indent only qty and price can be changed")
     elif varieties:
         variety = st.selectbox("Variety", varieties,
                                index=varieties.index(line.variety) if line.variety in varieties else None,
                                placeholder="Choose")
     c = st.columns(2)
-    qty = c[0].number_input("Qty", min_value=1, step=1, format="%d",
-                            value=max(1, int(line.qty)) if float(line.qty).is_integer() else 1)
+    low = 0 if saved else 1
+    qty = c[0].number_input("Qty", min_value=low, step=1, format="%d",
+                            value=max(low, int(line.qty)) if float(line.qty).is_integer() else low,
+                            help="Set 0 when there is no indent for this item (saved items stay on the indent)"
+                            if saved else "Whole numbers only")
     price = c[1].number_input("Price / lot", min_value=0.01, step=1.0,
                               value=float(line.price) if line.price > 0 else 1.0)
     new = IndentLine(parent_sku=line.parent_sku, customer_sku_name=name, variety=variety or "",
@@ -253,6 +267,32 @@ def _edit_item(m: Masters) -> None:
     if b[1].button("Cancel", width="stretch"):
         st.session_state.pop("pending_edit", None)
         st.rerun()
+
+
+def _po_fix_banner() -> None:
+    fix = state.po_fix() or {}
+    cmp = indents.po_compare(state.lines(), fix.get("po_qty", {}))
+    bad = [r for r in cmp if not r["ok"]]
+    with st.container(border=True, key="mt_po_fix"):
+        if not bad:
+            st.success("All items now match the PO. Press **Update indent** to save, then upload the PO.")
+            return
+        st.error(f"**Match the indent to the customer's PO** {fix.get('po_number') or ''}: "
+                 f"{len(bad)} item(s) differ.")
+        st.dataframe(pd.DataFrame([{
+            "Customer SKU Name": r["customer_sku_name"], "Lot": r["lot"],
+            "Indent qty": fmt_num(r["indent_qty"]),
+            "PO qty": "not entered" if r["po_qty"] is None else fmt_num(r["po_qty"]),
+        } for r in bad]), hide_index=True, width="stretch")
+        if st.button("Set these quantities to the PO", icon=":material/sync:", key="po_fix_apply",
+                     disabled=all(r["po_qty"] is None for r in bad)):
+            by = {r["customer_sku_name"]: r["po_qty"] for r in cmp if r["po_qty"] is not None}
+            new = [IndentLine(**{**x.to_dict(), "qty": float(by.get(x.customer_sku_name, x.qty))})
+                   for x in state.lines()]
+            state.set_lines(new, structural=True)
+            st.rerun()
+        st.caption("Or use **Edit** on each item. If the PO has an item that is not on the indent, "
+                   "add it with **Add item**.")
 
 
 def _totals() -> None:
@@ -387,8 +427,8 @@ def _fill_fixed_varieties(m: Masters) -> None:
 
 def _check(m: Masters) -> list[str]:
     _fill_fixed_varieties(m)
-    errors = indents.validate(state.header(), state.lines(), m, check_date=True,
-                              keep_date=state.keep_date())
+    errors = indents.validate(state.header(), state.lines(), m, check_date=not state.po_fix(),
+                              keep_date=state.keep_date(), zero_ok=state.saved_names())
     u = st.session_state.get("user") or {}
     city = state.header().city
     if u.get("role") != "owner" and u.get("cities") and \
@@ -428,16 +468,24 @@ def _update(m: Masters, user: User) -> None:
     with st.spinner("Saving the new version…"):
         try:
             new_v, log_ok = indents.submit_update(ind["indent_id"], ind["base_version"], hdr, lines,
-                                                  user.email)
+                                                  user.email, po_fix=bool(ind.get("po_fix")))
         except SheetError as e:
             state.autosave(force=True)
             st.error(f"Not updated. {e}")
             return
     st.session_state.pop("review_open", None)
+    fix = ind.get("po_fix")
     state.clear_after_submit()
     msg = f"Indent **{ind['indent_id']}** updated to version {new_v}."
     if not log_ok:
         msg += " (The change log could not be written; the new version is saved.)"
+    if fix:
+        # back to the PO upload with what was typed before
+        from pages_src import indent_actions
+        st.session_state.setdefault("po_prefill", {})[ind["indent_id"]] = fix
+        common.flash("success", msg + " Now check the PO again and upload it.")
+        st.session_state[indent_actions.KEY] = ("po", ind["indent_id"])
+        st.switch_page(common.PAGES["po"])
     common.flash("success", msg)
     st.rerun()
 
@@ -457,6 +505,8 @@ def render(m: Masters, user: User) -> None:
     else:
         _add_form(m)
 
+    if state.po_fix():
+        _po_fix_banner()
     st.markdown("**Items in this indent**")
     _lines_table(m)
     _totals()
@@ -464,7 +514,8 @@ def render(m: Masters, user: User) -> None:
     st.divider()
     if ind["mode"] == "edit":
         saved_date = state.keep_date() or ""
-        open_ = indents.can_edit(saved_date)
+        fix = state.po_fix()
+        open_ = indents.can_edit(saved_date) or bool(fix)
         deadline = indents.deadline_text(saved_date)
         changed = state.changed_vs_base()
         c = st.columns([1, 1, 2])
@@ -483,8 +534,12 @@ def render(m: Masters, user: User) -> None:
         if not open_:
             st.error(f"Editing of {ind['indent_id']} closed at {deadline} (2 PM on the delivery day). "
                      "It can no longer be changed.")
+        elif fix:
+            c[2].caption("Correcting the indent to match the customer's PO. After **Update indent** "
+                         "you go back to the PO upload.")
         elif not changed:
-            c[2].caption(f"Nothing changed yet. Editable until {deadline}.")
+            c[2].caption(f"Nothing changed yet. Editable until {deadline}. Saved items cannot be "
+                         "removed; set qty to 0 instead.")
         else:
             c[2].caption(f"Editable until {deadline}.")
     else:

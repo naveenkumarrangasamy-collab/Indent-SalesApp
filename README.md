@@ -9,13 +9,14 @@ Built from `MT_INDENT_BUILD_SPEC.md`, with one change: users sign in with their 
 | Screen | Who | What |
 |---|---|---|
 | Sign in | everyone | Email + PIN. Users who are not in `Access` or are revoked are blocked. 5 wrong PINs lock the email for 15 min. |
-| Home (opens first) | everyone | **Daily operations** for **Today or Tomorrow**: **Create indent** and **Upload PO** buttons at the top (Upload PO shows how many indents are waiting); tiles for stores placed, PO received, waiting for PO, not placed yet and qty; a progress bar; a **Status board** (one card per customer, a chip per store: grey not placed, amber placed and waiting for PO, green PO done, red deleted); a **City × Customer** table; and **Indents to act on** (cards with Edit / Delete / PO). Users see only their cities and stores. |
+| Home (opens first) | everyone | **Daily operations** for **Today or Tomorrow**: **Create indent** and **Upload PO** buttons at the top (Upload PO shows how many indents are waiting); tiles for stores placed, PO received, waiting for PO, not placed yet and qty; a progress bar; a **Status board** (one card per customer, a chip per store: grey not placed, amber placed and waiting for PO, green PO done, red deleted); a **City × Customer** table; and **Indents to act on** (cards with Edit / Upload PO). Users see only their cities and stores. |
 | Create indent | everyone | The delivery card is the heart of the page: delivery day, then **customer pills**, then **store pills** for that customer ("✓ placed" / "✓ PO done" on stores that already have an indent), then expected time. The items appear below once a store is chosen. Draft autosaves to the `Drafts` tab and is restored at the next sign-in. |
-| Upload PO | everyone | Every indent the user can see, as cards: **waiting for PO first** (oldest delivery first, 🔴 when the delivery date has passed), then PO done with the PO file name, date and who uploaded it. Filter by Waiting / PO done / All, delivery date, city, customer, or search a store or indent number. **Items** shows the lines to check before uploading; **Upload PO** asks for the PDF, confirms customer and store, freezes the indent and e-mails the PDF. A PO can be uploaded after the 2 PM edit cutoff. |
+| Upload PO | everyone | Every indent the user can see, as cards: **waiting for PO first** (oldest delivery first, 🔴 when the delivery date has passed), then PO done with the PO file name, date and who uploaded it. Filter by Waiting / PO done / All, delivery date, city, customer, or search a store or indent number. **Items** shows the lines to check before uploading; **Upload PO** asks for the PO number, the PDF and **the qty of every item as on the PO**. If any item differs, the upload is blocked and **Edit indent to match PO** opens the indent (allowed even after the 2 PM cutoff); after **Update indent** the app comes back to the upload with the PDF and quantities kept. When everything matches, the indent is frozen and the SO / PO e-mail goes out at once. |
+| Hourly tracker | everyone | Filters: delivery date, city, customer. **By customer** and **By store** tables with the total qty at every hour **8 AM–2 PM** on the delivery day (plus *Now* while the day is open): 🟩 went up, 🟥 went down, 🟦 indent placed, and the change since 8 AM. Click a customer or store row to see the qty per item at each hour and every save (who, when, what) up to the hour you pick. Built from the saved versions, so it also works for past days. |
 | My indents (All indents for the owner) | everyone | List, open, correct (new version), last 10 versions with Load, change log, PO upload and freeze. |
 | City / SKU report | everyone | Total qty per City → Customer → SKU with lot, lot size and Spec-Size; PDF and CSV. |
 | Production sheet | everyone | **One row per city** where Parent SKU, Customer SKU name, Variety, Spec-Size, Lot and Lot size match, **clubbed across customers and stores** (Customers and Indents columns show what was added up); filter by delivery date, city, customer; PDF, CSV, and (owner) **Write to Google Sheet** which replaces the `Production_Sheet` tab. |
-| Access | owner | Add users with an initial PIN, reset PINs, revoke/restore, change role, create missing tabs, SKU-mapping source and master-data checks. |
+| Access | owner | **Users & PINs** (add users with an initial PIN, reset PINs, revoke/restore, role, cities, stores); **E-mail recipients** (ground / central team, which e-mails, cities / customers / stores they see); **E-mail sending** (mail server test, hourly e-mail *Send now*, preview of the 4 files, the e-mail log); **Sheet setup & checks**. |
 
 Every user can change their own PIN from the sidebar.
 
@@ -23,25 +24,28 @@ Every user can change their own PIN from the sidebar.
 
 - **Phones**: every page works on a phone. Rows of items and indents turn into cards with full-width buttons, tiles go two per row, and the sidebar folds into the » menu.
 
-- **Staying signed in**: after signing in, the browser keeps a signed cookie for 7 days (`session_days`), so a refresh or closing and reopening the tab returns to the same page without the PIN. **Sign out**, a PIN change/reset or revoking access ends it.
+- **Staying signed in**: a sign-in lasts **24 hours** (`session_hours`). The browser keeps it (cookie + local storage, since Streamlit Cloud does not pass cookies to the app), so a refresh or closing and reopening the tab returns to the same page without the PIN. After 24 hours the PIN is asked again. **Sign out**, a PIN change/reset or revoking access ends it.
 - **Google Sheet data** (SKUs, stores, varieties, access) is re-read every **5 minutes** (`master_refresh_minutes`), or at once with ↻ Refresh data.
-- **Edit / Delete everywhere**: items on the Indent page, items in All indents, and whole indents (home screen and All indents). Deleting a whole indent marks it **Cancelled** (a new version): it leaves production, frees the store/date, and its history stays in the sheet.
+- **Indent numbers** run on for ever: **IN-001, IN-002, …** (never reset by day or city), so every indent number is unique. Indents saved before this rule keep their old IND-yyyymmdd-CITY-nnnn numbers.
+- **Nothing is deleted once saved**: an indent, or an item on it, cannot be removed after submitting. On a saved indent only **qty and price** can change (and the expected time); to drop an item set its **qty to 0** (it then leaves production and the reports). The delivery day, city, customer and store of a saved indent are locked. Before the first submit, items can still be removed from the draft.
 - **Add item**: choosing a different parent SKU clears the SKU, variety, qty and price of that line; choosing a different SKU clears variety, qty and price.
-- **PO e-mail**: on Confirm, the PO PDF is e-mailed to rakeshdhasa@gmail.com (`po_mail_to`, `po_mail_cc`) with the **customer name as the subject** and the indent details in the body. Needs `smtp_user` + `smtp_password` (a Gmail App password) in the secrets; without them the indent is still frozen and the app says the e-mail was not sent.
-- **City and store access**: on the Access page each sales person can be given one or more **cities** and, optionally, specific **stores / facilities** (`Stores` column of the Access tab, separated by `;`). They see only those cities' customers and stores (only the listed stores when stores are given), place indents only there, and see, edit and delete every indent there, whoever created it. A sales person with neither sees only their own indents; owners see everything.
+- **SO / PO e-mail** (central team): the moment a PO is uploaded (any time of day), to every *E-mail recipient* with **SO / PO** on whose cities / customers / stores cover that store, plus `po_mail_to` (default rakeshdhasa@gmail.com when nobody is set up). Subject *Customer - SO placed - Store - IN-… - PO …*; body with the indent and PO details; attached: the customer's PO, the SO as **PDF** and **Excel**.
+- **Hourly indent e-mail** (ground team): every hour **8 AM–2 PM IST** for today's deliveries (`hourly_mail_days`, `hourly_mail_from`, `hourly_mail_to`), to every recipient with **Hourly indent** on, showing only their cities / customers / stores: section 1 the overall indent (all SKUs, clubbed per city), section 2 the customer-level indent (customer → store → items), plus **4 files**: overall PDF, customer PDF, overall Excel, customer Excel. Sent by the GitHub schedule (see *Hourly e-mail setup* below); each person gets each hour once (Mail_Log).
+- E-mail needs `smtp_user` + `smtp_password` (a Gmail App password) in the secrets; without them the indent is still frozen and the app says the e-mail was not sent.
+- **City and store access**: on the Access page each sales person can be given one or more **cities** and, optionally, specific **stores / facilities** (`Stores` column of the Access tab, separated by `;`). They see only those cities' customers and stores (only the listed stores when stores are given), place indents only there, and see and edit every indent there, whoever created it. A sales person with neither sees only their own indents; owners see everything.
 - **change_note** (Indent_Lines): every version's rows carry one note: *Created by …*, *Edited by … (same user / other user; created by …): what changed*, *Deleted by …*, *PO uploaded by …*.
 - **Open indents first**: All indents, the home screen and "Indents included" list open (Submitted) indents on top, then PO-frozen, then deleted.
-- **Upload PO** (home screen or All indents): PDF only, asks "Is this PO for customer X and store Y?", then freezes the indent. To keep the PDF itself, set `po_drive_folder_id` to a folder in a **Shared drive** shared with the service account as Content manager, and enable the Google Drive API; the link is saved in PO_Freeze. Without it only the file name is saved.
+- **Upload PO** (Upload PO page, home screen or All indents): PDF only; every item's PO qty must equal the indent qty, then the indent is frozen. PO number, total qty and the item quantities are saved in PO_Freeze. To keep the PDF itself, set `po_drive_folder_id` to a folder in a **Shared drive** shared with the service account as Content manager, and enable the Google Drive API; the link is saved in PO_Freeze. Without it only the file name is saved.
 
-- **One indent per store per delivery date.** Choosing a store and date that already have an indent shows it, blocks Continue and offers **Edit IND-…** instead; a correction cannot be moved onto another indent's store and date either.
+- **One indent per store per delivery date.** Choosing a store and date that already have an indent shows it, blocks Continue and offers **Edit IN-…** instead; a correction cannot be moved onto another indent's store and date either.
 - **Delivery date** is **today (T) or tomorrow (T+1)** (`delivery_days_ahead`), and only days still open for edits are offered (after 2 PM today only tomorrow is shown); a correction may keep its saved date.
 - **Expected delivery time**: 10:00 AM to 8:00 PM. Pick a 30-minute slot, or type a time in that range (6:45 PM, 18:45) and press Enter. Change with `delivery_from` / `delivery_to` in the secrets.
 - **Qty** is a whole number only. **Lot** (Kg, Pcs, Pack for gm packs, Box, Tray) and **Lot size** (e.g. "2 Pcs", "200 gm", "17.5 Kg Box") come from the customer SKU name and cannot be edited; Lot size is also saved in Indent_Lines.
 - **Variety** is asked only for **Apple** (`variety_parents` in the secrets). When the customer SKU name contains a variety it is **taken from the name and locked** (Royal Gala → Gala, Granny Smith, Queen, Red Delicious → RD, BH-Fuji → Fuji). Names without one (Apple Snacky, Daily Apple, Washington) keep the variety box editable. The list comes from the *Apple Varity* tab; while that tab is empty, the standard list is used (Gala, Granny Smith, Queen, RD, Pink Lady, Crispy Pink, Braeburn, Sonya, Fuji, Jazz).
-- **All indents**: each item has **Edit** (qty, price, variety) and **Delete** buttons, both with a confirmation; each saves a new version and a Change_Log entry (within the edit window).
+- **All indents**: each item has **Edit** (qty and price; qty may be 0); each change saves a new version and a Change_Log entry (within the edit window).
 - **Submit / Update** opens a review box with everything entered (and, for corrections, the list of changes); nothing is saved until **Confirm**.
-- **Removing an item, clearing the form or discarding changes** asks for confirmation first.
-- **Edit window**: an indent can be corrected or deleted until **2:00 PM IST on its delivery date** (delivery 16 Nov → editable until 16 Nov 2:00 PM), whenever it was created. After that, Edit/Delete/Update are disabled and the save is refused. Change with `edit_cutoff_hour` (and `edit_cutoff_days`, days after the delivery date, default 0) in the secrets.
+- **Removing an unsaved item, clearing the form or discarding changes** asks for confirmation first.
+- **Edit window**: an indent can be corrected until **2:00 PM IST on its delivery date** (delivery 16 Nov → editable until 16 Nov 2:00 PM), whenever it was created. After that, Edit/Update are disabled and the save is refused, except a correction to match the customer's PO (from the PO upload). Change with `edit_cutoff_hour` (and `edit_cutoff_days`, days after the delivery date, default 0) in the secrets.
 - **Spec-Size** (from *Mapping Whole*, the active origin's size) is a column on both production reports. Origin itself stays hidden. Set `show_spec = true` in the secrets to bring it back.
 - If the app is **not connected to the Google Sheet** (secrets missing or wrong), every page shows a red banner with the exact reason.
 
@@ -50,7 +54,7 @@ Every user can change their own PIN from the sidebar.
 In the Google Sheet (the owner also gets an **📄 Open Google Sheet** button in the sidebar):
 - **Indent_Lines**: every submitted version of every indent, one row per item. Filter `indent_id`; the highest `version` is current.
 - **Change_Log**: one row per change (who, when, from/to version, field, old → new). Filter `indent_id` for an indent's edit history.
-- **PO_Freeze**: which PO froze which indent.
+- **PO_Freeze**: which PO froze which indent, with the PO number, total qty and each item's qty.
 These tabs are created on the first submit (or with **Access → Create missing tabs**).
 
 ## Deploy on Streamlit Community Cloud
@@ -72,6 +76,17 @@ These tabs are created on the first submit (or with **Access → Create missing 
    2. Check **SKU mapping** on the same page: it should say *live from 'All Cux City' + 'Mapping Whole'*.
    3. Stores come from the **Customer List** tab; add a row there for every new store.
    4. Add the sales users under **Users & PINs**, and share each PIN privately.
+
+## Hourly e-mail setup (one time)
+
+A Streamlit Cloud app sleeps when nobody has it open, so the hourly e-mail is sent by a GitHub schedule in this repository (`.github/workflows/hourly-indent-mail.yml` → `scripts/hourly_mail.py`), every hour from 8 AM to 2 PM IST.
+
+1. GitHub → this repository → **Settings → Secrets and variables → Actions → New repository secret**.
+2. Name `STREAMLIT_SECRETS`; value: **the same text** as in Streamlit Cloud → Manage app → Settings → Secrets (sheet, service-account key, `smtp_user`, `smtp_password`, …).
+3. **Actions** tab → *Hourly indent e-mail* → **Run workflow** (tick *force*) to test once.
+4. Add the ground team on **Access → E-mail recipients** with *Hourly indent e-mail* on.
+
+GitHub may start a scheduled run a few minutes late; it still sends that hour once. **Access → E-mail sending → Send now** sends by hand at any time.
 
 ## Google Sheet tabs
 
@@ -98,6 +113,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Varieties**: Parent SKU, Variety. Optional extra varieties; a parent with varieties (today: Apple) makes variety required.
 - **Access**: Email, Name, Role (`owner`/`sales`), Status (`active`/`revoked`), PIN_Hash, Updated_At, Updated_By, City, Stores. Manage it from the Access page. PINs are stored only as salted, peppered PBKDF2 hashes.
 - **Indent_Lines, Change_Log, PO_Freeze**: append-only output, as in the spec. The current version of an indent is its highest `version`. Freezing appends one more version with `status = Frozen`.
+- **Mail_Recipients**: Email, Name, Team (Ground / Central), Hourly_Indent, SO_PO (Y/N), Cities, Customers, Stores (`;`-separated, empty = all), Active. Edited from Access → E-mail recipients.
+- **Mail_Log**: one row per e-mail sent or failed (hourly e-mails are never sent twice for the same hour and person).
 - **Production_Sheet**: written by the owner from the Production page (Write to Google Sheet); replaced each time.
 - **Drafts**: one row per user, updated in place. Please don't sort or delete rows in this tab while people are working.
 

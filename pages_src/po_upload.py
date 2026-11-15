@@ -84,7 +84,7 @@ def _card(r, lines: pd.DataFrame, po: dict, today: str) -> None:
             st.markdown(f"<div class='mt-muted'>✅ PO {label} · {escape(when)}{' · ' + by if by else ''}</div>",
                         unsafe_allow_html=True)
         c = st.columns(2)
-        with c[0].popover(f"{r.lines} items", icon=":material/list:", width="stretch"):
+        with c[0].popover(f"{r.lines} item{'s' if r.lines != 1 else ''}", icon=":material/list:", width="stretch"):
             st.markdown(f"**{r.indent_id}** · {r.customer} · {r.store} · delivery {r.delivery_date}")
             _items_table(lines, r.indent_id)
         if waiting:
@@ -141,7 +141,7 @@ def render(user: User) -> None:
                          format_func=lambda d: d if d == "All dates" else _fmt_day(d))
     cities = sorted(set(base["city"].astype(str)))
     city = f[1].selectbox("City", ["All cities"] + cities, key="po_city") if len(cities) > 1 else None
-    find = f[2].text_input("Search store or indent", key="po_find", placeholder="e.g. Nelamangala or 0003")
+    find = f[2].text_input("Search store or indent", key="po_find", placeholder="e.g. Nelamangala or IN-012")
 
     rows = base
     if day != "All dates":

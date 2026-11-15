@@ -1,6 +1,8 @@
 """Delivery choices at the top of the Indent page: day, city, customer, store, time."""
 from __future__ import annotations
 
+from html import escape
+
 from datetime import date, time
 
 import streamlit as st
@@ -287,68 +289,78 @@ def render(m: Masters) -> bool:
     ind = state.get()
 
     with st.container(border=True, key="mt_delivery_card"):
-        # 1. Delivery day
-        days = _date_options()
-        if hdr.delivery_date and hdr.delivery_date not in days:
-            state.set_header_field("delivery_date", "")
-            hdr = state.header()
-        if not hdr.delivery_date and days and ind["mode"] != "edit":
-            state.set_header_field("delivery_date", days[0])   # first open day, ready to use
-            hdr = state.header()
-        k = _k("day")
-        st.segmented_control("Delivery day", days, default=hdr.delivery_date or None, key=k,
-                             format_func=_fmt_day, on_change=_on_pick, args=(k, "delivery_date"))
-        today = config.now_ist().date()
-        if today.isoformat() not in days:
-            st.caption(f"Orders for today closed at {indents.deadline_text(today.isoformat())[-8:]}. "
-                       "Next delivery day is shown.")
-
-        # 2. City (only asked when the user has more than one)
-        cities = _my_cities(m)
-        if hdr.city and hdr.city not in cities and ind["mode"] == "edit":
-            cities = cities + [hdr.city]
-        if not cities:
-            st.warning("No city is available to you yet. Ask the indent owner to check your access.")
-            return False
-        if len(cities) == 1 and hdr.city != cities[0]:
-            _on_pick_value("city", cities[0])
-            hdr = state.header()
-        if len(cities) > 1:
-            k = _k("city")
-            st.pills("City", cities, default=hdr.city or None, key=k, on_change=_on_pick,
-                     args=(k, "city"))
+        if ind["mode"] == "edit":
+            # a saved indent keeps its day, city, customer and store; only the time can change
+            st.markdown(
+                "<div class='mt-strip'>"
+                f"<span><b>Delivery</b>{escape(_fmt_day(hdr.delivery_date))}</span>"
+                f"<span><b>City</b>{escape(hdr.city)}</span>"
+                f"<span><b>Customer</b>{escape(hdr.customer)}</span>"
+                f"<span><b>Store</b>{escape(hdr.store)}</span></div>", unsafe_allow_html=True)
+            st.caption("🔒 Delivery day, city, customer and store of a saved indent cannot be changed.")
         else:
-            st.markdown(f"<span class='mt-muted'>City</span>&nbsp; <b>{cities[0]}</b>",
-                        unsafe_allow_html=True)
+            # 1. Delivery day
+            days = _date_options()
+            if hdr.delivery_date and hdr.delivery_date not in days:
+                state.set_header_field("delivery_date", "")
+                hdr = state.header()
+            if not hdr.delivery_date and days and ind["mode"] != "edit":
+                state.set_header_field("delivery_date", days[0])   # first open day, ready to use
+                hdr = state.header()
+            k = _k("day")
+            st.segmented_control("Delivery day", days, default=hdr.delivery_date or None, key=k,
+                                 format_func=_fmt_day, on_change=_on_pick, args=(k, "delivery_date"))
+            today = config.now_ist().date()
+            if today.isoformat() not in days:
+                st.caption(f"Orders for today closed at {indents.deadline_text(today.isoformat())[-8:]}. "
+                           "Next delivery day is shown.")
 
-        # 3. Customer
-        customers = _my_customers(m, hdr.city)
-        if hdr.customer and hdr.customer not in customers and ind["mode"] == "edit":
-            customers = customers + [hdr.customer]
-        k = _k("customer")
-        st.pills("Customer", customers, default=hdr.customer or None, key=k, on_change=_on_pick,
-                 args=(k, "customer"), disabled=not hdr.city)
-
-        # 4. Store (shows which ones already have an indent that day)
-        if hdr.customer:
-            stores = _my_stores(m, hdr.city, hdr.customer)
-            if hdr.store and hdr.store not in stores and ind["mode"] == "edit":
-                stores = stores + [hdr.store]
-            placed = _placed_map(hdr.delivery_date, hdr.city, hdr.customer)
-            mine = ind["indent_id"] if ind["mode"] == "edit" else ""
-
-            def store_label(x: str) -> str:
-                info = placed.get(" ".join(x.split()).casefold())
-                if not info or info[0] == mine:
-                    return x
-                return f"{x}  ✓ {'PO done' if info[1] == 'Frozen' else 'placed'}"
-
-            if stores:
-                k = _k("store")
-                st.pills("Store", stores, default=hdr.store or None, key=k, format_func=store_label,
-                         on_change=_on_pick, args=(k, "store"))
+            # 2. City (only asked when the user has more than one)
+            cities = _my_cities(m)
+            if hdr.city and hdr.city not in cities and ind["mode"] == "edit":
+                cities = cities + [hdr.city]
+            if not cities:
+                st.warning("No city is available to you yet. Ask the indent owner to check your access.")
+                return False
+            if len(cities) == 1 and hdr.city != cities[0]:
+                _on_pick_value("city", cities[0])
+                hdr = state.header()
+            if len(cities) > 1:
+                k = _k("city")
+                st.pills("City", cities, default=hdr.city or None, key=k, on_change=_on_pick,
+                         args=(k, "city"))
             else:
-                st.info(f"No stores mapped for {hdr.customer} in {hdr.city} (Customer List tab).")
+                st.markdown(f"<span class='mt-muted'>City</span>&nbsp; <b>{cities[0]}</b>",
+                            unsafe_allow_html=True)
+
+            # 3. Customer
+            customers = _my_customers(m, hdr.city)
+            if hdr.customer and hdr.customer not in customers and ind["mode"] == "edit":
+                customers = customers + [hdr.customer]
+            k = _k("customer")
+            st.pills("Customer", customers, default=hdr.customer or None, key=k, on_change=_on_pick,
+                     args=(k, "customer"), disabled=not hdr.city)
+
+            # 4. Store (shows which ones already have an indent that day)
+            if hdr.customer:
+                stores = _my_stores(m, hdr.city, hdr.customer)
+                if hdr.store and hdr.store not in stores and ind["mode"] == "edit":
+                    stores = stores + [hdr.store]
+                placed = _placed_map(hdr.delivery_date, hdr.city, hdr.customer)
+                mine = ind["indent_id"] if ind["mode"] == "edit" else ""
+
+                def store_label(x: str) -> str:
+                    info = placed.get(" ".join(x.split()).casefold())
+                    if not info or info[0] == mine:
+                        return x
+                    return f"{x}  ✓ {'PO done' if info[1] == 'Frozen' else 'placed'}"
+
+                if stores:
+                    k = _k("store")
+                    st.pills("Store", stores, default=hdr.store or None, key=k, format_func=store_label,
+                             on_change=_on_pick, args=(k, "store"))
+                else:
+                    st.info(f"No stores mapped for {hdr.customer} in {hdr.city} (Customer List tab).")
 
         # 5. Expected delivery time
         c5, c6 = st.columns([1, 2])
@@ -360,7 +372,9 @@ def render(m: Masters) -> bool:
                      accept_new_options=True, on_change=_on_time, args=(k,),
                      help="Between 10:00 AM and 8:00 PM. Pick a 30-minute slot, or type a time "
                           "(6:45 PM, 18:45) and press Enter")
-        if hdr.delivery_date:
+        if ind["mode"] == "edit" and ind.get("po_fix"):
+            c6.caption("Correcting this indent to match the customer's PO (allowed after the 2 PM cutoff).")
+        elif hdr.delivery_date:
             c6.caption(f"Edits allowed until **{indents.deadline_text(hdr.delivery_date)}** "
                        "(2 PM on the delivery day).")
 

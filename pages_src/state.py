@@ -27,7 +27,7 @@ WIDGET_PREFIXES = ("w_", "a_", "ed_")
 
 def blank() -> dict:
     return {"mode": "new", "indent_id": "", "base_version": 0, "base": None, "step": "delivery",
-            "created_at": "", "header": IndentHeader().to_dict(), "lines": []}
+            "created_at": "", "header": IndentHeader().to_dict(), "lines": [], "po_fix": None}
 
 
 def get() -> dict:
@@ -105,6 +105,21 @@ def date_bounds():
     return delivery_bounds(keep_date())
 
 
+def saved_names() -> set[str]:
+    """SKU names already saved on the indent being corrected (cannot be removed)."""
+    b = base_snapshot()
+    return {x.customer_sku_name.strip().casefold() for x in b[1]} if b else set()
+
+
+def is_saved_line(name: str) -> bool:
+    return get()["mode"] == "edit" and name.strip().casefold() in saved_names()
+
+
+def po_fix() -> dict | None:
+    ind = get()
+    return ind.get("po_fix") if ind["mode"] == "edit" else None
+
+
 def has_unsaved_work() -> bool:
     ind = get()
     if ind["mode"] == "edit":
@@ -121,7 +136,7 @@ def start_new() -> None:
 
 
 def open_for_edit(current: IndentSnapshot, load: IndentSnapshot | None = None,
-                  created_at: str = "") -> None:
+                  created_at: str = "", po_fix: dict | None = None) -> None:
     """Load an indent into the form. `load` is an older version to copy in;
     the comparison base is always the current version."""
     src = load or current
@@ -132,6 +147,7 @@ def open_for_edit(current: IndentSnapshot, load: IndentSnapshot | None = None,
         "created_at": created_at,
         "header": src.header.to_dict(),
         "lines": [x.to_dict() for x in src.lines],
+        "po_fix": po_fix,   # {"po_qty": {sku: qty}, "po_number": ...} when correcting to match a PO
     }
     reset_widgets()
     mark_dirty(force=True)

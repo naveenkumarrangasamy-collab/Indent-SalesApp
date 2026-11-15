@@ -31,6 +31,7 @@ def _whole(col: pd.Series) -> pd.Series:
 def _prep(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     df = lines.copy()
     df["qty"] = df["qty"].map(to_number)
+    df = df[df["qty"] > 0].copy()   # items set to 0 (no indent) produce nothing
     df["variety"] = df["variety"].fillna("").astype(str)
     df["Lot Size"] = df["customer_sku_name"].map(lot_size)
     if masters is not None:
@@ -59,6 +60,8 @@ def aggregate(lines: pd.DataFrame, masters: Masters, with_spec: bool = False) ->
     if lines is None or lines.empty:
         return pd.DataFrame(columns=cols)
     df = _prep(lines, masters)
+    if df.empty:
+        return pd.DataFrame(columns=cols)
     df["Origin"] = ([masters.spec(r.city, r.customer, r.customer_sku_name)[0] or NO_ORIGIN
                      for r in df.itertuples()] if with_spec else "")
     df["_name"] = df["customer_sku_name"].map(lambda v: " ".join(str(v).split()))
@@ -105,6 +108,8 @@ def city_sku_report(lines: pd.DataFrame, masters: Masters | None = None) -> pd.D
     if lines is None or lines.empty:
         return pd.DataFrame(columns=CITY_SKU_COLUMNS)
     df = _prep(lines, masters)
+    if df.empty:
+        return pd.DataFrame(columns=CITY_SKU_COLUMNS)
     g = (df.groupby(["city", "customer", "parent_sku", "customer_sku_name", "variety", "lot",
                      "Lot Size", "Spec-Size"], dropna=False)
            .agg(Qty=("qty", "sum"), Indents=("indent_id", "nunique"), Stores=("store", "nunique"))

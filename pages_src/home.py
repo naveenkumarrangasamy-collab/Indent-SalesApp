@@ -54,6 +54,11 @@ def _confirm_open(indent_id: str) -> None:
         st.rerun()
 
 
+def _short_id(indent_id: str) -> str:
+    """IN-012 stays as is; old IND-yyyymmdd-CITY-0001 numbers show their last part."""
+    return indent_id if indent_id.startswith("IN-") else indent_id[-4:]
+
+
 def _status_of(row) -> str:
     return {"Frozen": "done", "Cancelled": "cnl"}.get(row, "open")
 
@@ -90,7 +95,7 @@ def _act_card(r, ind) -> None:
             f"{common.badge(r.status)}</div>"
             f"<div class='mt-muted'><span class='mt-id'>{escape(r.indent_id)}</span> · {int(r.lines)} items · "
             f"₹ {r.total_amount:,.0f}</div>", unsafe_allow_html=True)
-        c = st.columns(3)
+        c = st.columns(2)
         editing = ind["mode"] == "edit" and ind["indent_id"] == r.indent_id
         if c[0].button("Edit", icon=":material/edit:", key=f"hm_e_{r.indent_id}",
                        disabled=not ok, width="stretch", help=None if ok else why):
@@ -100,10 +105,7 @@ def _act_card(r, ind) -> None:
             if not editing:
                 _open(r.indent_id)
             st.switch_page(common.PAGES["indent"])
-        if c[1].button("Delete", icon=":material/delete:", key=f"hm_d_{r.indent_id}",
-                       disabled=not ok, width="stretch", help=None if ok else why):
-            indent_actions.ask("delete", r.indent_id)
-        if c[2].button("PO" if not frozen else "PO done", icon=":material/upload_file:",
+        if c[1].button("Upload PO" if not frozen else "PO done", icon=":material/upload_file:",
                        key=f"hm_p_{r.indent_id}", disabled=frozen, width="stretch",
                        type="primary" if not frozen else "secondary",
                        help="Upload the customer's PO (PDF) and freeze this indent"):
@@ -227,7 +229,7 @@ def render(user: User) -> None:
             total = int((part["state"] != "cnl").sum())
             chips = "".join(
                 f"<span class='mt-chip {r.state}' title='{escape(STATUS_LABEL[r.state])}'>"
-                f"{escape(r.store)}{' · ' + escape(r.indent_id[-4:]) if r.indent_id else ''}</span>"
+                f"{escape(r.store)}{' · ' + escape(_short_id(r.indent_id)) if r.indent_id else ''}</span>"
                 for r in part.itertuples())
             cols[i % 2].markdown(
                 f"<div class='mt-cust'><h4>{escape(cust)} <span class='mt-muted'>· {escape(c_city)}</span></h4>"
