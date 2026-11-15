@@ -194,20 +194,23 @@ def _delete_dialog(indent_id: str, user: User) -> None:
         _close()
         st.rerun()
     _strip(cur)
-    st.write("The indent is marked **Cancelled**: it is removed from production and the store / "
-             "delivery date becomes free for a new indent. All versions stay in the Google Sheet.")
+    st.write("The indent is marked **Deleted (Cancelled)**: it leaves production, batching and the "
+             "e-mails, and the store / delivery date becomes free for a new indent. All versions stay "
+             "in the Google Sheet.")
+    if cur.status == "Frozen":
+        st.warning("This indent already has a PO. The PO record stays in PO_Freeze; no e-mail is sent.")
     b = st.columns(2)
     if b[0].button("Yes, delete", icon=":material/delete:", type="primary", width="stretch"):
         try:
             with st.spinner("Deleting…"):
-                indents.cancel(indent_id, cur.version, user.email)
+                indents.cancel(indent_id, cur.version, user.email, owner=user.is_owner)
         except SheetError as e:
             st.error(f"Not deleted. {e}")
             return
         if state.get()["mode"] == "edit" and state.get()["indent_id"] == indent_id:
             state.start_new()
         _close()
-        common.flash("success", f"{indent_id} deleted (marked Cancelled).")
+        common.flash("success", f"{indent_id} deleted.")
         st.rerun()
     if b[1].button("Cancel", width="stretch"):
         _close()

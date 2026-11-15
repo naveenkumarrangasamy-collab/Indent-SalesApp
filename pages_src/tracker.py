@@ -152,6 +152,9 @@ def _style(p: pd.DataFrame, hours: list[str]):
 
 def render(user: User) -> None:
     common.show_flash()
+    if not (user.is_owner or getattr(user, "is_warehouse", False)):
+        st.error("The hourly tracker is for the owner and the warehouse team.")
+        return
     try:
         lines = indents.read_lines()
     except SheetError as e:

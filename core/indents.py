@@ -20,7 +20,7 @@ from core import changelog, config
 from core.lots import lot_size, normalize_lot
 from core.masters import Masters
 from core.models import IndentHeader, IndentLine, IndentSnapshot, fmt_num, to_number
-from core.schema import (CHANGE_LOG, INDENT_LINES, LOTS, PO_FREEZE, STATUS_CANCELLED,
+from core.schema import (CHANGE_LOG, DRAFTS, INDENT_LINES, LOTS, PO_FREEZE, STATUS_CANCELLED, TABS,
                          STATUS_FROZEN, STATUS_SUBMITTED)
 from core.sheets import SheetError, get_backend
 
@@ -598,22 +598,52 @@ __all__ = ["find_duplicate", "DuplicateError", "edit_deadline", "can_edit", "dea
            "ConflictError", "FrozenError", "NothingChangedError", "fmt_num"]
 
 
-def cancel(indent_id: str, base_version: int, user: str) -> int:
+def owner_delete_days() -> int:
+    try:
+        return max(0, int(config.get("owner_delete_days", 2)))
+    except (TypeError, ValueError):
+        return 2
+
+
+def owner_can_delete(delivery_date: str) -> bool:
+    """Owners may delete an indent until 2 days after its delivery date (T-2),
+    even after the edit cutoff and even when a PO was uploaded."""
+    try:
+        d = date.fromisoformat(str(delivery_date)[:10])
+    except ValueError:
+        return False
+    return d >= config.now_ist().date() - timedelta(days=owner_delete_days())
+
+
+def cancel(indent_id: str, base_version: int, user: str, owner: bool = False) -> int:
     """'Delete' an indent: append a copy of the current version with status
     Cancelled. It disappears from production, the store/date becomes free,
-    and every earlier version stays in the sheet."""
+    and every earlier version stays in the sheet. owner=True: allowed until
+    2 days after the delivery date, also after the cutoff and after a PO."""
     backend = get_backend()
     df = prepare(backend.read(INDENT_LINES))
     cur = snapshot(df, indent_id)
-    _check_editable(cur, indent_id, base_version)
-    if not can_edit(cur.header.delivery_date):
-        raise CutoffError(f"{indent_id} can no longer be deleted: editing closed at "
-                          f"{deadline_text(cur.header.delivery_date)}.")
+    if owner:
+        if cur is None:
+            raise SheetError(f"Indent {indent_id} was not found in the sheet.")
+        if cur.status == STATUS_CANCELLED:
+            raise FrozenError(f"{indent_id} is already deleted.")
+        if cur.version != int(base_version):
+            raise ConflictError(f"{indent_id} was changed by {cur.submitted_by} meanwhile. Please try again.")
+        if not owner_can_delete(cur.header.delivery_date):
+            raise CutoffError(f"{indent_id} is older than {owner_delete_days()} days after its delivery "
+                              "date and can no longer be deleted.")
+    else:
+        _check_editable(cur, indent_id, base_version)
+        if not can_edit(cur.header.delivery_date):
+            raise CutoffError(f"{indent_id} can no longer be deleted: editing closed at "
+                              f"{deadline_text(cur.header.delivery_date)}.")
     new_v = cur.version + 1
     stamp = config.now_iso()
     rows = build_rows(indent_id, new_v, STATUS_CANCELLED, stamp, user, cur.header, cur.lines,
                       note=change_note("Deleted", user, creator_of(df, indent_id), stamp,
-                                       "whole indent deleted (Cancelled)"))
+                                       "whole indent deleted (Cancelled)"
+                                       + (" by the owner; it had a PO" if cur.status == STATUS_FROZEN else "")))
     if not _append_verified(backend, rows, indent_id, new_v, stamp, user):
         clear_cache()
         raise ConflictError(f"Someone else saved {indent_id} at the same moment. Please try again.")
@@ -627,3 +657,30 @@ def cancel(indent_id: str, base_version: int, user: str) -> int:
         pass
     clear_cache()
     return new_v
+
+
+RESET_TABS = (INDENT_LINES, CHANGE_LOG, PO_FREEZE, DRAFTS)
+
+
+def backup_and_clear(user: str) -> dict:
+    """Start fresh: copy every indent tab to Backup_<time>_<tab>, then leave
+    only the header row in Indent_Lines, Change_Log, PO_Freeze and Drafts.
+    Returns {tab: rows cleared}. Numbering starts again at IN-001."""
+    backend = get_backend()
+    stamp = config.now_ist().strftime("%Y%m%d_%H%M")
+    present = set(backend.list_tabs())
+    done = {}
+    for tab in RESET_TABS:
+        if tab not in present:
+            continue
+        values = backend._get_values([tab]).get(tab, [])
+        rows = max(0, len([r for r in values[1:] if any(str(c).strip() for c in r)]))
+        done[tab] = rows
+        if not rows:
+            continue
+        backend.replace_tab(f"Backup_{stamp}_{tab}", values)
+        header = [str(h) for h in values[0]] if values and any(values[0]) else list(TABS[tab])
+        backend.replace_tab(tab, [header])
+        backend._headers[tab] = header
+    clear_cache()
+    return done

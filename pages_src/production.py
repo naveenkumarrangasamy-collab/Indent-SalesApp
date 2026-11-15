@@ -196,22 +196,9 @@ def render_batching(user: User) -> None:
     has_var = bat["Variety"].astype(bool).any()
     cols = ["Parent SKU"] + (["Variety"] if has_var else []) + ["Lot", "Lot Size", "Spec", "Qty"]
     points = list(bat.groupby(["City", "Customer", "Delivery point"], sort=False))
-    view = st.segmented_control("View", ["By delivery point", "One table"], default="By delivery point",
-                                key="bs_view", required=True)
-    if view == "One table":
-        st.dataframe(bat if has_var else bat.drop(columns=["Variety"]), hide_index=True, width="stretch",
-                     column_config={"Qty": st.column_config.NumberColumn(format="%g")})
-    else:
-        for i, ((city, cust, store), part) in enumerate(points, start=1):
-            with st.container(border=True, key=f"mtbatch_{i}"):
-                tot = part.groupby("Lot")["Qty"].sum()
-                st.markdown(f"**{i}) {city} / {cust} / {store}** "
-                            f"<span class='mt-muted'>· {', '.join(sorted(set(', '.join(part['Indent']).split(', '))))} · "
-                            + " · ".join(f"{q:,.0f} {lot}" for lot, q in tot.items()) + "</span>",
-                            unsafe_allow_html=True)
-                st.dataframe(part[cols], hide_index=True, width="stretch",
-                             column_config={"Qty": st.column_config.NumberColumn(format="%g"),
-                                            "Spec": st.column_config.TextColumn(width="large")})
+    st.dataframe(bat if has_var else bat.drop(columns=["Variety"]), hide_index=True, width="stretch",
+                 column_config={"Qty": st.column_config.NumberColumn(format="%g"),
+                                "Spec": st.column_config.TextColumn(width="medium")})
     _unmapped_warning(lines, m)
 
     # downloads: PDF one section per delivery point, Excel, CSV

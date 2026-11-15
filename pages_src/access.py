@@ -149,6 +149,37 @@ def _save(fn, ok_msg: str) -> None:
 
 # ------------------------------------------------------------------ setup
 
+def _start_fresh(me: User) -> None:
+    """Owner: back up and clear every indent (Indent_Lines, Change_Log, PO_Freeze, Drafts)."""
+    from core import indents
+    with st.expander("🧹 Start fresh: clear all indents", expanded=False):
+        try:
+            df = indents.read_lines(fresh=True)
+            n = df["indent_id"].nunique() if not df.empty else 0
+        except SheetError as e:
+            common.sheet_error(e)
+            return
+        st.markdown(
+            f"There are **{n} indents** in the sheet. This copies Indent_Lines, Change_Log, PO_Freeze and "
+            "Drafts into new **Backup_…** tabs, then empties them (headers stay). Users, stores, SKU "
+            "mapping, e-mail lists and the e-mail log are not touched. Numbering starts again at **IN-001**.")
+        typed = st.text_input("Type CLEAR to confirm", key="fresh_confirm", placeholder="CLEAR")
+        if st.button("Back up and clear all indents", icon=":material/delete_sweep:", type="primary",
+                     disabled=typed.strip() != "CLEAR", key="fresh_btn"):
+            try:
+                with st.spinner("Backing up and clearing…"):
+                    done = indents.backup_and_clear(me.email)
+            except SheetError as e:
+                st.error(f"Not cleared. {e}")
+                return
+            from pages_src import state
+            state.start_new()
+            st.session_state.pop("fresh_confirm", None)
+            common.flash("success", "Cleared: " + ", ".join(f"{t} {r} rows" for t, r in done.items())
+                         + ". Backups are in the Backup_… tabs of the Google Sheet.")
+            st.rerun()
+
+
 def _setup(m: masters.Masters | None, me: User) -> None:
     backend = get_backend()
     if backend.mode == "gsheets":
@@ -156,6 +187,8 @@ def _setup(m: masters.Masters | None, me: User) -> None:
                     f"`{backend.service_email}`.")
     else:
         st.markdown(f"**Local mode**: data lives in CSV files in `{backend.sheet_url()}`.")
+
+    _start_fresh(me)
 
     try:
         tabs = backend.list_tabs()

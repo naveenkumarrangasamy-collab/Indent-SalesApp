@@ -356,3 +356,31 @@ def test_po_correction_allowed_after_cutoff(backend, monkeypatch):
     v, _ = indents.submit_update(iid, 1, H, [IndentLine(**{**HASS.to_dict(), "qty": 31})], "s@x.com",
                                  po_fix=True)
     assert v == 2
+
+
+def test_owner_can_delete_until_two_days_after_delivery_even_with_po(backend, monkeypatch):
+    iid = indents.submit_new(H, [HASS], "s@x.com")
+    jid = indents.submit_new(IndentHeader(**{**H.to_dict(), "store": "Store Z"}), [HASS], "s@x.com")
+    indents.freeze(iid, 1, "po.pdf", "s@x.com")
+    with pytest.raises(indents.FrozenError):
+        indents.cancel(iid, 2, "s@x.com")                       # sales: frozen, not allowed
+    monkeypatch.setattr(indents, "can_edit", lambda *a, **k: False)
+    assert indents.cancel(iid, 2, "o@x.com", owner=True) == 3   # owner: after cutoff, with a PO
+    monkeypatch.setattr(indents, "owner_can_delete", lambda d: False)   # older than T-2
+    with pytest.raises(indents.CutoffError):
+        indents.cancel(jid, 1, "o@x.com", owner=True)
+
+
+def test_owner_delete_window_is_two_days():
+    today = config.now_ist().date()
+    assert indents.owner_can_delete((today - timedelta(days=2)).isoformat())
+    assert not indents.owner_can_delete((today - timedelta(days=3)).isoformat())
+    assert indents.owner_can_delete((today + timedelta(days=1)).isoformat())
+
+
+def test_backup_and_clear_starts_fresh(backend):
+    indents.submit_new(H, [HASS], "s@x.com")
+    done = indents.backup_and_clear("o@x.com")
+    assert done[INDENT_LINES] == 1 and indents.read_lines(fresh=True).empty
+    assert any(t.startswith("Backup_") and t.endswith(INDENT_LINES) for t in backend.list_tabs())
+    assert indents.submit_new(H, [HASS], "s@x.com") == "IN-001"

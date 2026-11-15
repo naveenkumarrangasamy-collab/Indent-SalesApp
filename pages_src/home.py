@@ -46,34 +46,30 @@ def render(user: User) -> None:
     summ = summ[summ["status"] != "Cancelled"] if not summ.empty else summ
     today = config.now_ist().date()
 
-    # ---- title + the two buttons (side by side, also on a phone)
-    with st.container(key="mtbar_home"):
-        c = st.columns([2.2, 1, 1], vertical_alignment="center")
-        c[0].markdown(f"<div class='mt-h'>Daily operations <span>· {escape(indents.scope_text(user))}</span></div>",
-                      unsafe_allow_html=True)
-        if c[1].button("Create indent", icon=":material/add_circle:", type="primary", width="stretch"):
-            st.switch_page(common.PAGES["indent"])
-        waiting_all = int((summ["status"] == STATUS_SUBMITTED).sum()) if not summ.empty else 0
-        if c[2].button(f"Upload PO · {waiting_all}" if waiting_all else "Upload PO",
-                       icon=":material/upload_file:", type="primary", width="stretch", key="home_po_btn",
-                       help="Indents waiting for a PO, and the PO upload"):
-            st.switch_page(common.PAGES["po"])
-
-    # ---- delivery day (+ city when there is more than one)
+    # ---- one aligned row: title · delivery day · Create indent · Upload PO
     days = [(today + timedelta(days=k)).isoformat() for k in (0, 1)]
     k = "home_day"
     if k not in st.session_state or st.session_state[k] not in days:
         st.session_state[k] = today.isoformat()
     rows_all = summ
-    cities = sorted(set(rows_all["city"].astype(str))) if not rows_all.empty else []
-    with st.container(key="mtbar_filters"):
-        f = st.columns([1.3, 2] if len(cities) > 1 else [1], vertical_alignment="bottom")
-        day = f[0].segmented_control("Delivery day", days, key=k, format_func=_fmt_day, required=True,
+    waiting_all = int((summ["status"] == STATUS_SUBMITTED).sum()) if not summ.empty else 0
+    with st.container(key="mtbar_home"):
+        c = st.columns([1.5, 1.7, 1, 1], vertical_alignment="center", gap="small")
+        c[0].markdown(f"<div class='mt-h'>Daily operations<span>{escape(indents.scope_text(user))}</span></div>",
+                      unsafe_allow_html=True)
+        day = c[1].segmented_control("Delivery day", days, key=k, format_func=_fmt_day, required=True,
                                      label_visibility="collapsed") or today.isoformat()
-        city = None
-        if len(cities) > 1:
-            city = f[1].pills("City", ["All cities"] + cities, default="All cities", key="home_city",
-                              label_visibility="collapsed")
+        if c[2].button("Create indent", icon=":material/add_circle:", type="primary", width="stretch"):
+            st.switch_page(common.PAGES["indent"])
+        if c[3].button(f"Upload PO · {waiting_all}" if waiting_all else "Upload PO",
+                       icon=":material/upload_file:", type="primary", width="stretch", key="home_po_btn",
+                       help="Indents waiting for a PO, and the PO upload"):
+            st.switch_page(common.PAGES["po"])
+    cities = sorted(set(rows_all["city"].astype(str))) if not rows_all.empty else []
+    city = None
+    if len(cities) > 1:
+        city = st.pills("City", ["All cities"] + cities, default="All cities", key="home_city",
+                        label_visibility="collapsed")
     rows = rows_all[rows_all["delivery_date"].astype(str) == day] if not rows_all.empty else rows_all
     if city and city != "All cities":
         rows = rows[rows["city"] == city]

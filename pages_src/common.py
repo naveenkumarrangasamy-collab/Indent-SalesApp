@@ -108,8 +108,14 @@ _CSS = f"""
   .mt-line .st.done {{ background:#dafbe1; color:#116329; border:1px solid #4ac26b; }}
   .mt-line .st.open {{ background:#fff8c5; color:#7d4e00; border:1px solid #d4a72c; }}
   .mt-tiles.k3 {{ grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom:.5rem; }}
-  .mt-h {{ font-size:1.45rem; font-weight:700; line-height:1.3; }}
-  .mt-h span {{ font-size:.8rem; font-weight:400; color:#6e7781; }}
+  .mt-h {{ font-size:1.4rem; font-weight:700; line-height:1.15; white-space:nowrap; }}
+  .mt-h span {{ display:block; font-size:.78rem; font-weight:400; color:#6e7781; margin-top:2px; }}
+  .st-key-mtbar_home {{ margin-bottom:.35rem; }}
+  .st-key-mtbar_home [data-testid="stButtonGroup"] {{ margin:0; }}
+  .st-key-mtbar_home [role="radiogroup"]:has(> button[data-variant="segmented_control"]) {{ width:100%; display:flex; }}
+  .st-key-mtbar_home button[data-variant="segmented_control"] {{ flex:1 1 0; }}
+  .st-key-mtbar_home .stButton button {{ min-height:2.6rem; }}
+  .mt-bar {{ margin:.1rem 0 .7rem !important; }}
 
   /* ---- cards (Home "Indents to act on", Upload PO, items on phone) ---- */
   [class*="st-key-mtcard"] {{ border-radius:14px !important; }}
@@ -135,11 +141,12 @@ _CSS = f"""
     .mt-tiles.k3 .mt-tile .sub {{ display:none; }}
     /* Home title row: title on its own line, the two buttons side by side under it */
     .st-key-mtbar_home [data-testid="stHorizontalBlock"] {{ flex-wrap:wrap !important; gap:.4rem !important; }}
-    .st-key-mtbar_home [data-testid="stColumn"]:first-child {{ flex:1 1 100% !important; min-width:100% !important;
-        padding-bottom:.35rem; }}
-    .mt-h {{ font-size:1.3rem; display:block; margin-bottom:.3rem; }}
-    .st-key-mtbar_home [data-testid="stColumn"]:not(:first-child) {{ flex:1 1 0 !important; min-width:0 !important; width:auto !important; }}
-    .st-key-mtbar_filters [data-testid="stHorizontalBlock"] {{ gap:.3rem !important; }}
+    .st-key-mtbar_home [data-testid="stColumn"]:nth-child(-n+2) {{ flex:1 1 100% !important; min-width:100% !important; }}
+    .st-key-mtbar_home [data-testid="stColumn"]:first-child {{ padding-bottom:.6rem; }}
+    .st-key-mtbar_home {{ margin-bottom:0; }}
+    .mt-h {{ font-size:1.3rem; display:block; margin-bottom:.15rem; }}
+    .mt-h span {{ display:inline; margin-left:.35rem; }}
+    .st-key-mtbar_home [data-testid="stColumn"]:nth-child(n+3) {{ flex:1 1 0 !important; min-width:0 !important; width:auto !important; }}
     .mt-line {{ padding:.4rem .55rem; gap:.4rem; }}
     .mt-line .cnt {{ display:none; }}
     button[data-variant="pills"] {{ padding:.35rem .8rem !important; min-height:2.1rem; font-size:.9rem; }}
@@ -285,8 +292,7 @@ def _from_cookie() -> auth.User | None:
     from pages_src import state
     sign_in(user)
     # the stored sign-in keeps its original expiry: the PIN is asked again after session_hours
-    if state.restore_from_sheet(user.email):
-        flash("info", "Welcome back. Your unsaved indent draft was restored.")
+    state.restore_from_sheet(user.email)   # the draft is back on Create indent; no banner
     return user
 
 

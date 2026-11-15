@@ -92,14 +92,12 @@ if user.is_owner:
 common.PAGES.clear()
 common.PAGES.update(pages)
 
-# Sales: indents + PO.  Warehouse: production + batching.  Owner: everything.
+# Sales: indents + PO.  Warehouse: production, batching, hourly tracker.  Owner: everything.
 sections = {}
 if makes_indents:
-    sections["Indents"] = [pages["home"], pages["indent"], pages["my_indents"], pages["po"], pages["tracker"]]
-if sees_production:
-    sections["Production"] = [pages["production"], pages["batching"]]
-    if not makes_indents:
-        sections["Production"].append(pages["tracker"])
+    sections["Indents"] = [pages["home"], pages["indent"], pages["my_indents"], pages["po"]]
+if sees_production:   # owner and warehouse; sales do not get production or the hourly tracker
+    sections["Production"] = [pages["production"], pages["batching"], pages["tracker"]]
 if user.is_owner:
     sections["Admin"] = [pages["access"]]
 nav = st.navigation(sections)

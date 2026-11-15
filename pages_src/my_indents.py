@@ -146,7 +146,7 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
     elif cancelled:
         st.info("This indent was deleted (Cancelled). It is kept here for history only.")
     else:
-        c = st.columns([1.2, 1, 0.2, 2.6])
+        c = st.columns([1.2, 1, 0.9, 2.2])
         can = open_ and not frozen
         if c[0].button("Edit whole indent", icon=":material/edit_note:", type="primary", disabled=not can,
                        help="Open the indent on the Indent page to change delivery details or add items"
@@ -156,6 +156,11 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
                        help="Upload the customer's PO (PDF) and freeze this indent" if not frozen
                        else "PO already uploaded"):
             indent_actions.ask("po", indent_id)
+        if user.is_owner and indents.owner_can_delete(cur.header.delivery_date):
+            if c[2].button("Delete", icon=":material/delete:", key=f"own_del_{indent_id}",
+                           help="Owner: delete this indent (allowed until 2 days after the delivery date, "
+                                "also after the cutoff and after a PO)"):
+                indent_actions.ask("delete", indent_id)
         if frozen:
             c[3].caption("Frozen with a PO: read-only.")
         elif not open_:
