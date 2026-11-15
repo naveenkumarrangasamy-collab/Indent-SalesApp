@@ -5,6 +5,7 @@ import streamlit as st
 
 from core import auth, config, indents, masters
 from core.sheets import SheetError, get_backend
+from core.schema import role_name
 
 ACCENT = "#1c6b49"
 
@@ -349,7 +350,7 @@ def sheet_error(e: Exception, what: str = "") -> None:
 
 def sidebar(user: auth.User) -> None:
     with st.sidebar:
-        st.markdown(f"**{user.label}**  \n<span class='mt-muted'>{user.email} · {user.role}</span>",
+        st.markdown(f"**{user.label}**  \n<span class='mt-muted'>{user.email} · {role_name(user.role)}</span>",
                     unsafe_allow_html=True)
         backend = get_backend()
         if backend.mode == "gsheets" and user.is_owner:

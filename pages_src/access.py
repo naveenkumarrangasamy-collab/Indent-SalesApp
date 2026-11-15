@@ -7,7 +7,7 @@ import streamlit as st
 from core import auth, config, importer, masters
 from core.auth import User
 from core.schema import (ACCESS_ACTIVE, ACCESS_REVOKED, OWNER_ROLES, ROLE_OWNER, ROLE_OWNER_FULL, ROLE_SALES,
-                         ROLE_WAREHOUSE, ROLES, TABS)
+                         ROLE_WAREHOUSE, ROLES, TABS, role_name)
 from core.sheets import SheetError, get_backend
 from pages_src import common
 
@@ -47,8 +47,8 @@ def render(user: User) -> None:
 
 ROLE_HELP = {ROLE_SALES: "sales: create indents, upload POs (no production)",
              ROLE_WAREHOUSE: "warehouse: production + batching sheets only",
-             ROLE_OWNER: "owner (limited): everything except Import indents and Start fresh",
-             ROLE_OWNER_FULL: "owner (full): everything"}
+             ROLE_OWNER: "Owner L: everything except Import indents and Start fresh",
+             ROLE_OWNER_FULL: "Owner (full): everything"}
 
 
 def _no_full_owner(acc: pd.DataFrame) -> bool:
@@ -68,7 +68,7 @@ def _roles_for(me: User, acc: pd.DataFrame) -> list[str]:
 def _users(m: masters.Masters, me: User) -> None:
     acc = m.access
     if not acc.empty:
-        show = pd.DataFrame({"Email": acc["Email"], "Name": acc["Name"], "Role": acc["Role"],
+        show = pd.DataFrame({"Email": acc["Email"], "Name": acc["Name"], "Role": acc["Role"].map(role_name),
                              "Status": acc["Status"],
                              "City": [("all cities" if str(r).lower() in OWNER_ROLES else
                                        (c or ("all cities" if str(r).lower() == "warehouse" else "— (own indents only)")))
@@ -103,7 +103,7 @@ def _users(m: masters.Masters, me: User) -> None:
                 _save(lambda: auth.upsert_access(email_n, by=me.email, name=name, role=role,
                                                  status=ACCESS_ACTIVE, pin=pin,
                                                  cities=cities if role not in OWNER_ROLES else [], stores=[]),
-                      f"{email_n} added as {role}" + (f" for {', '.join(cities)}" if cities and role not in OWNER_ROLES
+                      f"{email_n} added as {role_name(role)}" + (f" for {', '.join(cities)}" if cities and role not in OWNER_ROLES
                                                       else "")
                       + ". Share the PIN with them privately.")
 
@@ -138,7 +138,7 @@ def _users(m: masters.Masters, me: User) -> None:
                 _save(lambda: auth.upsert_access(target, by=me.email, role=role_set,
                                                  cities=new_cities if (role_set or role_now) not in OWNER_ROLES else [],
                                                  stores=[]),
-                      f"{target}: {role_set or role_now}"
+                      f"{target}: {role_name(role_set or role_now)}"
                       + (f", cities {', '.join(new_cities) or 'none'}" if (role_set or role_now) not in OWNER_ROLES
                          else ", all cities") + ".")
         with st.form("reset_pin", clear_on_submit=True):
