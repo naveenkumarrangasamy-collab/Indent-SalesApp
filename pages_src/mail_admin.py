@@ -1,7 +1,7 @@
 """Access page (owner): the E-mails tab.
 
 1. Mail server   - is sending set up, the last error in plain words, a test.
-2. Indent e-mails - hourly production e-mail (8 AM-2 PM): address (+ name) -> cities.
+2. Production e-mails - the production report (once a day at 8 AM): address (+ name) -> cities.
 3. PO e-mails     - every PO the moment it is uploaded: address (+ name), all cities / customers.
 """
 from __future__ import annotations
@@ -16,9 +16,9 @@ from core.sheets import SheetError
 from pages_src import common
 
 TEAMS = {
-    "Ground": ("Indent e-mails",
-               "Every hour from 8 AM to 2 PM: the production report (all customers clubbed, with boxes) "
-               "for today's deliveries, only for the cities chosen for each address, as PDF + Excel."),
+    "Ground": ("Production e-mails",
+               "Every day at 8 AM: the production report (make-ready list + by spec size, all customers "
+               "together) for today's deliveries, only for the cities chosen for each address, as PDF + Excel."),
     "Central": ("PO e-mails",
                 "The moment any PO is uploaded (any time, all cities and customers): the customer's PO plus "
                 "the SO details as PDF + Excel."),
@@ -123,7 +123,7 @@ def _team(team: str, m: masters.Masters, me: User, people: list[Recipient]) -> N
     c = st.columns([2, 1])
     who = c[0].selectbox("Send a sample of this e-mail to", [me.email] + [r.email for r in mine],
                          key=f"sample_to_{team}", accept_new_options=True,
-                         help="Uses that address's cities when it is on the indent e-mail list")
+                         help="Uses that address's cities when it is on the production e-mail list")
     if c[1].button("Send sample", icon=":material/forward_to_inbox:", width="stretch",
                    key=f"sample_btn_{team}", disabled=not mailer.configured()):
         scope = next((r for r in mine if r.email == who), None)
@@ -139,12 +139,12 @@ def _team(team: str, m: masters.Masters, me: User, people: list[Recipient]) -> N
             for name, data, mime in st.session_state.get("hm_files", []):
                 st.download_button(name, data, file_name=name, mime=mime, key=f"dl_{name}",
                                    icon=":material/download:")
-        with st.expander("Automatic sending every hour"):
+        with st.expander("Automatic sending at 8 AM"):
             st.markdown(
                 "A Streamlit Cloud app sleeps when nobody has it open, so a schedule in the GitHub repository "
-                "opens the app every hour from 8 AM to 2 PM (waking it if needed) and the app sends that hour's "
-                "e-mail. Nothing to set up; each hour goes out once. Test: GitHub → **Actions** → "
-                "*Hourly indent e-mail* → **Run workflow**.")
+                "opens the app every hour from 8 AM to 2 PM (waking it if needed). The app sends the production "
+                "e-mail only at **8 AM** (a late run until 10:59 still sends it, once). Nothing to set up. "
+                "Test: GitHub → **Actions** → *Hourly indent e-mail* → **Run workflow**.")
 
 
 def _sample(team: str, to: str, scope: Recipient | None, me: User) -> tuple[bool, str]:
@@ -171,7 +171,7 @@ def emails_tab(m: masters.Masters, me: User) -> None:
         common.sheet_error(e)
         return
     st.divider()
-    t1, t2 = st.tabs(["Indent e-mails (hourly)", "PO e-mails"])
+    t1, t2 = st.tabs(["Production e-mails (8 AM)", "PO e-mails"])
     with t1:
         _team("Ground", m, me, people)
     with t2:

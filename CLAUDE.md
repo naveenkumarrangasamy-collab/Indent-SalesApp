@@ -35,7 +35,7 @@ Longan/Litchi and Grapefruit.
 | **Hosting** | Streamlit Community Cloud: https://indent-salesapp.streamlit.app | Redeploys automatically on push to `main`, in about 1 minute. The direct app path (no iframe) is `https://indent-salesapp.streamlit.app/~/+/<page>`. |
 | **Database** | Google Sheet `1cxOtb4Q4CQsgkYzdnCgetsQsibKFlpmzsKeV6yUoTuA` | Reached through a Google service account using `gspread`. The service account's `client_email` must have **Editor** on the sheet. |
 | **E-mail sending** | Gmail SMTP, the team sender account with a Google **App password** | Port 587 STARTTLS, falling back to 465 SSL. The values `smtp_user`/`smtp_password` are kept in Streamlit Secrets. An unused older App password named "MT Indent" should be revoked; the one in use is "MT Indent mail". |
-| **Hourly schedule** | GitHub Actions `.github/workflows/hourly-indent-mail.yml`, cron `30 2-8 * * *` UTC (8:00 AM–2:00 PM IST) | **Needs no GitHub secrets.** It runs `scripts/wake_and_send.py`, which uses Playwright to open `https://indent-salesapp.streamlit.app/?hourly=run` and wakes the sleeping app if needed. The app then sends that hour's e-mail with its own secrets. It is never forced, never sends outside 8–2, and sends once per hour (deduplicated via `Mail_Log`). Tested OK on 16 Nov 00:45: the app answered "outside the 8 AM-2 PM window". |
+| **Hourly schedule** | GitHub Actions `.github/workflows/hourly-indent-mail.yml`, cron `30 2-8 * * *` UTC (8:00 AM–2:00 PM IST) | **Needs no GitHub secrets.** It runs `scripts/wake_and_send.py`, which uses Playwright to open `https://indent-salesapp.streamlit.app/?hourly=run` and wakes the sleeping app if needed. The app then sends that hour's e-mail with its own secrets. The app sends the production e-mail only at the send hours (default 8 AM), once (deduplicated via `Mail_Log`); other runs do nothing. Tested OK on 16 Nov 00:45: the app answered "outside the 8 AM-2 PM window". |
 | **PO PDFs in Drive** | Optional `po_drive_folder_id` (a Shared-drive folder) | When it is not set, only the file name is recorded. |
 
 ### Streamlit secrets: key names only (the values stay in Streamlit)
@@ -161,7 +161,18 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - A SKU name missing from New shows Spec-Size "not in New tab (name)", is never clubbed, and is listed in a
     warning on the page.
   - Tiles: only Indents, Delivery points, Customers (no per-unit tiles).
-  - **No** customer names, Customer SKU Name or customer-specific logic. The hourly e-mail uses the same table.
+  - **No** customer names, Customer SKU Name or customer-specific logic.
+  - The page has **two views** (tabs): **By spec size** (the table above) and **Make-ready list**.
+- **Make-ready list** (production page, 2nd view; for the ground team): all customers **and all sizes** together,
+  one row per City + Parent SKU + Variety (Apple only) + Repacking + Pack. Columns:
+  (City only when several cities) Parent SKU, Variety, Repacking, Pack, Make ready, Fruit needed.
+  - Pack = lot size from the SKU name (1 Pcs, 2 Pcs, 200 gm, 1 Kg, 1 Box).
+  - Unit packs (Punnet, Pack): Make ready = number of packs ("50 Punnet"); Fruit needed = pieces for piece
+    packs (10 × 2 Pcs = "20 pcs"), kilos for kg packs, **blank for gram packs** (the packet count is the answer).
+  - **Loose**: Repacking Tray/Box/Crate with a piece or kg pack → the fruit goes in loose: "7 pcs loose"
+    (More's 7 avocados into trays, NOT 7 trays), "700 kg loose".
+  - The pack itself a container ("1 Box", Namdhari green apple) → "10 Box", Fruit needed blank. **Known gap**
+    (user asked to be reminded): box packs have no kg/pieces yet; fix later.
   - Mapping Whole / spec labels are still used by the Batching sheet and the spec mapping list. A permanent
     master for production is to be fixed later (user: "take it from New for now").
 - **Batching sheet:** **one table** with columns City, Customer, Delivery point, Parent SKU, **Customer SKU Name**, Variety, Lot, Lot Size, Spec, Qty, Indent. Downloads: PDF/Excel/CSV.
@@ -179,7 +190,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 
 ### E-mails (formats must stay consistent)
 
-- **Hourly** (8 AM–2 PM, the production report only): PDF + Excel per recipient, scoped by their cities. There is no customer-level section and no batching report.
+- **Production e-mail** (list "Production e-mails", Team = Ground; was called "Indent e-mails"): **once a day at
+  8 AM IST** (secret `production_mail_hours`, default [8]; a late GitHub run until 10:59 still sends the 8 AM slot,
+  once, via Mail_Log). Content: **both tables**: 1) Make-ready list, 2) By spec size, in the body and as PDF
+  (two sections) + Excel (two sheets), per recipient, scoped by their cities. No customer-level section, no
+  batching. Recipients are added by the user in Access → E-mails.
 - **SO/PO**: sent on every PO upload to the PO list, with the PO lines as PDF + Excel.
 
 ### Owner tools
@@ -221,7 +236,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **140 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **141 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 
@@ -238,7 +253,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 ## 8. Open items and next steps
 
-1. Add the **Indent e-mails** recipients (Access → E-mails). The user will do this later. Until then the hourly run reports "no active recipients".
+1. Add the **Production e-mails** recipients (Access → E-mails). The user will do this later. Until then the 8 AM run reports "no active recipients".
+7. **Remind the user**: box packs ("1 Box", e.g. Namdhari green apple) show only "N Box" on the make-ready list;
+   box kg / pieces per box are not known yet. Also box counts for kg and gram packs need box weights.
 2. Namdhari: confirm the real store name (rename it in the Customer List) and confirm whether rates are per tray/box or total.
 3. More: decide whether the Hubli and Mangalore supply need their own stores (and separate indents).
 4. Master data clean-up: the duplicate "2PC - Snacky Kiwi", and whether Orange Imported sits under the Orange or Mandarin parent.

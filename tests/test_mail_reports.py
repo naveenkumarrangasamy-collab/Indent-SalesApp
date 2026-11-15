@@ -56,7 +56,7 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
     indents.submit_new(_hdr("Store C", city="Chennai"), [HASS], "s@x.com")
     recipients.upsert(Recipient("z@x.com", "Bangalore team", hourly=True, cities=["Bangalore"]), by="o")
     recipients.upsert(Recipient("all@x.com", "Everyone", hourly=True), by="o")
-    at9 = config.now_ist().replace(hour=9, minute=2)
+    at9 = config.now_ist().replace(hour=8, minute=2)          # the 8 AM send
     res = hourly.run(now=at9)
     assert [r["status"] for r in res] == ["sent", "sent"]
     by_to = {m["To"]: m for m in sent}
@@ -65,11 +65,14 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
     assert len(names) == 2 and names[0].startswith("Production_") and names[0].endswith(".pdf") \
         and names[1].endswith(".xlsx")
     body = z.get_body(("html",)).get_content()
-    assert "Production sheet" in body and "Customer-level" not in body and "Chennai" not in body
+    assert "Production sheet" in body and "Make-ready list" in body and "Customer-level" not in body \
+        and "Chennai" not in body
     assert z["Subject"].startswith("Production ") and "2 indent" in z["Subject"]      # Bangalore only
     assert "3 indent" in by_to["all@x.com"]["Subject"] and "Chennai" in by_to["all@x.com"].get_body(("html",)).get_content()
-    # same hour again: nothing new; outside the window: skipped
+    # same slot again (also a late run at 10:15): nothing new; not a send hour: skipped
     assert {r["status"] for r in hourly.run(now=at9.replace(minute=40))} == {"skipped"}
+    assert {r["status"] for r in hourly.run(now=at9.replace(hour=10, minute=15))} == {"skipped"}
+    assert hourly.run(now=at9.replace(hour=12))[0]["detail"].startswith("not a send hour")
     assert hourly.run(now=at9.replace(hour=19))[0]["status"] == "skipped"
     assert len(sent) == 2
     log = recipients.read_log()
@@ -81,10 +84,10 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
 def test_hourly_slot_window():
     now = config.now_ist().replace(minute=5)
     assert hourly.slot_for(now.replace(hour=8)).hour == 8
-    assert hourly.slot_for(now.replace(hour=14)).hour == 14
-    assert hourly.slot_for(now.replace(hour=15, minute=20)).hour == 14   # late scheduled run
+    assert hourly.slot_for(now.replace(hour=10, minute=50)).hour == 8    # late scheduled run: still 8 AM
+    assert hourly.slot_for(now.replace(hour=11)) is None
+    assert hourly.slot_for(now.replace(hour=14)) is None
     assert hourly.slot_for(now.replace(hour=7)) is None
-    assert hourly.slot_for(now.replace(hour=16)) is None
 
 
 def test_reports_overall_clubs_customers_and_customer_level_keeps_stores(env):

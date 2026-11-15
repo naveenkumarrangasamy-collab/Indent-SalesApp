@@ -195,6 +195,54 @@ def production(lines: pd.DataFrame, masters: Masters | None,
     return g.sort_values(keys, key=_SORT)[PRODUCTION_COLUMNS + extra].reset_index(drop=True)
 
 
+MAKE_READY_COLUMNS = ["City", "Parent SKU", "Variety", "Repacking", "Pack", "Make ready", "Fruit needed"]
+_BULK = {"tray", "box", "crate", "carton", "bulk", "loose"}   # containers that hold loose fruit
+
+
+def _is_container(pack: str) -> bool:
+    """The pack itself is a container: '1 Box', '17.5 Kg Box', '1 Tray'."""
+    return any(w in str(pack or "").casefold().split() for w in ("box", "tray", "crate", "carton"))
+
+
+def make_ready(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
+    """Make-ready list for the ground team: all customers and all sizes together.
+    One row per City + Parent SKU + Variety (Apple only) + Repacking + Pack.
+    - Unit packs (Punnet, Pack): Make ready = number of packs; Fruit needed =
+      pieces for piece packs (2 Pc x 316 = 632 pcs), kilos for kg packs, blank
+      for gram packs (the packets are the answer).
+    - Bulk repacking (Tray, Box) of a piece or kg pack: the fruit goes in loose,
+      so Make ready = '7 pcs loose' / '700 kg loose' (not 7 trays).
+    - The pack is itself a container ('1 Box'): Make ready = '10 Box'."""
+    df = _base_rows(lines, masters) if lines is not None and not lines.empty else None
+    if df is None or df.empty:
+        return pd.DataFrame(columns=MAKE_READY_COLUMNS)
+    df = df.rename(columns={"Lot Size": "Pack"})
+    keys = ["City", "Parent SKU", "Variety", "Repacking", "Pack"]
+    g = (df.assign(**{k + "_k": df[k].astype(str).str.casefold() for k in keys})
+           .groupby([k + "_k" for k in keys], sort=False)
+           .agg(**{k: (k, "first") for k in keys}, _qty=("qty", "sum"), _lot=("lot", "first"))
+           .reset_index(drop=True))
+    make, need = [], []
+    for r in g.to_dict("records"):
+        q, pack, rep = r["_qty"], r["Pack"], r["Repacking"]
+        pcs, kg = _pcs_per_lot(pack), _kg_per_lot(pack, r["_lot"])
+        bulk = rep.casefold() in _BULK
+        if _is_container(pack):
+            make.append(f"{fmt_num(q)} {pack.split()[-1]}")
+            need.append("")
+        elif bulk and pcs:
+            make.append(f"{fmt_num(q * pcs)} pcs loose")
+            need.append(f"{fmt_num(q * pcs)} pcs")
+        elif bulk and kg:
+            make.append(f"{fmt_num(q * kg)} kg loose")
+            need.append(f"{fmt_num(q * kg)} kg")
+        else:
+            make.append(f"{fmt_num(q)} {rep or 'packs'}".strip())
+            need.append(f"{fmt_num(q * pcs)} pcs" if pcs else f"{fmt_num(q * kg)} kg" if kg else "")
+    g["Make ready"], g["Fruit needed"] = make, need
+    return g.sort_values(keys, key=_SORT)[MAKE_READY_COLUMNS].reset_index(drop=True)
+
+
 def not_in_base(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     """Customer SKU names in these indents that are missing from the New tab."""
     df = _base_rows(lines, masters) if lines is not None and not lines.empty else None

@@ -1,4 +1,6 @@
-"""Hourly production e-mail to the ground team, 8:00 AM to 2:00 PM IST.
+"""Production e-mail to the ground team: once a day at 8 AM IST by default
+(secret `production_mail_hours`, e.g. [8, 11]). The GitHub schedule still runs
+every hour 8 AM-2 PM; runs that are not a send hour do nothing.
 
 Each active ground-team address gets, for the delivery day(s), the
 production report of the indents in its cities / customers (all customers
@@ -34,16 +36,28 @@ def delivery_offsets() -> list[int]:
         return [0]
 
 
+def send_hours() -> list[int]:
+    """The hours (IST) the production e-mail goes out: secret `production_mail_hours`,
+    default [8] = once a day at 8 AM. Each must sit inside the scheduled 8 AM-2 PM runs."""
+    v = config.get("production_mail_hours", [8])
+    if isinstance(v, (int, float, str)):
+        v = [v]
+    try:
+        return sorted({int(x) for x in v}) or [8]
+    except (TypeError, ValueError):
+        return [8]
+
+
+CATCH_UP_HOURS = 3   # a scheduled run up to 3 h late still sends a missed slot (once, via Mail_Log)
+
+
 def slot_for(now: datetime) -> datetime | None:
-    """The hour this run belongs to, or None outside 8 AM-2 PM. A scheduled
-    run that starts up to 40 minutes late still counts for the last hour."""
-    first, last = hours()
+    """The send hour this run belongs to, or None. With the default [8], runs from
+    8:00 to 10:59 AM belong to the 8 AM slot (GitHub schedules can be late); the
+    Mail_Log check then sends it only once."""
     h = now.replace(minute=0, second=0, microsecond=0)
-    if first <= now.hour <= last:
-        return h
-    if now.hour == last + 1 and now.minute < 40:
-        return h - timedelta(hours=1)
-    return None
+    due = [s for s in send_hours() if s <= now.hour < s + CATCH_UP_HOURS]
+    return h.replace(hour=max(due)) if due else None
 
 
 def slot_label(slot: datetime) -> str:
@@ -57,7 +71,8 @@ def run(now: datetime | None = None, force: bool = False, only: str | None = Non
     slot = slot_for(now)
     if slot is None:
         if not force:
-            return [{"to": "-", "status": "skipped", "detail": "outside the 8 AM-2 PM window"}]
+            return [{"to": "-", "status": "skipped",
+                     "detail": "not a send hour (" + ", ".join(f"{h}:00" for h in send_hours()) + ")"}]
         slot = now.replace(minute=0, second=0, microsecond=0)
     key = f"{slot:%Y-%m-%d %H:%M}"
     label = slot_label(slot)

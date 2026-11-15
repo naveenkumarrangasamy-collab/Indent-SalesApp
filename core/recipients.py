@@ -1,8 +1,8 @@
 """E-mail recipients (Mail_Recipients tab) and the e-mail log (Mail_Log tab).
 
 Two lists:
-  * Indent e-mails (Team Ground, Hourly_Indent = Y): the hourly production
-    e-mail, 8 AM-2 PM, only for the cities chosen for that address (empty = all).
+  * Production e-mails (Team Ground, Hourly_Indent = Y): the production
+    e-mail, 8 AM, only for the cities chosen for that address (empty = all).
   * PO e-mails (Team Central, SO_PO = Y): every PO the moment it is uploaded,
     all cities and customers.
 """

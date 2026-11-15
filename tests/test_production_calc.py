@@ -155,3 +155,37 @@ def test_new_tab_read_from_sheet_values():
     info = m.prod_info("bangalore", "SWIGGY", "1kg - nectr  royal gala apple")
     assert info["Repacking"] == "Box" and info["Spec-Origin"] == "Turkey" and info["Variety"] == "Royal Gala"
 
+
+
+def test_make_ready_list_mixes_sizes_and_handles_loose_and_boxes():
+    """All customers and sizes together; loose fruit into trays/boxes in pcs/kg; box packs in boxes."""
+    from core.importer import build_prod_base
+    from core.production_calc import make_ready
+    tab = NEW_TAB + [
+        ["Bangalore", "More", "Avocado", "1Pc - Loose Avocado", "Hass", "Tray", "18C, 20C", "Tanzania"],
+        ["Bangalore", "Zepto", "Avocado", "1Pc - Hass Avocado 90", "Hass", "Punnet", "22C", "Tanzania"],
+        ["Bangalore", "Swiggy", "Avocado", "1Pc - Hass Avocado 110", "Hass", "Punnet", "24C", "Tanzania"],
+        ["Bangalore", "Namdhari", "Apple", "1Box - Green apple", "Granny Smith", "Box", "90, 110", "Turkey"],
+        ["Bangalore", "Zepto", "Apple", "200gm - Snacky Apple", "Gala", "Punnet", "135, 150", "Turkey"],
+    ]
+    m = _masters()
+    m.prod_base = pd.DataFrame(build_prod_base(tab))
+    row = lambda c, n, q, lot, p: dict(BASE, indent_id="A", version="1", customer=c, store="S",  # noqa: E731
+                                       parent_sku=p, customer_sku_name=n, lot=lot, qty=q)
+    df = _lines([row("More", "1Pc - Loose Avocado", "7", "Pcs", "Avocado"),
+                 row("Zepto", "1Pc - Hass Avocado 90", "30", "Pcs", "Avocado"),
+                 row("Swiggy", "1Pc - Hass Avocado 110", "20", "Pcs", "Avocado"),
+                 row("Swiggy", "1Kg - nectr Royal Gala Apple", "700", "Kg", "Apple"),
+                 row("Zepto", "2PC - Apple Queen Imported", "10", "Pack", "Apple"),
+                 row("Namdhari", "1Box - Green apple", "10", "Box", "Apple"),
+                 row("Zepto", "200gm - Snacky Apple", "725", "Pack", "Apple")])
+    mr = make_ready(df, m)
+    assert list(mr.columns) == ["City", "Parent SKU", "Variety", "Repacking", "Pack", "Make ready", "Fruit needed"]
+    got = {(r["Parent SKU"], r["Variety"], r["Repacking"], r["Pack"]): (r["Make ready"], r["Fruit needed"])
+           for r in mr.to_dict("records")}
+    assert got[("Avocado", "", "Punnet", "1 Pcs")] == ("50 Punnet", "50 pcs")       # 22C + 24C mixed
+    assert got[("Avocado", "", "Tray", "1 Pcs")] == ("7 pcs loose", "7 pcs")       # not 7 trays
+    assert got[("Apple", "Royal Gala", "Box", "1 Kg")] == ("700 kg loose", "700 kg")
+    assert got[("Apple", "Queen", "Punnet", "2 Pcs")] == ("10 Punnet", "20 pcs")
+    assert got[("Apple", "Granny Smith", "Box", "1 Box")] == ("10 Box", "")
+    assert got[("Apple", "Gala", "Punnet", "200 gm")] == ("725 Punnet", "")         # packets, no kg

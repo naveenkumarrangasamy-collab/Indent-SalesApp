@@ -184,29 +184,41 @@ def indent_mail_html(rows: pd.DataFrame, m: Masters | None, day: str, slot_label
 # ------------------------------------------------------------------ hourly production e-mail
 
 def production_view(rows: pd.DataFrame, m: Masters | None, rules: list | None) -> pd.DataFrame:
+    """Production sheet 'by spec size' (Variety dropped when empty)."""
     p = production_calc.production(rows, m)
     if not p.empty and not p["Variety"].astype(bool).any():
         p = p.drop(columns=["Variety"])
     return p
 
 
+def make_ready_view(rows: pd.DataFrame, m: Masters | None) -> pd.DataFrame:
+    """Make-ready list (City dropped when only one city)."""
+    mr = production_calc.make_ready(rows, m)
+    if len(mr["City"].unique()) <= 1:
+        mr = mr.drop(columns=["City"])
+    return mr
+
+
 def production_mail_files(rows: pd.DataFrame, m: Masters | None, rules: list | None, day: str,
                           slot_label: str, scope: str = "everything") -> list[tuple[str, bytes, str]]:
-    """The hourly e-mail attachments: the production report as PDF and Excel."""
-    p = production_view(rows, m, rules)
+    """The production e-mail attachments: both tables (make-ready list + by spec size) as PDF and Excel."""
+    from core.pdf_report import sections_pdf
+    p, mr = production_view(rows, m, rules), make_ready_view(rows, m)
     n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
-    sub = [f"Delivery {fmt_day(day)} - as of {slot_label} - {scope}",
-           f"{n} indents - all customers together"]
+    sub = [f"Delivery {fmt_day(day)} - as of {slot_label} - {scope}", f"{n} indents - all customers together"]
     stamp = str(day).replace("-", "")
     hh = slot_label.split(",")[0].replace(":", "").replace(" ", "")
-    return [(f"Production_{stamp}_{hh}.pdf",
-             table_pdf("Production sheet", sub, p, footer=f"MT Indent - {slot_label}"), "application/pdf"),
-            (f"Production_{stamp}_{hh}.xlsx", xlsx({"Production": p}), XLSX)]
+    pdf = sections_pdf("Production sheet", sub,
+                       [("1) Make-ready list", "All customers and sizes together", mr),
+                        ("2) By spec size", "All customers clubbed per spec size", p)],
+                       footer=f"MT Indent - {slot_label}")
+    return [(f"Production_{stamp}_{hh}.pdf", pdf, "application/pdf"),
+            (f"Production_{stamp}_{hh}.xlsx", xlsx({"Make-ready list": mr, "By spec size": p}), XLSX)]
 
 
 def production_mail_html(rows: pd.DataFrame, m: Masters | None, rules: list | None, day: str,
                          slot_label: str, name: str = "", scope: str = "everything") -> str:
-    p = production_view(rows, m, rules)
+    p, mr = production_view(rows, m, rules), make_ready_view(rows, m)
     n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
     waiting = rows[rows["status"] != STATUS_FROZEN]["indent_id"].nunique() if n else 0
     return "".join([
@@ -214,7 +226,9 @@ def production_mail_html(rows: pd.DataFrame, m: Masters | None, rules: list | No
         f"<p>Production for delivery on <b>{fmt_day(day)}</b>, as of <b>{slot_label}</b> "
         f"({html.escape(scope)}). {n} indent(s), {waiting} still waiting for a PO. "
         "The same report is attached as PDF and Excel.</p>",
-        "<h3 style='color:#1c6b49'>Production sheet</h3>",
+        "<h3 style='color:#1c6b49'>1. Make-ready list</h3>",
+        _html_table(mr, {"Make ready"}),
+        "<h3 style='color:#1c6b49'>2. Production sheet by spec size</h3>",
         _html_table(p, {"Total"}),
         "<p style='color:#888;font-size:12px'>Sent by the MT Indent app.</p>"])
 

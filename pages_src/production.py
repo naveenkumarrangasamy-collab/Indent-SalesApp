@@ -11,8 +11,8 @@ import streamlit as st
 from core import config, indents, masters
 from core.auth import User
 from core.pdf_report import sections_pdf, table_pdf
-from core.production_calc import (batching, default_date, delivery_dates,
-                                  filter_lines, not_in_base, production, spec_mapping_list, unmapped)
+from core.production_calc import (batching, default_date, delivery_dates, filter_lines, make_ready,
+                                  not_in_base, production, spec_mapping_list, unmapped)
 from core.sheets import SheetError
 from pages_src import common
 
@@ -115,7 +115,7 @@ def _unmapped_warning(lines: pd.DataFrame, m) -> None:
 def render(user: User) -> None:
     common.show_flash()
     st.markdown("### Production sheet")
-    st.caption("Step 1 · what to produce, **all customers together**. Variety, repacking, spec size and origin "
+    st.caption("Step 1 · what to produce, **all customers together**. Variety, repacking and spec size "
                "come from the **New** tab of the Google Sheet. Customers and delivery points are on the "
                "**Batching sheet**.")
     if not _guard(user):
@@ -131,16 +131,29 @@ def render(user: User) -> None:
         return
     prod = production(lines, m)
     _count_tiles(lines)
-    show = prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"])
-    st.dataframe(show, hide_index=True, width="stretch",
-                 column_config={"Qty": st.column_config.NumberColumn(format="%g"),
-                                "Total": st.column_config.TextColumn(
-                                    help="All customers clubbed for the same parent SKU, repacking, spec size "
-                                         "and lot size: Kg packs in kilos, else in repacking units")})
-    st.caption("**Total** = all customers clubbed per parent SKU + repacking + spec size + lot size: Kg packs in "
-               "**kilos** (700 × 1 Kg = 700 Kg), others in repacking units (10 + 20 two-piece packs = 30 Punnet). "
-               "**Boxes @ count**: for piece packs, the boxes needed at each count of the spec size "
-               "(pieces ÷ count, rounded up; e.g. 440 pcs → 22C: 20, 24C: 19).")
+    v1, v2 = st.tabs(["By spec size", "Make-ready list"])
+    with v1:
+        show = prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"])
+        st.dataframe(show, hide_index=True, width="stretch",
+                     column_config={"Qty": st.column_config.NumberColumn(format="%g"),
+                                    "Total": st.column_config.TextColumn(
+                                        help="All customers clubbed for the same parent SKU, repacking, spec "
+                                             "size and lot size: Kg packs in kilos, else in repacking units")})
+        st.caption("**Total** = all customers clubbed per parent SKU + repacking + spec size + lot size: Kg packs "
+                   "in **kilos** (700 × 1 Kg = 700 Kg), others in repacking units (10 + 20 two-piece packs = "
+                   "30 Punnet). **Boxes @ count**: for piece packs, the boxes needed at each count of the spec "
+                   "size (pieces ÷ count, rounded up; e.g. 440 pcs → 22C: 20, 24C: 19).")
+        _downloads("Production sheet", show, f"production_{label}", "ps", lines)
+    with v2:
+        mr = make_ready(lines, m)
+        if len(mr["City"].unique()) <= 1:
+            mr = mr.drop(columns=["City"])
+        st.dataframe(mr, hide_index=True, width="stretch")
+        st.caption("For the ground team: **all customers and all sizes together**. Punnets / packs are counted as "
+                   "packs; fruit going **loose** into a tray or box shows as pieces or kg (7 pcs loose, not "
+                   "7 trays); a box pack counts boxes. **Fruit needed**: pieces for piece packs, kg for kg packs.")
+        st.session_state["mr_desc"] = st.session_state.get("ps_desc", "")
+        _downloads("Make-ready list", mr, f"make_ready_{label}", "mr", lines)
     gaps = not_in_base(lines, m)
     if not gaps.empty:
         with st.expander(f"⚠️ {len(gaps)} SKU name(s) are not in the New tab: they show as "
@@ -148,7 +161,6 @@ def render(user: User) -> None:
             st.caption("Add them to the New tab (City, Customer, Parent SKU, Customer SKU Name, variety, "
                        "Spec-Repacking, Spec-Size, Spec-Origin). The app re-reads it every few minutes.")
             st.dataframe(gaps, hide_index=True, width="stretch")
-    _downloads("Production sheet", show, f"production_{label}", "ps", lines)
     if user.is_owner:
         _publish("Production sheet", PRODUCTION_TAB, show, lines, user, "ps")
         with st.expander("Spec mapping list (what production uses for every SKU name, and what is missing)"):
@@ -221,14 +233,14 @@ def _downloads(title: str, table: pd.DataFrame, fname: str, prefix: str, lines: 
            f"{len(lines)} lines.   Generated {now} IST."]
     c = st.columns([1, 1, 4])
     c[0].download_button("CSV", table.to_csv(index=False).encode("utf-8"), file_name=f"{fname}.csv",
-                         mime="text/csv", icon=":material/download:", width="stretch")
+                         mime="text/csv", icon=":material/download:", width="stretch", key=f"{prefix}_csv")
     try:
         pdf = table_pdf(title, sub, table, footer=f"MT Indent - {title}")
     except Exception as e:  # never block the CSV because of the PDF
         c[2].caption(f"PDF could not be made: {e}")
         return
     c[1].download_button("PDF", pdf, file_name=f"{fname}.pdf", mime="application/pdf",
-                         icon=":material/picture_as_pdf:", width="stretch")
+                         icon=":material/picture_as_pdf:", width="stretch", key=f"{prefix}_pdf")
 
 
 PRODUCTION_TAB = "Production_Sheet"
