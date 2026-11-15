@@ -24,13 +24,17 @@ def render(user: User) -> None:
         m = None
 
     from pages_src import mail_admin
-    t_users, t_mail, t_setup = st.tabs(["Users & PINs", "E-mails", "Sheet setup & checks"])
+    t_users, t_mail, t_import, t_setup = st.tabs(["Users & PINs", "E-mails", "Import indents",
+                                                   "Sheet setup & checks"])
     with t_users:
         if m is not None:
             _users(m, user)
     with t_mail:
         if m is not None:
             mail_admin.emails_tab(m, user)
+    with t_import:
+        from pages_src import import_indents
+        import_indents.render(m, user)
     with t_setup:
         _setup(m, user)
 
