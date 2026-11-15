@@ -258,8 +258,7 @@ def _new_tab_preview() -> None:
                 if vals:
                     w = max(len(r) for r in vals)
                     rows = [list(r) + [""] * (w - len(r)) for r in vals[:60]]
-                    st.dataframe(pd.DataFrame(rows[1:], columns=[f"{i + 1}: {h}" for i, h in enumerate(rows[0])]),
-                                 hide_index=True, width="stretch")
+                    st.code("\n".join(" | ".join(str(c) for c in r) for r in rows), language=None)
             if not names:
                 st.caption("No tab named 'New' found.")
         except Exception as e:  # preview only; never break the page
