@@ -39,8 +39,8 @@ def _prep(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return df
 
 
-PRODUCTION_COLUMNS = ["City", "Parent SKU", "Variety", "Spec-Origin", "Repacking", "Spec-Size", "Lot Size", "Qty",
-                      "Total"]
+PRODUCTION_COLUMNS = ["City", "Parent SKU", "Variety", "Repacking", "Spec-Size", "Lot Size", "Qty", "Total"]
+BOX_COL = "Boxes @ count {}"   # one column per count in Spec-Size (22C, 24C -> 2 columns)
 NOT_IN_BASE = "not in New tab"
 BATCH_COLUMNS = ["City", "Customer", "Delivery point", "Parent SKU", "Customer SKU Name", "Variety", "Lot", "Lot Size",
                  "Spec", "Qty", "Indent"]
@@ -96,23 +96,58 @@ def _pack_label(size: str, lot: str) -> str:
 _SORT = lambda s: s.astype(str).str.casefold()  # noqa: E731
 
 
+def _counts(spec_size: str) -> list[int]:
+    """Fruit counts in a Spec-Size: '22C, 24C' -> [22, 24], '90, 110' -> [90, 110],
+    '33 36' -> [33, 36]. Sizes that are not counts ('16mm', 'Blue', RSA '2,3') -> []."""
+    import re
+    s = str(spec_size or "")
+    if re.search(r"mm|not in", s, re.IGNORECASE):
+        return []
+    out = [int(x) for x in re.findall(r"(?<![\d.])(\d{2,3})(?![\d.])", s)]
+    return [c for c in out if c >= 10]
+
+
+def _pcs_per_lot(size: str) -> float | None:
+    """Pieces in one lot when the lot size is in pieces ('2 Pcs' -> 2), else None."""
+    import re
+    if not re.search(r"\bpcs?\b|piece", str(size or ""), re.IGNORECASE):
+        return None          # '1 Pack', '200 gm', '1 Box': pieces unknown
+    unit, n = boxes.per_lot("", size)
+    return n if unit == "pcs" else None
+
+
+def _kg_per_lot(size: str, lot: str) -> float | None:
+    """Kg in one lot when the lot is a kg pack ('1 Kg' -> 1, plain Kg lot -> 1), else None."""
+    s = str(size or "").casefold()
+    if "box" in s or "tray" in s:
+        return None
+    if "kg" in s:
+        return boxes.per_lot("", size)[1]
+    if not s.strip() and str(lot or "").strip().casefold() == "kg":
+        return 1.0
+    return None
+
+
 def _base_rows(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     """Indent rows with the production attributes from the 'New' tab
-    (variety, Spec-Repacking, Spec-Size, Spec-Origin). A SKU name missing from
-    the New tab gets Spec-Size 'not in New tab (name)' so it is never clubbed."""
+    (variety, Spec-Repacking, Spec-Size). A SKU name missing from the New tab
+    gets Spec-Size 'not in New tab (name)' so it is never clubbed.
+    Variety is kept only for the variety parents (Apple); other fruit has none."""
+    from core import config
     df = lines.copy()
     df["qty"] = df["qty"].map(to_number)
     df = df[df["qty"] > 0].copy()
     if df.empty:
         return df
     clean = lambda v: " ".join(str(v or "").split())  # noqa: E731
+    with_variety = {p.casefold() for p in config.variety_parents()}
     info = [masters.prod_info(r.city, r.customer, r.customer_sku_name) if masters is not None else None
             for r in df.itertuples()]
     df["City"] = df["city"].map(clean)
     df["Parent SKU"] = df["parent_sku"].map(clean)
-    df["Variety"] = [clean(i.get("Variety")) if i and clean(i.get("Variety")) else clean(v)
-                     for i, v in zip(info, df["variety"].fillna(""))]
-    df["Spec-Origin"] = [clean(i.get("Spec-Origin")) if i else "" for i in info]
+    df["Variety"] = [(clean(i.get("Variety")) if i and clean(i.get("Variety")) else clean(v))
+                     if p.casefold() in with_variety else ""
+                     for i, v, p in zip(info, df["variety"].fillna(""), df["Parent SKU"])]
     df["Repacking"] = [clean(i.get("Repacking")) if i else "" for i in info]
     df["Spec-Size"] = [(clean(i.get("Spec-Size")) or "-") if i else f"{NOT_IN_BASE} ({clean(n)})"
                        for i, n in zip(info, df["customer_sku_name"])]
@@ -124,25 +159,40 @@ def _base_rows(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
 def production(lines: pd.DataFrame, masters: Masters | None,
                box_rules: list | None = None) -> pd.DataFrame:
     """Production sheet (base: the 'New' tab), all customers together.
-    One row per City + Parent SKU + Variety + Spec-Origin + Repacking +
-    Spec-Size + Lot Size with the Qty. 'Total' clubs every customer's qty for
-    the same City + Parent SKU + Repacking + Spec-Size + Lot Size, in repacking
-    units: 10 + 20 packs of 2 pcs repacked in punnets = '30 Punnet'.
-    No customer names. `box_rules` is accepted for older callers and ignored."""
-    cols = PRODUCTION_COLUMNS
+    One row per City + Parent SKU + Variety + Repacking + Spec-Size + Lot Size.
+    'Total' clubs every customer for the same City + Parent SKU + Repacking +
+    Spec-Size + Lot Size:
+    - kg packs ('1 Kg', plain Kg) -> total kilos, e.g. '700 Kg' (no repacking units);
+    - otherwise in repacking units: 10 + 20 packs of 2 pcs = '30 Punnet'.
+    'Boxes @ count N' columns: for a piece lot (1 Pcs, 2 Pcs) and a Spec-Size with
+    counts (22C, 24C), the boxes needed if packed at each count = pieces / count,
+    rounded up (440 pcs: 22C -> 20, 24C -> 19). Blank when not computable.
+    `box_rules` is accepted for older callers and ignored."""
+    import math
     df = _base_rows(lines, masters) if lines is not None and not lines.empty else None
     if df is None or df.empty:
-        return pd.DataFrame(columns=cols)
-    keys = ["City", "Parent SKU", "Variety", "Spec-Origin", "Repacking", "Spec-Size", "Lot Size"]
+        return pd.DataFrame(columns=PRODUCTION_COLUMNS)
+    keys = ["City", "Parent SKU", "Variety", "Repacking", "Spec-Size", "Lot Size"]
     g = (df.assign(**{k + "_k": df[k].astype(str).str.casefold() for k in keys})
            .groupby([k + "_k" for k in keys], sort=False)
-           .agg(**{k: (k, "first") for k in keys}, Qty=("qty", "sum"))
+           .agg(**{k: (k, "first") for k in keys}, Qty=("qty", "sum"), _lot=("lot", "first"))
            .reset_index(drop=True))
     club = ["City", "Parent SKU", "Repacking", "Spec-Size", "Lot Size"]
     tot = g.groupby([g[k].astype(str).str.casefold() for k in club], sort=False)["Qty"].transform("sum")
+    totals, box_cols = [], {}
+    for i, (t, r) in enumerate(zip(tot, g.to_dict("records"))):
+        kg = _kg_per_lot(r["Lot Size"], r["_lot"])
+        totals.append(f"{fmt_num(t * kg)} Kg" if kg else f"{fmt_num(t)} {r['Repacking']}".strip())
+        pcs = _pcs_per_lot(r["Lot Size"])
+        for j, c in enumerate(_counts(r["Spec-Size"]) if pcs else [], start=1):
+            box_cols.setdefault(j, [""] * len(g))[i] = f"{c}C: {math.ceil(t * pcs / c - 1e-9)}"
     g["Qty"] = _whole(g["Qty"])
-    g["Total"] = [f"{fmt_num(t)} {r}".strip() for t, r in zip(tot, g["Repacking"])]
-    return g.sort_values(keys, key=_SORT)[cols].reset_index(drop=True)
+    g["Total"] = totals
+    extra = []
+    for j in sorted(box_cols):
+        g[BOX_COL.format(j)] = box_cols[j]
+        extra.append(BOX_COL.format(j))
+    return g.sort_values(keys, key=_SORT)[PRODUCTION_COLUMNS + extra].reset_index(drop=True)
 
 
 def not_in_base(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:

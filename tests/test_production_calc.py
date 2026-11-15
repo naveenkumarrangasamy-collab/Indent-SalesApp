@@ -86,7 +86,8 @@ def _base_masters():
 
 
 def test_production_from_new_tab_columns_and_club_total():
-    """Columns from the New tab; Total clubs all customers per parent + repacking + size + lot size."""
+    """Columns from the New tab (no origin); Total clubs all customers; Kg packs in kilos;
+    variety only for Apple; box columns per count for piece packs."""
     df = _lines([
         dict(BASE, indent_id="A", version="1", customer="Zepto", store="S1", parent_sku="Avocado",
              customer_sku_name="2PC - Hass Avocado", lot="Pack", qty="10"),
@@ -98,17 +99,27 @@ def test_production_from_new_tab_columns_and_club_total():
              customer_sku_name="2PC - Hass Avocado", lot="Pack", qty="5", city="Chennai"),
     ])
     p = production(df, _base_masters())
-    assert list(p.columns) == ["City", "Parent SKU", "Variety", "Spec-Origin", "Repacking", "Spec-Size",
-                               "Lot Size", "Qty", "Total"]
+    assert list(p.columns) == ["City", "Parent SKU", "Variety", "Repacking", "Spec-Size", "Lot Size", "Qty",
+                               "Total", "Boxes @ count 1", "Boxes @ count 2"]
     avo = p[(p["City"] == "Bangalore") & (p["Parent SKU"] == "Avocado")].iloc[0]
-    assert (avo["Variety"], avo["Spec-Origin"], avo["Repacking"], avo["Spec-Size"], avo["Lot Size"]) == \
-        ("Hass", "Tanzania", "Punnet", "20C, 22C", "2 Pcs")
+    assert (avo["Variety"], avo["Repacking"], avo["Spec-Size"], avo["Lot Size"]) == ("", "Punnet", "20C, 22C",
+                                                                                    "2 Pcs")
     assert avo["Qty"] == 30 and avo["Total"] == "30 Punnet"
+    # 30 packs x 2 pcs = 60 pcs: 20C -> 3 boxes, 22C -> 3 boxes (60/22 = 2.7, rounded up)
+    assert avo["Boxes @ count 1"] == "20C: 3" and avo["Boxes @ count 2"] == "22C: 3"
     apple = p[p["Parent SKU"] == "Apple"].iloc[0]
-    assert apple["Repacking"] == "Box" and apple["Qty"] == 700 and apple["Total"] == "700 Box"
+    assert apple["Variety"] == "Royal Gala" and apple["Total"] == "700 Kg" and apple["Boxes @ count 1"] == ""
     chn = p[p["City"] == "Chennai"].iloc[0]      # not in the New tab for Chennai: kept apart
     assert chn["Spec-Size"].startswith("not in New tab") and chn["Qty"] == 5
 
+
+def test_production_counts_and_kg_helpers():
+    from core.production_calc import _counts, _kg_per_lot, _pcs_per_lot
+    assert _counts("22C, 24C") == [22, 24] and _counts("90, 110") == [90, 110] and _counts("33 36") == [33, 36]
+    assert _counts("16mm") == [] and _counts("2,3") == [] and _counts("Blue") == [] and _counts("-") == []
+    assert _kg_per_lot("1 Kg", "Kg") == 1 and _kg_per_lot("", "Kg") == 1 and _kg_per_lot("200 gm", "Pack") is None
+    assert _kg_per_lot("17.5 Kg Box", "Box") is None
+    assert _pcs_per_lot("2 Pcs") == 2 and _pcs_per_lot("200 gm") is None and _pcs_per_lot("") is None and _pcs_per_lot("1 Pack") is None
 
 def test_production_total_clubs_across_varieties_same_pack():
     """Different varieties keep their own rows; Total adds them when repacking, size and lot size match."""

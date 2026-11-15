@@ -94,6 +94,14 @@ def _qty_strip(df: pd.DataFrame, qty: str, lines: pd.DataFrame, unit: str = "Lot
         f"<div class='sub'>{sub}</div></div>" for lbl, val, sub in tiles) + "</div>", unsafe_allow_html=True)
 
 
+def _count_tiles(lines: pd.DataFrame) -> None:
+    tiles = [("Indents", lines["indent_id"].nunique()), ("Delivery points", lines["store"].nunique()),
+             ("Customers", lines["customer"].nunique())]
+    st.markdown("<div class='mt-tiles'>" + "".join(
+        f"<div class='mt-tile'><div class='lbl'>{lbl}</div><div class='val'>{val}</div><div class='sub'></div></div>"
+        for lbl, val in tiles) + "</div>", unsafe_allow_html=True)
+
+
 def _unmapped_warning(lines: pd.DataFrame, m) -> None:
     gaps = unmapped(lines, m)
     if gaps.empty:
@@ -122,15 +130,17 @@ def render(user: User) -> None:
         common.sheet_error(e)
         return
     prod = production(lines, m)
-    _qty_strip(prod, "Qty", lines, unit="Repacking")
+    _count_tiles(lines)
     show = prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"])
     st.dataframe(show, hide_index=True, width="stretch",
                  column_config={"Qty": st.column_config.NumberColumn(format="%g"),
                                 "Total": st.column_config.TextColumn(
                                     help="All customers clubbed for the same parent SKU, repacking, spec size "
-                                         "and lot size, in repacking units (10 + 20 packs of 2 pcs = 30 Punnet)")})
-    st.caption("**Total** = all customers clubbed per parent SKU + repacking + spec size + lot size "
-               "(e.g. 10 + 20 two-piece packs in punnets = 30 Punnet).")
+                                         "and lot size: Kg packs in kilos, else in repacking units")})
+    st.caption("**Total** = all customers clubbed per parent SKU + repacking + spec size + lot size: Kg packs in "
+               "**kilos** (700 × 1 Kg = 700 Kg), others in repacking units (10 + 20 two-piece packs = 30 Punnet). "
+               "**Boxes @ count**: for piece packs, the boxes needed at each count of the spec size "
+               "(pieces ÷ count, rounded up; e.g. 440 pcs → 22C: 20, 24C: 19).")
     gaps = not_in_base(lines, m)
     if not gaps.empty:
         with st.expander(f"⚠️ {len(gaps)} SKU name(s) are not in the New tab: they show as "
