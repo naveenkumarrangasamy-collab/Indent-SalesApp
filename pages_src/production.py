@@ -8,11 +8,12 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from core import config, indents, masters
+from core import config, indents, masters, reports
 from core.auth import User
 from core.pdf_report import sections_pdf, table_pdf
 from core.production_calc import (batching, default_date, delivery_dates, filter_lines, make_ready,
-                                  next_day_mask, not_in_base, production, unmapped)
+                                  make_ready_by_customer, next_day_mask, not_in_base, production,
+                                  unmapped)
 from core.sheets import SheetError
 from pages_src import common
 
@@ -143,7 +144,7 @@ def render(user: User) -> None:
     if d1.any():
         st.caption(f"{' / '.join(config.next_day_customers())} orders are not in these tables: "
                    "see their own section at the bottom.")
-    v1, v2 = st.tabs(["By spec size", "Make-ready list"])
+    v1, v2, v3 = st.tabs(["By spec size", "Make-ready list", "By customer"])
     with v1:
         show = prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"])
         st.dataframe(show, hide_index=True, width="stretch",
@@ -167,6 +168,8 @@ def render(user: User) -> None:
                    "**Spec Size**: pieces at each count of the spec (New tab), e.g. 20C : 100PC | 22C : 100PC; otherwise the spec.")
         st.session_state["mr_desc"] = st.session_state.get("ps_desc", "")
         _downloads("Make-ready list", mr, f"make_ready_{label}", "mr", lines)
+    with v3:
+        _by_customer(all_lines, m, label)
     _next_day(m)
     gaps = not_in_base(all_lines, m)
     if not gaps.empty:
@@ -177,6 +180,30 @@ def render(user: User) -> None:
             st.dataframe(gaps, hide_index=True, width="stretch")
     if user.is_owner:
         _publish("Production sheet", PRODUCTION_TAB, show, lines, user, "ps")
+
+
+def _by_customer(lines: pd.DataFrame, m, label: str) -> None:
+    """Make-ready list per customer + store (all customers of the date, Zepto too),
+    with a total; PDF = one customer per page, Excel = one sheet per customer."""
+    blocks = make_ready_by_customer(lines, m)
+    if not blocks:
+        st.info("No indents for these filters.")
+        return
+    desc = st.session_state.get("ps_desc", "")
+    c = st.columns([1, 1, 4])
+    c[0].download_button(
+        "PDF", lambda: sections_pdf("Make-ready list by customer", [desc], blocks,
+                                    footer="MT Indent - make-ready by customer", page_each=True),
+        file_name=f"make_ready_by_customer_{label}.pdf", mime="application/pdf",
+        icon=":material/picture_as_pdf:", width="stretch", key="mrc_pdf", on_click="ignore")
+    c[1].download_button(
+        "Excel", lambda: reports.xlsx({f"{i + 1} {h.split(' · ')[0]}"[:31]: df for i, (h, _, df) in enumerate(blocks)}),
+        file_name=f"make_ready_by_customer_{label}.xlsx", mime=reports.XLSX,
+        icon=":material/download:", width="stretch", key="mrc_xlsx", on_click="ignore")
+    c[2].caption("PDF: one customer per page. Excel: one sheet per customer.")
+    for head, sub, df in blocks:
+        st.markdown(f"**{head}** <span class='mt-muted'>· {sub}</span>", unsafe_allow_html=True)
+        st.dataframe(df, hide_index=True, width="stretch")
 
 
 def _next_day(m) -> None:

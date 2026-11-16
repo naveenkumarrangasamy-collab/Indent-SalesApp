@@ -148,10 +148,14 @@ def send_so_mail(cur, file_name: str, pdf: bytes, uploaded_by: str,
     h = cur.header
     subject = (("[SAMPLE] " if sample else "") + f"{h.customer} - SO placed - {h.store} - {cur.indent_id}"
                + (f" - PO {po_number}" if po_number else ""))
-    files = [(file_name or "PO.pdf", pdf, "application/pdf")] if pdf else []
-    files += reports.so_files(cur, po_number, file_name, uploaded_by, po_qty)
+    # Attachments: the PO as PDF (the customer's own file) + the PO as Excel (17 Nov: user wants just these two).
+    so = reports.so_files(cur, po_number, file_name, uploaded_by, po_qty)
+    xlsx = [(f"PO_{cur.indent_id}{('_' + po_number) if po_number else ''}.xlsx", f[1], f[2])
+            for f in so if f[0].endswith(".xlsx")]
+    files = ([(file_name or "PO.pdf", pdf, "application/pdf")] if pdf
+             else [f for f in so if f[0].endswith(".pdf")]) + xlsx
     text = (f"SO placed for {h.customer} / {h.store} ({h.city}), delivery {h.delivery_date}. "
-            f"Indent {cur.indent_id}, PO {po_number or file_name}. Details attached (PDF and Excel).")
+            f"Indent {cur.indent_id}, PO {po_number or file_name}. The PO is attached as PDF and Excel.")
     msg = build_message(to, subject, reports.so_html(cur, po_number, file_name, uploaded_by, po_qty), text,
                         files, s["cc"])
     if sample:

@@ -95,14 +95,15 @@ def table_pdf(title: str, subtitle: list[str], df: pd.DataFrame, footer: str = "
 
 
 def sections_pdf(title: str, subtitle: list[str], sections: list[tuple[str, str, pd.DataFrame]],
-                 footer: str = "") -> bytes:
-    """One PDF with a heading + table per section (e.g. one per customer / store)."""
+                 footer: str = "", page_each: bool = False) -> bytes:
+    """One PDF with a heading + table per section (e.g. one per customer / store).
+    page_each: every section starts on a new page (one customer per page)."""
     pdf = _new_pdf(title, subtitle, footer)
     if not sections:
         pdf.cell(0, 8, "No indents.")
         return bytes(pdf.output())
     for i, (head, sub, df) in enumerate(sections):
-        if pdf.get_y() > 170 and i:
+        if i and (page_each or pdf.get_y() > 170):
             pdf.add_page()
         pdf.ln(2 if i else 0)
         pdf.set_font("Helvetica", "B", 12)

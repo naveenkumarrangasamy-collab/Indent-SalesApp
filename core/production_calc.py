@@ -359,6 +359,30 @@ def default_date(dates: list[str], today: str) -> str | None:
     return upcoming[0] if upcoming else (dates[-1] if dates else None)
 
 
+def make_ready_by_customer(lines: pd.DataFrame, masters: Masters | None) -> list[tuple[str, str, pd.DataFrame]]:
+    """Make-ready list per customer + store (same rules as make_ready), with a Total
+    row. Returns [(heading, subheading, table)] sorted by customer, store."""
+    out = []
+    if lines is None or lines.empty:
+        return out
+    for (cust, store), part in sorted(lines.groupby(["customer", "store"]),
+                                     key=lambda kv: (str(kv[0][0]).casefold(), str(kv[0][1]).casefold())):
+        mr = make_ready(part, masters)
+        if mr.empty:
+            continue
+        if len(mr["City"].unique()) <= 1:
+            mr = mr.drop(columns=["City"])
+        qty = float(pd.to_numeric(part["qty"], errors="coerce").fillna(0).sum())
+        total = {c: "" for c in mr.columns}
+        total[mr.columns[0]] = "Total"
+        total["Make ready"] = fmt_num(qty)
+        mr = pd.concat([mr, pd.DataFrame([total])], ignore_index=True)
+        ids = ", ".join(sorted(set(part["indent_id"].astype(str))))
+        days = ", ".join(sorted(set(part["delivery_date"].astype(str))))
+        out.append((f"{cust} · {store}", f"Delivery {days} · {ids}", mr))
+    return out
+
+
 def next_day_mask(lines: pd.DataFrame) -> pd.Series:
     """Rows of the D+1 customers (config.next_day_customers: Zepto in Bangalore)."""
     from core import config

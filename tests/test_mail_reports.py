@@ -132,6 +132,6 @@ def test_so_mail_goes_to_central_team_in_scope(env):
     m = sent[-1]
     assert m["Subject"].startswith("Zepto - SO placed - Store A") and "PO 77" in m["Subject"]
     assert sorted(p.get_filename() for p in m.iter_attachments()) == sorted(
-        ["po.pdf", f"SO_{iid}.pdf", f"SO_{iid}.xlsx"])
+        ["po.pdf", f"PO_{iid}_77.xlsx"])                                # the PO as PDF + Excel only
     ok, _ = mailer.send_so_mail(cur, "", b"", "s@x.com", po_number="SAMPLE", to_override=["me@x.com"], sample=True)
     assert ok and sent[-1]["To"] == "me@x.com" and sent[-1]["Subject"].startswith("[SAMPLE] Zepto")

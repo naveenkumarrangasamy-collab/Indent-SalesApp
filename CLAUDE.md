@@ -200,6 +200,9 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
     (user asked to be reminded): box packs have no kg/pieces yet; fix later.
   - Mapping Whole / spec labels are only a fallback for the Batching sheet when there is no New tab. A permanent
     master for production is to be fixed later (user: "take it from New for now").
+- **By customer** (17 Nov 3:30 AM; 3rd tab on the Production page): the make-ready list per customer + store (same
+  rules/columns, all customers of the date incl. Zepto), each with a Total row. Downloads: **PDF = one customer per
+  page** (`sections_pdf(page_each=True)`), Excel = one sheet per customer. `production_calc.make_ready_by_customer`.
 - **D+1 customers** (17 Nov 2:30 AM; secret `next_day_customers`, default {Zepto = ["Bangalore"]}, a word of the
   city; per customer/city, more later): their rows are **left out of the main production tables** for the selected
   date and shown in their own section at the bottom: **Today's order** (delivery = selected date) above, **Next-day
@@ -237,7 +240,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   once via Mail_Log. 16 Nov: GitHub's scheduled 8 AM run never came; the mail was sent by a manual run at 8:11. Content: **both tables**: 1) Make-ready list, 2) By spec size, in the body and as PDF
   (two sections) + Excel (two sheets), per recipient, scoped by their cities. No customer-level section, no
   batching. Recipients are added by the user in Access → E-mails.
-- **SO/PO**: sent on every PO upload to the PO list, with the PO lines as PDF + Excel.
+- **SO/PO**: sent on every PO upload to the PO list. **Attachments (17 Nov): only the PO as PDF (the customer's
+  uploaded file) + the PO as Excel** (`PO_<indent>_<po no>.xlsx`: items, indent qty, PO qty, Diff). No SO PDF.
 
 ### Owner tools
 
@@ -290,7 +294,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **152 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **153 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 

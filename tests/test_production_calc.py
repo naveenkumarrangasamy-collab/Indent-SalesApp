@@ -221,3 +221,18 @@ def test_make_ready_boxes_and_blueberry_trays():
     got = {r["Parent SKU"]: (r["Pack"], r["Make ready"], r["Spec Size"]) for r in mr.to_dict("records")}
     assert got["Apple"] == ("2 Pcs", "450 Punnet", "90C: 10 Box | 100C: 9 Box")
     assert got["Blueberry"] == ("Punnet", "119 Punnet", "16mm: 10 Tray")      # 119 punnets / 12 a tray
+
+
+def test_make_ready_by_customer_blocks_and_pdf_pages():
+    from core.pdf_report import sections_pdf
+    from core.production_calc import make_ready_by_customer
+    row = lambda c, s, n, q: dict(BASE, indent_id=c[:2], version="1", customer=c, store=s,  # noqa: E731
+                                  parent_sku="Avocado", customer_sku_name=n, lot="Pcs", qty=q)
+    blocks = make_ready_by_customer(_lines([row("Zepto", "Z1", "1PC - Hass Avocado", "10"),
+                                            row("More", "M1", "1PC - Hass Avocado", "5"),
+                                            row("Zepto", "Z1", "2PC - Hass Avocado", "3")]), _masters())
+    assert [h for h, _, _ in blocks] == ["More · M1", "Zepto · Z1"]
+    zepto = blocks[1][2]
+    assert zepto.iloc[-1][zepto.columns[0]] == "Total" and zepto.iloc[-1]["Make ready"] == "13"
+    pdf = sections_pdf("x", [], blocks, page_each=True)
+    assert pdf.count(b"/Type /Page\n") + pdf.count(b"/Type /Page ") >= 2 or pdf.count(b"/Page") >= 2
