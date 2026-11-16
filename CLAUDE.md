@@ -35,7 +35,7 @@ Longan/Litchi and Grapefruit.
 | **Hosting** | Streamlit Community Cloud: https://indent-salesapp.streamlit.app | Redeploys automatically on push to `main`, in about 1 minute. The direct app path (no iframe) is `https://indent-salesapp.streamlit.app/~/+/<page>`. |
 | **Database** | Google Sheet `1cxOtb4Q4CQsgkYzdnCgetsQsibKFlpmzsKeV6yUoTuA` | Reached through a Google service account using `gspread`. The service account's `client_email` must have **Editor** on the sheet. |
 | **E-mail sending** | Gmail SMTP, the team sender account with a Google **App password** | Port 587 STARTTLS, falling back to 465 SSL. The values `smtp_user`/`smtp_password` are kept in Streamlit Secrets. An unused older App password named "MT Indent" should be revoked; the one in use is "MT Indent mail". |
-| **Hourly schedule** | GitHub Actions `.github/workflows/hourly-indent-mail.yml`, cron `30 2-8 * * *` UTC (8:00 AM–2:00 PM IST) | **Needs no GitHub secrets.** It runs `scripts/wake_and_send.py`, which uses Playwright to open `https://indent-salesapp.streamlit.app/?hourly=run` and wakes the sleeping app if needed. The app then sends that hour's e-mail with its own secrets. The app sends the production e-mail only at the send hours (default 8 AM), once (deduplicated via `Mail_Log`); other runs do nothing. Tested OK on 16 Nov 00:45: the app answered "outside the 8 AM-2 PM window". |
+| **Mail schedule** | cron-job.org (exact, 7:54 / 8:54 IST → workflow_dispatch) + GitHub Actions `.github/workflows/hourly-indent-mail.yml`, cron `30 2-8 * * *` UTC as backup | **Needs no GitHub secrets.** It runs `scripts/wake_and_send.py`, which uses Playwright to open `https://indent-salesapp.streamlit.app/?hourly=run` and wakes the sleeping app if needed. The app then sends that hour's e-mail with its own secrets. The app sends the production e-mail only at the send hours (default 8 AM), once (deduplicated via `Mail_Log`); other runs do nothing. Tested OK on 16 Nov 00:45: the app answered "outside the 8 AM-2 PM window". |
 | **PO PDFs in Drive** | Optional `po_drive_folder_id` (a Shared-drive folder) | When it is not set, only the file name is recorded. |
 
 ### Streamlit secrets: key names only (the values stay in Streamlit)
@@ -190,9 +190,12 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 
 ### E-mails (formats must stay consistent)
 
-- **Production e-mail** (list "Production e-mails", Team = Ground; was called "Indent e-mails"): **once a day at
-  8 AM IST** (secret `production_mail_hours`, default [8]; a late GitHub run until 10:59 still sends the 8 AM slot,
-  once, via Mail_Log). Content: **both tables**: 1) Make-ready list, 2) By spec size, in the body and as PDF
+- **Production e-mail** (list "Production e-mails", Team = Ground; was called "Indent e-mails"): **at 8 AM and
+  9 AM IST, exactly on the hour** (secret `production_mail_hours`, default [8, 9]). Exact timing: **cron-job.org**
+  starts the GitHub workflow (workflow_dispatch, via a token kept only in cron-job.org) at 7:54 and 8:54 IST; the
+  job wakes the app, waits until hh:00:00 and opens `?hourly=run`. Backup: GitHub's hourly schedule (often 10-60
+  min late). The app accepts a run from 5 min before a send hour to 3 h after (later slot wins) and sends each slot
+  once via Mail_Log. 16 Nov: GitHub's scheduled 8 AM run never came; the mail was sent by a manual run at 8:11. Content: **both tables**: 1) Make-ready list, 2) By spec size, in the body and as PDF
   (two sections) + Excel (two sheets), per recipient, scoped by their cities. No customer-level section, no
   batching. Recipients are added by the user in Access → E-mails.
 - **SO/PO**: sent on every PO upload to the PO list, with the PO lines as PDF + Excel.

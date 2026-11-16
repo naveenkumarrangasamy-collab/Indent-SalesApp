@@ -69,12 +69,13 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
         and "Chennai" not in body
     assert z["Subject"].startswith("Production ") and "2 indent" in z["Subject"]      # Bangalore only
     assert "3 indent" in by_to["all@x.com"]["Subject"] and "Chennai" in by_to["all@x.com"].get_body(("html",)).get_content()
-    # same slot again (also a late run at 10:15): nothing new; not a send hour: skipped
+    # same slot again (also at 8:50): nothing new; not a send hour: skipped
     assert {r["status"] for r in hourly.run(now=at9.replace(minute=40))} == {"skipped"}
-    assert {r["status"] for r in hourly.run(now=at9.replace(hour=10, minute=15))} == {"skipped"}
+    assert {r["status"] for r in hourly.run(now=at9.replace(hour=8, minute=50))} == {"skipped"}
     assert hourly.run(now=at9.replace(hour=12))[0]["detail"].startswith("not a send hour")
+    assert {r["status"] for r in hourly.run(now=at9.replace(hour=8, minute=58))} == {"sent"}   # the 9 AM slot
     assert hourly.run(now=at9.replace(hour=19))[0]["status"] == "skipped"
-    assert len(sent) == 2
+    assert len(sent) == 4
     log = recipients.read_log()
     assert set(log["kind"]) == {"hourly"} and set(log["status"]) == {"sent"}
     ok, msg = hourly.send_sample("me@x.com")
@@ -83,11 +84,12 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
 
 def test_hourly_slot_window():
     now = config.now_ist().replace(minute=5)
-    assert hourly.slot_for(now.replace(hour=8)).hour == 8
-    assert hourly.slot_for(now.replace(hour=10, minute=50)).hour == 8    # late scheduled run: still 8 AM
-    assert hourly.slot_for(now.replace(hour=11)) is None
-    assert hourly.slot_for(now.replace(hour=14)) is None
-    assert hourly.slot_for(now.replace(hour=7)) is None
+    assert hourly.slot_for(now.replace(hour=8, minute=0)).hour == 8
+    assert hourly.slot_for(now.replace(hour=7, minute=58)).hour == 8     # exact trigger fires 2 min early
+    assert hourly.slot_for(now.replace(hour=8, minute=58)).hour == 9     # 9 AM slot, not 8
+    assert hourly.slot_for(now.replace(hour=11, minute=50)).hour == 9    # late scheduled run: still 9 AM
+    assert hourly.slot_for(now.replace(hour=12)) is None
+    assert hourly.slot_for(now.replace(hour=7, minute=50)) is None
 
 
 def test_reports_overall_clubs_customers_and_customer_level_keeps_stores(env):

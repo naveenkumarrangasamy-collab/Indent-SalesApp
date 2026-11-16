@@ -38,26 +38,31 @@ def delivery_offsets() -> list[int]:
 
 def send_hours() -> list[int]:
     """The hours (IST) the production e-mail goes out: secret `production_mail_hours`,
-    default [8] = once a day at 8 AM. Each must sit inside the scheduled 8 AM-2 PM runs."""
-    v = config.get("production_mail_hours", [8])
+    default [8, 9] = at 8 AM and 9 AM."""
+    v = config.get("production_mail_hours", [8, 9])
     if isinstance(v, (int, float, str)):
         v = [v]
     try:
-        return sorted({int(x) for x in v}) or [8]
+        return sorted({int(x) for x in v}) or [8, 9]
     except (TypeError, ValueError):
-        return [8]
+        return [8, 9]
 
 
 CATCH_UP_HOURS = 3   # a scheduled run up to 3 h late still sends a missed slot (once, via Mail_Log)
+EARLY_MINUTES = 5    # a run up to 5 min before the hour counts for that hour, so the mail lands at :00
 
 
 def slot_for(now: datetime) -> datetime | None:
-    """The send hour this run belongs to, or None. With the default [8], runs from
-    8:00 to 10:59 AM belong to the 8 AM slot (GitHub schedules can be late); the
-    Mail_Log check then sends it only once."""
-    h = now.replace(minute=0, second=0, microsecond=0)
-    due = [s for s in send_hours() if s <= now.hour < s + CATCH_UP_HOURS]
-    return h.replace(hour=max(due)) if due else None
+    """The send hour this run belongs to, or None. A run from 5 minutes before a
+    send hour (7:55) up to 3 hours after it (10:59) belongs to that slot; when two
+    slots qualify (8:57 with 8 and 9), the later one wins. The exact-time trigger
+    (cron-job.org) fires at 7:58 / 8:58 so the mail lands at 8:00 / 9:00; the
+    Mail_Log check sends each slot only once."""
+    mins = now.hour * 60 + now.minute
+    due = [s for s in send_hours() if s * 60 - EARLY_MINUTES <= mins < (s + CATCH_UP_HOURS) * 60]
+    if not due:
+        return None
+    return now.replace(hour=max(due), minute=0, second=0, microsecond=0)
 
 
 def slot_label(slot: datetime) -> str:

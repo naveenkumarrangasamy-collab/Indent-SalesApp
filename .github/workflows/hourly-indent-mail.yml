@@ -1,9 +1,11 @@
 name: Hourly indent e-mail
 
-# Every hour from 8:00 AM to 2:00 PM IST (02:30-08:30 UTC). The job opens the
-# live app with ?hourly=run; the app sends that hour's e-mail with its own
-# Streamlit secrets (no secrets are needed in GitHub). Each hour is sent once
-# (Mail_Log), and nothing is sent outside 8 AM-2 PM. "Run workflow" = a test run.
+# Exact times: cron-job.org starts this workflow (workflow_dispatch) at 7:54 and
+# 8:54 IST; the job wakes the app, waits until 8:00:00 / 9:00:00 and opens
+# ?hourly=run, so the production e-mail leaves on the hour.
+# Backup: GitHub's own schedule every hour 8 AM-2 PM IST (often late). The app
+# sends only at its send hours (8 and 9 AM) and each slot once (Mail_Log), so
+# extra runs do nothing. "Run workflow" = a manual run.
 on:
   schedule:
     - cron: "30 2-8 * * *"
@@ -12,7 +14,7 @@ on:
 jobs:
   send:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
