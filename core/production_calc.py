@@ -257,11 +257,23 @@ def not_in_base(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
 
 def batching(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     """Batching sheet: how the produced stock is split per delivery point
-    (city > customer > store), with the same variety / lot / lot size / spec
-    as the production sheet so the totals add up."""
-    df = _spec_rows(lines, masters) if lines is not None and not lines.empty else None
-    if df is None or df.empty:
+    (city > customer > store). Temporary (16 Nov): when the New tab exists,
+    Variety (Apple only), Spec (= New tab Spec-Size) and Lot Size come from it,
+    the same as the production sheet, so the two match; SKU names missing from
+    New show 'not in New tab (name)'. Without a New tab: Mapping Whole as before."""
+    if lines is None or lines.empty:
         return pd.DataFrame(columns=BATCH_COLUMNS)
+    if masters is not None and masters.has_prod_base:
+        df = _base_rows(lines, masters)
+        if df.empty:
+            return pd.DataFrame(columns=BATCH_COLUMNS)
+        df["Customer SKU Name"] = df["customer_sku_name"].map(lambda v: " ".join(str(v).split()))
+        df["Lot"] = df["lot"]
+        df["Spec"] = df["Spec-Size"]
+    else:
+        df = _spec_rows(lines, masters)
+        if df.empty:
+            return pd.DataFrame(columns=BATCH_COLUMNS)
     df["Customer"], df["Delivery point"] = df["customer"], df["store"]
     keys = ["City", "Customer", "Delivery point", "Parent SKU", "Customer SKU Name", "Variety", "Lot",
             "Lot Size", "Spec"]

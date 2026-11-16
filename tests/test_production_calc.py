@@ -189,3 +189,24 @@ def test_make_ready_list_mixes_sizes_and_handles_loose_and_boxes():
     assert got[("Apple", "Queen", "Punnet", "2 Pcs")] == ("10 Punnet", "20 pcs")
     assert got[("Apple", "Granny Smith", "Box", "1 Box")] == ("10 Box", "")
     assert got[("Apple", "Gala", "Punnet", "200 gm")] == ("725 Punnet", "")         # packets, no kg
+
+
+def test_batching_takes_spec_and_variety_from_new_tab():
+    """Temporary fix: batching uses the New tab like production (Spec = Spec-Size, Apple-only variety)."""
+    df = _lines([
+        dict(BASE, indent_id="A", version="1", customer="Zepto", store="S1", parent_sku="Avocado",
+             customer_sku_name="2PC - Hass Avocado", lot="Pack", qty="10"),
+        dict(BASE, indent_id="B", version="1", customer="Swiggy", store="WH1", parent_sku="Apple",
+             customer_sku_name="1Kg - nectr Royal Gala Apple", lot="Kg", qty="700"),
+        dict(BASE, indent_id="B", version="1", customer="Swiggy", store="WH1", parent_sku="Kiwi",
+             customer_sku_name="2PC - Green Kiwi", lot="Pack", qty="4"),
+    ])
+    raw = batching(df, _base_masters())
+    b = raw.set_index("Customer SKU Name")
+    assert list(raw.columns) == ["City", "Customer", "Delivery point", "Parent SKU", "Customer SKU Name",
+                                             "Variety", "Lot", "Lot Size", "Spec", "Qty", "Indent"]
+    assert b.loc["2PC - Hass Avocado", "Spec"] == "20C, 22C" and b.loc["2PC - Hass Avocado", "Variety"] == ""
+    assert b.loc["1Kg - nectr Royal Gala Apple", "Spec"] == "80, 90"
+    assert b.loc["1Kg - nectr Royal Gala Apple", "Variety"] == "Royal Gala"
+    assert b.loc["2PC - Green Kiwi", "Spec"].startswith("not in New tab")
+    assert b["Qty"].sum() == production(df, _base_masters())["Qty"].sum() == 714

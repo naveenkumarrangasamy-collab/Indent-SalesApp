@@ -202,7 +202,14 @@ def render_batching(user: User) -> None:
     st.dataframe(bat if has_var else bat.drop(columns=["Variety"]), hide_index=True, width="stretch",
                  column_config={"Qty": st.column_config.NumberColumn(format="%g"),
                                 "Spec": st.column_config.TextColumn(width="medium")})
-    _unmapped_warning(lines, m)
+    if m.has_prod_base:
+        gaps = not_in_base(lines, m)
+        if not gaps.empty:
+            with st.expander(f"⚠️ {len(gaps)} SKU name(s) are not in the New tab: their spec shows as "
+                             "\"not in New tab\"", expanded=False):
+                st.dataframe(gaps, hide_index=True, width="stretch")
+    else:
+        _unmapped_warning(lines, m)
 
     # downloads: PDF one section per delivery point, Excel, CSV
     now = config.now_ist().strftime("%d %b %Y, %I:%M %p")

@@ -176,6 +176,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - Mapping Whole / spec labels are still used by the Batching sheet and the spec mapping list. A permanent
     master for production is to be fixed later (user: "take it from New for now").
 - **Batching sheet:** **one table** with columns City, Customer, Delivery point, Parent SKU, **Customer SKU Name**, Variety, Lot, Lot Size, Spec, Qty, Indent. Downloads: PDF/Excel/CSV.
+  - **Temporary (16 Nov)**: when the New tab exists, Spec = New tab Spec-Size, Variety = Apple only (New tab first),
+    Lot Size as on production, so batching matches the production sheet; missing SKUs show "not in New tab (name)"
+    and are listed in a warning. Without a New tab it falls back to Mapping Whole. The user will decide the
+    permanent master (where production and batching pull from) later.
 - **Hourly tracker:** 8 AM–2 PM columns per customer/store row. Changed cells are amber (▲/▼) and unchanged cells green. It has a Status column and a detail dialog when a cell is clicked. Owner and warehouse only.
 - The City/SKU report was removed.
 
@@ -243,7 +247,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **141 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **142 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 
