@@ -17,7 +17,7 @@ from pages_src import common
 
 TEAMS = {
     "Ground": ("Production e-mails",
-               "Every day at 8 AM: the production report (make-ready list + by spec size, all customers "
+               "Every day at 8 AM and 9 AM: the production report (make-ready list + by spec size, all customers "
                "together) for today's deliveries, only for the cities chosen for each address, as PDF + Excel."),
     "Central": ("PO e-mails",
                 "The moment any PO is uploaded (any time, all cities and customers): the customer's PO plus "
@@ -143,7 +143,7 @@ def _team(team: str, m: masters.Masters, me: User, people: list[Recipient]) -> N
             st.markdown(
                 "A Streamlit Cloud app sleeps when nobody has it open, so a schedule in the GitHub repository "
                 "opens the app every hour from 8 AM to 2 PM (waking it if needed). The app sends the production "
-                "e-mail only at **8 AM** (a late run until 10:59 still sends it, once). Nothing to set up. "
+                "e-mail at **8 AM and 9 AM** sharp (cron-job.org starts it a few minutes early; GitHub runs are a late backup; each goes out once). Nothing to set up. "
                 "Test: GitHub → **Actions** → *Hourly indent e-mail* → **Run workflow**.")
 
 
@@ -171,7 +171,7 @@ def emails_tab(m: masters.Masters, me: User) -> None:
         common.sheet_error(e)
         return
     st.divider()
-    t1, t2 = st.tabs(["Production e-mails (8 AM)", "PO e-mails"])
+    t1, t2 = st.tabs(["Production e-mails (8 & 9 AM)", "PO e-mails"])
     with t1:
         _team("Ground", m, me, people)
     with t2:
