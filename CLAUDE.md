@@ -186,8 +186,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - **Loose**: Repacking Tray/Box/Crate with a piece or kg pack → the fruit goes in loose: "7 pcs loose"
     (More's 7 avocados into trays, NOT 7 trays), "700 kg loose".
   - **Spec size 1, 2…** (17 Nov, last columns): one cell per New-tab Spec-Size: piece packs at a count →
-    "22C · 300 pcs · 14 cases" (cases = pcs ÷ count, rounded up); a spec allowing several counts gives one cell per
-    count, later ones "or 24C · …"; kg packs → "18C · 70 kg"; else the spec ("16mm"). Counts always shown with C
+    "22C; 300 pcs" (no cases: user wants it simple); a spec allowing several counts gives one cell per
+    count, later ones "or 24C; …"; kg packs → "18C; 70 kg"; else the spec ("16mm"). Counts always shown with C
     (also Spec-Size on the production sheet). Also in the production e-mail's make-ready table.
   - The pack itself a container ("1 Box", Namdhari green apple) → "10 Box", Fruit needed blank. **Known gap**
     (user asked to be reminded): box packs have no kg/pieces yet; fix later.

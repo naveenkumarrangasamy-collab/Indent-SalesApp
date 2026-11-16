@@ -236,11 +236,9 @@ def _count_label(spec: str) -> str:
 
 def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[list[str]]:
     """Per make-ready row, one cell per spec size (from the New tab):
-    piece packs at a count -> '22C · 300 pcs · 14 cases' (cases = pieces / count,
-    rounded up); a spec allowing several counts gives one cell per count, the
-    later ones starting with 'or' ('or 24C · 80 pcs · 4 cases'); kg packs ->
-    '18C · 70 kg'; otherwise just the spec ('16mm')."""
-    import math
+    piece packs at a count -> '22C; 300 pcs'; a spec allowing several counts gives
+    one cell per count, the later ones starting with 'or' ('or 24C; 80 pcs');
+    kg packs -> '18C; 70 kg'; otherwise just the spec ('16mm')."""
     fold = lambda r: tuple(str(r[k]).casefold() for k in keys)  # noqa: E731
     parts: dict[tuple, dict[str, float]] = {}
     for r in df.to_dict("records"):
@@ -261,10 +259,9 @@ def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[list[st
             if pcs and counts:
                 n = q * pcs
                 for i, c in enumerate(counts):
-                    k = math.ceil(n / c - 1e-9)
-                    cells.append(f"{'or ' if i else ''}{c}C · {fmt_num(n)} pcs · {k} case{'s' if k != 1 else ''}")
+                    cells.append(f"{'or ' if i else ''}{c}C; {fmt_num(n)} pcs")
             elif kg:
-                cells.append(f"{_count_label(spec)} · {fmt_num(q * kg)} kg")
+                cells.append(f"{_count_label(spec)}; {fmt_num(q * kg)} kg")
             else:
                 cells.append(_count_label(spec))
         out.append(cells)

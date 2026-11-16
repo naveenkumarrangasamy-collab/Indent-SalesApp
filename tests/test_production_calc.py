@@ -179,8 +179,8 @@ def test_make_ready_list_mixes_sizes_and_handles_loose_and_boxes():
     assert got[("Apple", "Gala", "Punnet", "200 gm")] == ("725 Punnet", "")         # packets, no kg
     size = {(r["Parent SKU"], r["Repacking"], r["Pack"]): (r["Spec size 1"], r["Spec size 2"])
             for r in mr.to_dict("records")}
-    assert size[("Avocado", "Punnet", "1 Pcs")] == ("22C · 30 pcs · 2 cases", "24C · 20 pcs · 1 case")
-    assert size[("Avocado", "Tray", "1 Pcs")] == ("18C · 7 pcs · 1 case", "or 20C · 7 pcs · 1 case")
+    assert size[("Avocado", "Punnet", "1 Pcs")] == ("22C; 30 pcs", "24C; 20 pcs")
+    assert size[("Avocado", "Tray", "1 Pcs")] == ("18C; 7 pcs", "or 20C; 7 pcs")
     assert size[("Apple", "Punnet", "200 gm")] == ("135C, 150C", "")                 # spec only
     assert size[("Apple", "Box", "1 Box")] == ("90C, 110C", "")
 
