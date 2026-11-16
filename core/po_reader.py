@@ -224,7 +224,7 @@ def find_in_indent(name: str, indent_names: list[str]) -> tuple[str, str]:
             sc = len(w & words) / len(w | words)
             if sc > score:
                 best, score = c, sc
-    return (best, "close") if score >= 0.6 else ("", "")
+    return (best, "close") if score >= 0.5 else ("", "")
 
 
 def match(lines: list[POLine], candidates: list[str], item_map: dict[str, str] | None = None,
