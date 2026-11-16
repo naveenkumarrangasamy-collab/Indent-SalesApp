@@ -66,18 +66,23 @@ def render(user: User) -> None:
         st.warning("No quantities in the file.")
         return
 
-    # 1. delivery, time, price
-    days = _days()
+    # 1. delivery date (always chosen here, so the order lands on the right day), time, price
+    today = config.now_ist().date()
+    open_days = _days()
+    days = sorted({(today + timedelta(days=k)).isoformat() for k in (-1, 0, 1)} | set(open_days)
+                  | ({zf.pack_date} if zf.pack_date else set()))
+    if not user.is_owner:
+        days = [d for d in days if d in open_days]
     if not days:
         st.error("No delivery date is open for Zepto right now (cutoff 1 AM on the delivery day).")
         return
     c = st.columns([1.2, 1, 1])
-    pick = zf.pack_date if zf.pack_date in days else days[-1]
+    pick = zf.pack_date if zf.pack_date in days else (open_days or days)[0]
     day = c[0].selectbox("Delivery date", days, index=days.index(pick), key="zx_day",
-                         format_func=lambda d: date.fromisoformat(d).strftime("%a %d %b"))
-    if zf.pack_date and zf.pack_date != day:
-        c[0].caption(f"Pack date in the file: {zf.pack_date}"
-                     + ("" if zf.pack_date in days else " (closed for Zepto)"))
+                         format_func=lambda d: date.fromisoformat(d).strftime("%a %d %b")
+                         + ("" if d in open_days else " · closed (retro)"))
+    c[0].caption(f"Pack date in the file: **{zf.pack_date or '-'}**. Check this is the delivery day.")
+    retro = day not in open_days
     slot = c[1].selectbox("Expected delivery time", TIME_SLOTS, format_func=fmt_slot, key="zx_time")
     price = c[2].number_input("Price for every line", min_value=0.01, value=1.0, step=1.0, key="zx_price")
 
@@ -158,7 +163,8 @@ def render(user: User) -> None:
         with st.spinner("Creating indents…"):
             for g in ready:
                 try:
-                    made.append(f"{indents.submit_new(g.header, g.lines, user.email)} · {g.header.store}")
+                    made.append(f"{indents.submit_new(g.header, g.lines, user.email, retro=retro)} · "
+                                f"{g.header.store}")
                 except SheetError as e:
                     failed.append(f"{g.label}: {e}")
         if made:

@@ -176,6 +176,23 @@ def po_store_prefixes() -> dict[str, str]:
         return {}
 
 
+def tray_parents() -> list[str]:
+    """Parent SKUs packed in trays (shown as 'Tray', not 'Box') on the make-ready
+    list. Secret `tray_parents`, default ["Avocado", "Blueberry"]."""
+    v = get("tray_parents", ["Avocado", "Blueberry"])
+    return [str(x).strip() for x in ([v] if isinstance(v, str) else (v or [])) if str(x).strip()]
+
+
+def punnets_per_tray() -> dict[str, int]:
+    """Parents sold as punnets whatever the gram size in the name, and how many
+    punnets go in one tray. Secret `punnets_per_tray`, default {Blueberry = 12}."""
+    v = get("punnets_per_tray", {"Blueberry": 12})
+    try:
+        return {str(k).strip().casefold(): max(1, int(n)) for k, n in dict(v).items()}
+    except (TypeError, ValueError):
+        return {"blueberry": 12}
+
+
 def next_day_customers() -> dict[str, list[str]]:
     """Customers processed the day before delivery (D+1), per city: shown in their own
     section on the Production page (today's order + the next day's order) and left

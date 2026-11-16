@@ -178,8 +178,8 @@ def test_make_ready_list_mixes_sizes_and_handles_loose_and_boxes():
     assert got[("Apple", "Granny Smith", "Box", "1 Box")] == ("10 Box", "")
     assert got[("Apple", "Gala", "Punnet", "200 gm")] == ("725 Punnet", "")         # packets, no kg
     size = {(r["Parent SKU"], r["Repacking"], r["Pack"]): r["Spec Size"] for r in mr.to_dict("records")}
-    assert size[("Avocado", "Punnet", "1 Pcs")] == "22C : 30PC | 24C : 20PC"
-    assert size[("Avocado", "Tray", "1 Pcs")] == "18C : 7PC | 20C : 7PC"
+    assert size[("Avocado", "Punnet", "1 Pcs")] == "22C: 2 Tray | 24C: 1 Tray"      # 30/22, 20/24 rounded up
+    assert size[("Avocado", "Tray", "1 Pcs")] == "18C: 1 Tray | 20C: 1 Tray"
     assert size[("Apple", "Punnet", "200 gm")] == "135C, 150C"                       # spec only
     assert size[("Apple", "Box", "1 Box")] == "90C, 110C"
 
@@ -203,3 +203,21 @@ def test_batching_takes_spec_and_variety_from_new_tab():
     assert b.loc["1Kg - nectr Royal Gala Apple", "Variety"] == "Royal Gala"
     assert b.loc["2PC - Green Kiwi", "Spec"].startswith("not in New tab")
     assert b["Qty"].sum() == production(df, _base_masters())["Qty"].sum() == 714
+
+
+def test_make_ready_boxes_and_blueberry_trays():
+    from core.importer import build_prod_base
+    from core.production_calc import make_ready
+    m = _masters()
+    m.prod_base = pd.DataFrame(build_prod_base(NEW_TAB + [
+        ["Bangalore", "Zepto", "Apple", "2PC - Apple Royal Gala Imported", "Gala", "Punnet", "90, 100", "NZ"],
+        ["Bangalore", "Zepto", "Blueberry", "125gm - Blueberry Imported", "", "Punnet", "16mm", "Peru"],
+        ["Bangalore", "Swiggy", "Blueberry", "1Box - Imported Blueberry", "", "Punnet", "16mm", "Peru"]]))
+    row = lambda c, n, q, lot, p: dict(BASE, indent_id="A", version="1", customer=c, store="S",  # noqa: E731
+                                       parent_sku=p, customer_sku_name=n, lot=lot, qty=q)
+    mr = make_ready(_lines([row("Zepto", "2PC - Apple Royal Gala Imported", "450", "Pcs", "Apple"),
+                            row("Zepto", "125gm - Blueberry Imported", "100", "Pack", "Blueberry"),
+                            row("Swiggy", "1Box - Imported Blueberry", "19", "Box", "Blueberry")]), m)
+    got = {r["Parent SKU"]: (r["Pack"], r["Make ready"], r["Spec Size"]) for r in mr.to_dict("records")}
+    assert got["Apple"] == ("2 Pcs", "450 Punnet", "90C: 10 Box | 100C: 9 Box")
+    assert got["Blueberry"] == ("Punnet", "119 Punnet", "16mm: 10 Tray")      # 119 punnets / 12 a tray

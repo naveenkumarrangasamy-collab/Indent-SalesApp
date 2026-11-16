@@ -193,7 +193,11 @@ def make_ready(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     df = _base_rows(lines, masters) if lines is not None and not lines.empty else None
     if df is None or df.empty:
         return pd.DataFrame(columns=MAKE_READY_COLUMNS)
+    from core import config
     df = df.rename(columns={"Lot Size": "Pack"})
+    punnet = config.punnets_per_tray()
+    is_p = df["Parent SKU"].astype(str).str.casefold().isin(punnet)
+    df.loc[is_p, "Pack"] = "Punnet"            # blueberry: always punnets, whatever the gram size
     keys = ["City", "Parent SKU", "Variety", "Repacking", "Pack"]
     g = (df.assign(**{k + "_k": df[k].astype(str).str.casefold() for k in keys})
            .groupby([k + "_k" for k in keys], sort=False)
@@ -232,9 +236,16 @@ def _count_label(spec: str) -> str:
 
 def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[list[str]]:
     """Per make-ready row, the parts of its 'Spec Size' cell (joined with ' | '),
-    from the New tab: piece packs -> pieces at each count of the spec
-    ('20C : 100PC | 22C : 100PC' for a 20C/22C spec); kg packs -> '18C : 70KG';
-    otherwise just the spec ('16mm')."""
+    from the New tab Spec-Size. A count is fruit per box / tray:
+    - piece packs: boxes at each count, rounded up: 900 pcs at '90C, 100C' ->
+      '90C: 10 Box | 100C: 9 Box' (Avocado / Blueberry: 'Tray');
+    - punnet parents (Blueberry, 12 punnets a tray): '16mm: 10 Tray' for 119 punnets;
+    - kg packs: '18C: 70 kg'; otherwise just the spec ('180C, 198C' for gram packs).
+    SKUs in one row with different specs each get their own part."""
+    import math
+    from core import config
+    trays = {p.casefold() for p in config.tray_parents()}
+    punnet = config.punnets_per_tray()
     fold = lambda r: tuple(str(r[k]).casefold() for k in keys)  # noqa: E731
     parts: dict[tuple, dict[str, float]] = {}
     for r in df.to_dict("records"):
@@ -246,18 +257,21 @@ def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[list[st
     out = []
     for r in g.to_dict("records"):
         d = parts.get(fold(r), {})
+        parent = str(r["Parent SKU"]).casefold()
+        unit = "Tray" if parent in trays else "Box"
         pcs, kg = _pcs_per_lot(r["Pack"]), _kg_per_lot(r["Pack"], r["_lot"])
         if _is_container(r["Pack"]):
             pcs = kg = None
         cells = []
         for spec, q in sorted(d.items(), key=lambda kv: (_counts(kv[0]) or [999])[0]):
             counts = _counts(spec)
-            if pcs and counts:
+            if parent in punnet:
+                cells.append(f"{_count_label(spec)}: {math.ceil(q / punnet[parent] - 1e-9)} Tray")
+            elif pcs and counts:
                 n = q * pcs
-                for c in counts:
-                    cells.append(f"{c}C : {fmt_num(n)}PC")
+                cells += [f"{c}C: {math.ceil(n / c - 1e-9)} {unit}" for c in counts]
             elif kg:
-                cells.append(f"{_count_label(spec)} : {fmt_num(q * kg)}KG")
+                cells.append(f"{_count_label(spec)}: {fmt_num(q * kg)} kg")
             else:
                 cells.append(_count_label(spec))
         out.append(cells)

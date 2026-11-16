@@ -454,8 +454,9 @@ def _append_verified(backend, rows: list[dict], indent_id: str, version: int,
     return bool(mine)
 
 
-def submit_new(header: IndentHeader, lines: list[IndentLine], user: str) -> str:
-    if not date_allowed(header.delivery_date, customer=header.customer):
+def submit_new(header: IndentHeader, lines: list[IndentLine], user: str, retro: bool = False) -> str:
+    """retro=True (owner): the delivery date may be a closed day (cutoff passed)."""
+    if not retro and not date_allowed(header.delivery_date, customer=header.customer):
         raise SheetError(f"The delivery date must be {date_rule_text()}.")
     backend = get_backend()
     for _ in range(3):

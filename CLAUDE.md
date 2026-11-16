@@ -190,9 +190,12 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
     packs (10 × 2 Pcs = "20 pcs"), kilos for kg packs, **blank for gram packs** (the packet count is the answer).
   - **Loose**: Repacking Tray/Box/Crate with a piece or kg pack → the fruit goes in loose: "7 pcs loose"
     (More's 7 avocados into trays, NOT 7 trays), "700 kg loose".
-  - **Spec Size** (17 Nov, ONE last column, user's format): pieces at each count of the New-tab spec, joined by
-    " | ": "20C : 100PC | 22C : 100PC"; kg packs "18C : 70KG"; else the spec text. No other extra columns.
-    Counts always shown with C (also Spec-Size on the production sheet). Also in the production e-mail.
+  - **Spec Size** (17 Nov 3 AM, ONE last column, approved): a count = fruit per box/tray. Piece packs → boxes at
+    each count of the New-tab spec, rounded up: 900 pcs at "90, 100" → "90C: 10 Box | 100C: 9 Box". Avocado and
+    Blueberry say **Tray** (`tray_parents`). **Blueberry is always "Punnet"** (Pack column too, whatever the gram
+    size) and 12 punnets = 1 tray (`punnets_per_tray` {Blueberry = 12}): 119 punnets, 16mm → "16mm: 10 Tray".
+    Kg packs "18C: 70 kg"; gram/box packs → the spec only. SKUs in one row with different specs → one part each.
+    Later: 10 kg box for 56/60-count trays.
   - The pack itself a container ("1 Box", Namdhari green apple) → "10 Box", Fruit needed blank. **Known gap**
     (user asked to be reminded): box packs have no kg/pieces yet; fix later.
   - Mapping Whole / spec labels are only a fallback for the Batching sheet when there is no New tab. A permanent
@@ -249,11 +252,15 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Zepto Excel upload** (17 Nov; page "Zepto Excel upload" in the Indents menu, sales + owners; Zepto in the
   Bangalore city only): Zepto's indent Excel (Product Name, UOM, EAN, Pack Date, one qty column per warehouse
   "… Final", Summation). Each warehouse column with qty → one indent; store picked per column (guess: HSK →
-  Yalachanayakanapura, NLM → Nelamangala). Delivery date = Pack Date when open for Zepto, else the next open day;
+  Yalachanayakanapura, NLM → Nelamangala). **Delivery date is picked on the page** (default = the file's Pack Date;
+  yesterday/today/tomorrow; owners may pick a closed day = retro order, `submit_new(retro=True)`; 17 Nov: an
+  order meant for 17 was created for 18, hence this);
   price for every line (default 1); expected time. Products matched like PO lines (PO_Item_Map by EAN/name, name +
   pack, close); **creating is blocked until every product is mapped or skipped** (if a SKU is missing, add it to
   All Cux City and press Refresh master). Picks are saved to PO_Item_Map. Duplicates point to the existing indent.
   `core/zepto_import.py`, `pages_src/zepto_upload.py`. Tested on the 17 Nov file: 22 products, 3,397 qty.
+- **Change date** (owner, All indents → an indent): move an indent to another delivery day (2 days back to
+  tomorrow), ignoring the cutoff; same status, new version + Change_Log (`indents.move_date`).
 - **Start fresh** (Owner only): type CLEAR. It backs up the indent tabs to Backup_ tabs and then empties them.
 
 ## 6. Code map (repo root)
@@ -283,7 +290,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **150 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **153 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 
