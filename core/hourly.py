@@ -38,14 +38,16 @@ def delivery_offsets() -> list[int]:
 
 def send_hours() -> list[int]:
     """The hours (IST) the production e-mail goes out: secret `production_mail_hours`,
-    default [8, 9] = at 8 AM and 9 AM."""
-    v = config.get("production_mail_hours", [8, 9])
+    default = every hour from hourly_mail_from to hourly_mail_to (8 AM-2 PM)."""
+    first, last = hours()
+    default = list(range(first, last + 1))          # every hour 8 AM-2 PM
+    v = config.get("production_mail_hours", default)
     if isinstance(v, (int, float, str)):
         v = [v]
     try:
-        return sorted({int(x) for x in v}) or [8, 9]
+        return sorted({int(x) for x in v}) or default
     except (TypeError, ValueError):
-        return [8, 9]
+        return default
 
 
 CATCH_UP_HOURS = 3   # a scheduled run up to 3 h late still sends a missed slot (once, via Mail_Log)

@@ -72,7 +72,7 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
     # same slot again (also at 8:50): nothing new; not a send hour: skipped
     assert {r["status"] for r in hourly.run(now=at9.replace(minute=40))} == {"skipped"}
     assert {r["status"] for r in hourly.run(now=at9.replace(hour=8, minute=50))} == {"skipped"}
-    assert hourly.run(now=at9.replace(hour=12))[0]["detail"].startswith("not a send hour")
+    assert hourly.run(now=at9.replace(hour=19))[0]["detail"].startswith("not a send hour")
     assert {r["status"] for r in hourly.run(now=at9.replace(hour=8, minute=58))} == {"sent"}   # the 9 AM slot
     assert hourly.run(now=at9.replace(hour=19))[0]["status"] == "skipped"
     assert len(sent) == 4
@@ -87,8 +87,10 @@ def test_hourly_slot_window():
     assert hourly.slot_for(now.replace(hour=8, minute=0)).hour == 8
     assert hourly.slot_for(now.replace(hour=7, minute=58)).hour == 8     # exact trigger fires 2 min early
     assert hourly.slot_for(now.replace(hour=8, minute=58)).hour == 9     # 9 AM slot, not 8
-    assert hourly.slot_for(now.replace(hour=11, minute=50)).hour == 9    # late scheduled run: still 9 AM
-    assert hourly.slot_for(now.replace(hour=12)) is None
+    assert hourly.slot_for(now.replace(hour=11, minute=50)).hour == 11   # every hour 8 AM-2 PM
+    assert hourly.slot_for(now.replace(hour=13, minute=56)).hour == 14
+    assert hourly.slot_for(now.replace(hour=16, minute=59)).hour == 14   # late run still catches 2 PM
+    assert hourly.slot_for(now.replace(hour=17)) is None
     assert hourly.slot_for(now.replace(hour=7, minute=50)) is None
 
 
