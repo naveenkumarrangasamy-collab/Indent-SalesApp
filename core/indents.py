@@ -728,6 +728,24 @@ def _nkey(s: str) -> str:
     return " ".join(str(s or "").split()).casefold()
 
 
+def _rematch(by: dict, lines: list[IndentLine]) -> None:
+    """PO names that are not exactly an indent item (e.g. a PO saved with the
+    customer's own name) are matched to a still-unmatched indent item with the
+    same words (core.po_reader), so old POs compare correctly too."""
+    from core import po_reader
+    names = {_nkey(x.customer_sku_name): x.customer_sku_name for x in lines}
+    free = [n for k, n in names.items() if k not in by]
+    for k in [k for k in list(by) if k not in names]:
+        if not free:
+            break
+        name, v = by[k]
+        hit, _ = po_reader.find_in_indent(name, free)
+        if hit and _nkey(hit) not in by:
+            del by[k]
+            by[_nkey(hit)] = (hit, v)
+            free.remove(hit)
+
+
 def po_vs_indent(lines: list[IndentLine], info: dict) -> list[dict]:
     """Indent qty vs PO qty, per item (same Customer SKU Name, spaces/case ignored).
     An indent item that is not on the PO has po_qty None (never shown as 0);
@@ -735,6 +753,7 @@ def po_vs_indent(lines: list[IndentLine], info: dict) -> list[dict]:
     if info["qty"] is None:
         return []
     by = {_nkey(k): (k, v) for k, v in info["qty"].items()}
+    _rematch(by, lines)
     out = []
     for x in lines:
         hit = by.pop(_nkey(x.customer_sku_name), None)

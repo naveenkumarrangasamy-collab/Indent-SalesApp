@@ -209,6 +209,24 @@ def _find(name: str, keys: list[tuple], close_at: float, loose: bool = False) ->
     return (best, "close") if score >= close_at else ("", "")
 
 
+def find_in_indent(name: str, indent_names: list[str]) -> tuple[str, str]:
+    """Match one PO name (customer's style or ours) to the indent's items."""
+    words, pack = our_key(name)
+    if not pack:
+        words, pack = po_key(name)
+    keys = _keys(indent_names)
+    same = [c for c, w, p in keys if w == words]
+    if len(same) == 1:
+        return same[0], "name"
+    best, score = "", 0.0
+    for c, w, p in keys:
+        if w and words:
+            sc = len(w & words) / len(w | words)
+            if sc > score:
+                best, score = c, sc
+    return (best, "close") if score >= 0.6 else ("", "")
+
+
 def match(lines: list[POLine], candidates: list[str], item_map: dict[str, str] | None = None,
           prefer: list[str] | None = None) -> list[POLine]:
     """Fill .sku/.how on every line. prefer: the indent's own SKU names; a PO line

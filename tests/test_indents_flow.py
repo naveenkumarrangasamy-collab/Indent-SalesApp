@@ -342,9 +342,10 @@ def test_po_mismatch_is_uploaded_and_flagged(backend):
 
 def test_owner_replaces_a_wrong_po(backend):
     iid = indents.submit_new(H, [HASS], "s@x.com")
-    indents.freeze(iid, 1, "a.pdf", "o", po_qty={"Avocado Hass Imported - 1 pc": 30})
+    indents.freeze(iid, 1, "a.pdf", "o", po_qty={"Avocado Hass Imported - 1 pc": 25})
     lines = indents.snapshot(indents.read_lines(fresh=True), iid).lines
-    assert not indents.po_vs_indent(lines, indents.po_info(indents.read_po_freeze(), iid))[0]["ok"]
+    first = indents.po_vs_indent(lines, indents.po_info(indents.read_po_freeze(), iid))[0]
+    assert first["po_qty"] == 25 and not first["ok"]       # customer's name still matched to our item
     v, frozen = indents.freeze(iid, 2, "b.pdf", "o", po_qty={" 1PC - Hass  Avocado Imported": 30}, replace=True)
     info = indents.po_info(indents.read_po_freeze(), iid)
     assert v == 2 and frozen and info["pos"] == 1                       # only the latest PO counts
