@@ -240,6 +240,14 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - Each customer + store + date becomes one indent.
   - If the store isn't found and the customer has **one** store in the master, that store is used.
   - Missing SKUs/stores can be added to All Cux City / Customer List first. Creating indents is blocked until they are added.
+- **Zepto Excel upload** (17 Nov; page "Zepto Excel upload" in the Indents menu, sales + owners; Zepto in the
+  Bangalore city only): Zepto's indent Excel (Product Name, UOM, EAN, Pack Date, one qty column per warehouse
+  "… Final", Summation). Each warehouse column with qty → one indent; store picked per column (guess: HSK →
+  Yalachanayakanapura, NLM → Nelamangala). Delivery date = Pack Date when open for Zepto, else the next open day;
+  price for every line (default 1); expected time. Products matched like PO lines (PO_Item_Map by EAN/name, name +
+  pack, close); **creating is blocked until every product is mapped or skipped** (if a SKU is missing, add it to
+  All Cux City and press Refresh master). Picks are saved to PO_Item_Map. Duplicates point to the existing indent.
+  `core/zepto_import.py`, `pages_src/zepto_upload.py`. Tested on the 17 Nov file: 22 products, 3,397 qty.
 - **Start fresh** (Owner only): type CLEAR. It backs up the indent tabs to Backup_ tabs and then empties them.
 
 ## 6. Code map (repo root)
@@ -269,7 +277,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **147 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **148 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 

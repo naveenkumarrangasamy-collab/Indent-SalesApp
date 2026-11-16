@@ -503,8 +503,8 @@ def make_backend():
     seed = LOCAL_DATA_DIR / "seed"
     if seed.is_dir():
         import shutil
-        from core.schema import OUTPUT_TABS, ACCESS
-        keep = set(OUTPUT_TABS) | {ACCESS}
+        from core.schema import OUTPUT_TABS, ACCESS, PO_ITEM_MAP
+        keep = set(OUTPUT_TABS) | {ACCESS, PO_ITEM_MAP}
         LOCAL_DATA_DIR.mkdir(parents=True, exist_ok=True)
         seed_names = {f.name for f in seed.glob("*.csv")}
         for f in seed.glob("*.csv"):
