@@ -139,8 +139,9 @@ def po_recipients(header) -> list[str]:
 
 def send_so_mail(cur, file_name: str, pdf: bytes, uploaded_by: str,
                  po_number: str = "", to_override: list[str] | None = None,
-                 sample: bool = False) -> tuple[bool, str]:
-    """SO placement e-mail with the customer's PO + SO as PDF and Excel."""
+                 sample: bool = False, po_qty: dict | None = None) -> tuple[bool, str]:
+    """SO placement e-mail with the customer's PO + SO as PDF and Excel.
+    po_qty: this PO's qty per SKU, to show the PO qty and differences."""
     from core import recipients, reports
     s = settings()
     to = to_override or po_recipients(cur.header)
@@ -148,10 +149,10 @@ def send_so_mail(cur, file_name: str, pdf: bytes, uploaded_by: str,
     subject = (("[SAMPLE] " if sample else "") + f"{h.customer} - SO placed - {h.store} - {cur.indent_id}"
                + (f" - PO {po_number}" if po_number else ""))
     files = [(file_name or "PO.pdf", pdf, "application/pdf")] if pdf else []
-    files += reports.so_files(cur, po_number, file_name, uploaded_by)
+    files += reports.so_files(cur, po_number, file_name, uploaded_by, po_qty)
     text = (f"SO placed for {h.customer} / {h.store} ({h.city}), delivery {h.delivery_date}. "
             f"Indent {cur.indent_id}, PO {po_number or file_name}. Details attached (PDF and Excel).")
-    msg = build_message(to, subject, reports.so_html(cur, po_number, file_name, uploaded_by), text,
+    msg = build_message(to, subject, reports.so_html(cur, po_number, file_name, uploaded_by, po_qty), text,
                         files, s["cc"])
     if sample:
         msg.replace_header("To", ", ".join(to))

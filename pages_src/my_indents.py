@@ -10,9 +10,9 @@ import streamlit as st
 
 from core import indents, masters
 from core.lots import lot_size
-from core.models import IndentLine, to_number
+from core.models import IndentLine, fmt_num, to_number
 from core.auth import User
-from core.schema import STATUS_FROZEN
+from core.schema import STATUS_FROZEN, STATUS_LOCKED
 from core.sheets import SheetError
 from pages_src import common, indent_actions, state
 
@@ -78,7 +78,7 @@ def _page(user: User) -> None:
 
     f = st.columns([2, 1, 1, 1])
     q = f[0].text_input("Search", placeholder="Indent id, store, customer…", label_visibility="collapsed")
-    status = f[1].selectbox("Status", ["All", "Submitted", "Frozen", "Cancelled"], label_visibility="collapsed")
+    status = f[1].selectbox("Status", ["All", "Submitted", "Locked", "Frozen", "Cancelled"], label_visibility="collapsed")
     cities = ["All cities"] + sorted(summ["city"].unique())
     city = f[2].selectbox("City", cities, label_visibility="collapsed")
     dates = ["All dates"] + sorted(summ["delivery_date"].unique(), reverse=True)
@@ -134,13 +134,15 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
         f"<span><b>Last saved</b>{fmt_ts(cur.submitted_at)} by {cur.submitted_by}</span></div>",
         unsafe_allow_html=True)
     cancelled = cur.status == "Cancelled"
-    frozen = cur.status == STATUS_FROZEN or cancelled
+    locked = cur.status == STATUS_LOCKED
+    has_po = cur.status == STATUS_FROZEN
+    frozen = has_po or cancelled or locked
     created = indents.created_at(df, indent_id)
     st.session_state["mi_created_at"] = created
-    open_ = indents.can_edit(cur.header.delivery_date)
-    deadline = indents.deadline_text(cur.header.delivery_date)
-    why = (("Deleted" if cancelled else "Frozen with a PO") if frozen
-           else f"Editing closed at {deadline}") if (frozen or not open_) else ""
+    open_ = indents.can_edit(cur.header.delivery_date, customer=h.customer)
+    deadline = indents.deadline_text(cur.header.delivery_date, h.customer)
+    why = (("Deleted" if cancelled else "Locked: processing started" if locked else "Frozen with a PO")
+           if frozen else f"Editing closed at {deadline}") if (frozen or not open_) else ""
     _line_rows(cur, user, editable=open_ and not frozen, why=why)
     confirm = st.session_state.get("mi_confirm")
     if confirm and confirm[0] == indent_id:
@@ -156,27 +158,36 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
     elif cancelled:
         st.info("This indent was deleted (Cancelled). It is kept here for history only.")
     else:
-        c = st.columns([1.2, 1, 0.9, 2.2])
+        c = st.columns([1.2, 1, 0.9, 0.9, 1.8])
         can = open_ and not frozen
         if c[0].button("Edit whole indent", icon=":material/edit_note:", type="primary", disabled=not can,
                        help="Open the indent on the Indent page to change delivery details or add items"
                        if can else why):
             _request_open(cur)
-        if c[1].button("Upload PO", icon=":material/upload_file:", disabled=frozen,
-                       help="Upload the customer's PO (PDF) and freeze this indent" if not frozen
-                       else "PO already uploaded"):
+        if c[1].button("Upload PO", icon=":material/upload_file:", disabled=has_po,
+                       help="Upload the customer's PO (PDF)" if not has_po else "PO already uploaded"):
             indent_actions.ask("po", indent_id)
+        if not frozen and c[3].button("Lock", icon=":material/lock:", key=f"lock_{indent_id}",
+                                      help="Processing started: stop all edits. The PO can still be "
+                                           "uploaded later."):
+            indent_actions.ask("lock", indent_id)
+        if not has_po and indents.is_multi_po(h.customer) and c[3].button(
+                "End of POs", icon=":material/done_all:", key=f"endpo_{indent_id}",
+                help="No more POs for this indent: freeze it and show the differences"):
+            indent_actions.ask("end", indent_id)
         if user.is_owner and indents.owner_can_delete(cur.header.delivery_date):
             if c[2].button("Delete", icon=":material/delete:", key=f"own_del_{indent_id}",
                            help="Owner: delete this indent (allowed until 2 days after the delivery date, "
                                 "also after the cutoff and after a PO)"):
                 indent_actions.ask("delete", indent_id)
-        if frozen:
-            c[3].caption("Frozen with a PO: read-only.")
+        if has_po:
+            c[4].caption("Frozen with a PO: read-only.")
+        elif locked:
+            c[4].caption("Locked (processing started). A PO can still be uploaded.")
         elif not open_:
-            c[3].caption(f"Editing closed at {deadline} (delivery-day cutoff). A PO can still be uploaded.")
+            c[4].caption(f"Editing closed at {deadline} (delivery-day cutoff). A PO can still be uploaded.")
         else:
-            c[3].caption(f"Editable until **{deadline}**.")
+            c[4].caption(f"Editable until **{deadline}**.")
 
     indent_actions.show_dialog(user)
     tabs = st.tabs(["Versions", "Change log", "PO"])
@@ -235,31 +246,46 @@ def _change_log(indent_id: str) -> None:
 def _po(cur, user: User) -> None:
     try:
         po = indents.read_po_freeze()
-        po = po[po["indent_id"] == cur.indent_id]
     except SheetError:
         po = pd.DataFrame()
-    if po.empty:
-        st.caption("No PO yet. Use **Upload PO** above (or on the home screen) to add the customer's "
-                   "PO as a PDF; that freezes the indent.")
+    mine = po[po["indent_id"] == cur.indent_id] if not po.empty else po
+    if not mine.empty and "kind" in mine.columns:
+        mine = mine[mine["kind"].astype(str).str.strip().str.lower() != "end"]
+    if mine.empty:
+        st.caption("No PO yet. Use **Upload PO** above (or on the home screen) to add the customer's PO.")
         return
-    r = po.iloc[-1]
+    info = indents.po_info(po, cur.indent_id)
+    st.dataframe(pd.DataFrame({
+        "PO number": mine["po_number"], "File": mine["po_file_name"],
+        "Qty": mine["po_total_qty"], "By": mine["confirmed_by"],
+        "At": mine["confirmed_at"].map(fmt_ts)}), hide_index=True, width="stretch")
+    if indents.is_multi_po(cur.header.customer) and not info["ended"]:
+        st.caption("More POs can still be added. Press **End of POs** after the last one.")
+    rows = indents.po_vs_indent(cur.lines, info)
+    bad = [r for r in rows if not r["ok"]]
+    if bad:
+        st.warning(f"{len(bad)} item(s) differ between the indent and the PO(s):")
+        st.dataframe(pd.DataFrame([{"Customer SKU Name": r["customer_sku_name"],
+                                    "Indent qty": fmt_num(r["indent_qty"]), "PO qty": fmt_num(r["po_qty"]),
+                                    "Difference": ("+" if r["diff"] > 0 else "") + fmt_num(r["diff"])}
+                                   for r in bad]), hide_index=True, width="stretch")
+    elif rows:
+        st.success("The PO(s) match the indent.")
+    r = mine.iloc[-1]
     link = str(r.get("po_file_link", "") or "")
-    po_no = str(r.get("po_number", "") or "")
-    st.success(f"Frozen with PO **{po_no or r['po_file_name']}** ({r['po_file_name']}) for {r['po_customer']} / "
-               f"{r['po_store']}, confirmed by {r['confirmed_by']} on {fmt_ts(r['confirmed_at'])}"
-               + (f". PO quantities: {r.get('po_lines')}" if str(r.get("po_lines", "") or "") else "") + ".")
     if link.startswith("http"):
-        st.link_button("Open PO file", link, icon=":material/picture_as_pdf:")
+        st.link_button("Open latest PO file", link, icon=":material/picture_as_pdf:")
     with st.expander("Re-send the PO e-mail", icon=":material/forward_to_inbox:"):
         from core import mailer
-        st.caption("If the SO / PO e-mail did not go out when the PO was uploaded, choose the same PDF "
-                   "again to re-send it. The indent stays frozen.")
+        st.caption("If the SO / PO e-mail did not go out, choose the same PDF again to re-send it.")
         up = st.file_uploader("PO file (PDF)", type=["pdf"], key=f"resend_{cur.indent_id}")
         if st.button("Send PO e-mail", icon=":material/send:", disabled=up is None,
                      key=f"resend_btn_{cur.indent_id}"):
             with st.spinner("Sending…"):
                 po_no = str(r.get("po_number", "") or "")
-                ok, msg = mailer.send_so_mail(cur, up.name, up.getvalue(), user.email, po_number=po_no)
+                qty = indents._qty_json(r.get("po_qty_json", "")) or None
+                ok, msg = mailer.send_so_mail(cur, up.name, up.getvalue(), user.email, po_number=po_no,
+                                              po_qty=qty)
             (st.success if ok else st.error)(msg)
 
 

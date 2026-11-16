@@ -124,7 +124,7 @@ def test_so_mail_goes_to_central_team_in_scope(env):
     iid = indents.submit_new(_hdr("Store A"), [HASS], "s@x.com")
     recipients.upsert(Recipient("c@x.com", team="Central", so=True), by="o")
     recipients.upsert(Recipient("other@x.com", team="Central", so=True, cities=["Chennai"]), by="o")
-    v = indents.freeze(iid, 1, "po.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 30}, po_number="77")
+    v, _ = indents.freeze(iid, 1, "po.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 30}, po_number="77")
     cur = indents.snapshot(indents.read_lines(fresh=True), iid)
     assert cur.version == v
     ok, msg = mailer.send_so_mail(cur, "po.pdf", b"%PDF-1.4 test", "s@x.com", po_number="77")

@@ -38,7 +38,7 @@ TABS: dict[str, list[str]] = {
                  "change_type", "customer_sku_name", "field", "old_value", "new_value"],
     PO_FREEZE: ["indent_id", "version", "po_file_name", "po_customer", "po_store",
                 "confirmed_by", "confirmed_at", "po_file_link", "po_number", "po_total_qty",
-                "po_lines"],
+                "po_lines", "kind", "po_qty_json"],
     DRAFTS: ["draft_id", "user_email", "updated_at", "payload_json"],
     # Who gets which e-mail, and which cities / customers / stores they see
     # (empty = all). Edited from the Access page.
@@ -56,6 +56,10 @@ LOTS = ["Kg", "Pcs", "Tray", "Box", "Pack"]  # "Pack" = gram packs (was "gms")
 STATUS_SUBMITTED = "Submitted"
 STATUS_FROZEN = "Frozen"
 STATUS_CANCELLED = "Cancelled"   # "deleted" indent: kept in the sheet, ignored elsewhere
+STATUS_LOCKED = "Locked"         # frozen by hand (processing started): no edits, still waiting for its PO
+WAITING_FOR_PO = (STATUS_SUBMITTED, STATUS_LOCKED)
+PO_KIND = "po"                   # PO_Freeze.kind: one uploaded PO
+PO_END = "end"                   # PO_Freeze.kind: "End of POs" pressed (multi-PO customers)
 
 ROLE_OWNER = "owner"               # limited owner: everything except the full-owner tools
 ROLE_OWNER_FULL = "owner_full"     # full owner: also Import indents and Start fresh

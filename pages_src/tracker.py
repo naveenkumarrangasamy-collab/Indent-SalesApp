@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from core import config, hourly, indents, reports
+from core.models import fmt_num
 from core.auth import User
 from core.sheets import SheetError
 from pages_src import common
@@ -130,7 +131,8 @@ def _style(p: pd.DataFrame, hours: list[str]):
                 elif prev is None or pd.isna(prev) or v != prev:
                     arrow = "▲" if prev is None or pd.isna(prev) or v > prev else "▼"
                     css.at[i, c] = CHANGED
-                    txt = f"{arrow} {txt}"
+                    was = "0" if prev is None or pd.isna(prev) else f"{prev:,.0f}"
+                    txt = f"{was} → {txt} {arrow}"
                 else:
                     css.at[i, c] = SAME
                 shown.at[i, c] = txt
@@ -166,8 +168,8 @@ def render(user: User) -> None:
     st.markdown("### Hourly indent tracker")
     first, last = hourly.hours()
     st.caption(f"Each store's indent qty at every hour from {_hour_label(first)} to {_hour_label(last)} "
-               "on the delivery day (the hours of the indent e-mail). "
-               "🟨 ▲▼ the indent changed that hour · 🟩 no change. Click a customer or store to see what changed.")
+               "on the delivery day. 🟨 previous → new qty where it changed that hour · 🟩 no change. "
+               "**Indent vs PO** compares each item with its PO(s).")
 
     # ---- the three filters
     today = config.now_ist().date()
@@ -203,6 +205,14 @@ def render(user: User) -> None:
         st.info(f"The 8 AM snapshot for {_fmt_day(day)} is not there yet: tracking starts at "
                 f"{_hour_label(first)} on the delivery day.")
 
+    t1, t2 = st.tabs(["Indent changes", "Indent vs PO"])
+    with t2:
+        _po_tracker(lines, ids)
+    with t1:
+        _changes(scoped, day, points, hours, states, city, cust)
+
+
+def _changes(scoped, day, points, hours, states, city, cust) -> None:
     # ---- by customer
     st.markdown("**By customer**")
     pc = _with_change(_pivot(states, ["customer"]), hours).rename(columns={"customer": "Customer"})
@@ -224,6 +234,69 @@ def render(user: User) -> None:
         _detail(scoped, day, points, r["Customer"], r["Store"])
     elif rc:
         _detail(scoped, day, points, pc.iloc[rc[0]]["Customer"], None)
+
+
+DIFF = "background-color:#ffe0e0;color:#a40e26;font-weight:700"
+PENDING = "background-color:#f1f3f5;color:#555"
+
+
+def _po_tracker(lines: pd.DataFrame, ids: set) -> None:
+    """Indent vs PO per store and item: the indent qty, the PO qty (all POs of
+    the indent together) and the difference."""
+    try:
+        po = indents.read_po_freeze()
+    except SheetError as e:
+        common.sheet_error(e)
+        return
+    out = []
+    for iid in sorted(ids):
+        cur = indents.snapshot(lines, iid)
+        if cur is None or cur.status == "Cancelled":
+            continue
+        info = indents.po_info(po, iid)
+        h = cur.header
+        multi = indents.is_multi_po(h.customer)
+        if info["pos"] == 0:
+            state_ = "No PO yet"
+        elif info["qty"] is None:
+            state_ = "PO without item qty"
+        elif multi and not info["ended"]:
+            state_ = f"{info['pos']} PO(s), more coming"
+        else:
+            state_ = ""
+        rows = indents.po_vs_indent(cur.lines, info) if info["qty"] is not None else [
+            {"customer_sku_name": x.customer_sku_name, "indent_qty": float(x.qty), "po_qty": None,
+             "diff": None, "ok": None} for x in cur.lines]
+        for r in rows:
+            out.append({"Customer": h.customer, "Store": h.store, "Indent": iid,
+                        "Customer SKU Name": r["customer_sku_name"],
+                        "Indent qty": fmt_num(r["indent_qty"]),
+                        "PO qty": "" if r["po_qty"] is None else fmt_num(r["po_qty"]),
+                        "Difference": "" if r["diff"] is None or r["ok"] else
+                        ("+" if r["diff"] > 0 else "") + fmt_num(r["diff"]),
+                        "Status": state_ or ("Match" if r["ok"] else
+                                             "Not on PO" if not r["po_qty"] else
+                                             "Not on indent" if not r["indent_qty"] else "Differs")})
+    if not out:
+        st.info("No indents with these filters.")
+        return
+    df = pd.DataFrame(out)
+    bad = df["Status"].isin(["Differs", "Not on PO", "Not on indent"])
+    n_st = df[bad][["Customer", "Store"]].drop_duplicates().shape[0]
+    show_all = st.toggle("Show matching items too", key="tk_po_all")
+    st.caption(f"**{int(bad.sum())}** item(s) differ in **{n_st}** store(s) · "
+               f"{int((df['Status'] == 'No PO yet').sum())} item(s) still without a PO. "
+               "Multi-PO customers are compared after End of POs.")
+    view = df if show_all else df[bad | ~df["Status"].isin(["Match"])]
+    if view.empty:
+        st.success("Every PO matches its indent.")
+        return
+
+    def _row(r):
+        css = DIFF if r["Status"] in ("Differs", "Not on PO", "Not on indent") else (
+            SAME if r["Status"] == "Match" else PENDING)
+        return [css if c in ("Difference", "Status", "PO qty") else "" for c in r.index]
+    st.dataframe(view.style.apply(_row, axis=1), hide_index=True, width="stretch")
 
 
 def _closed() -> None:

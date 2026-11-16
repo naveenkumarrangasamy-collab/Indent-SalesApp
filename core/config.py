@@ -145,6 +145,27 @@ def edit_cutoff_hour() -> int:
         return 14
 
 
+def customer_cutoff_hours() -> dict[str, int]:
+    """Per-customer edit cutoff hour on the delivery day (IST), overriding
+    `edit_cutoff_hour`. Default: Zepto closes at 1 AM on the delivery day,
+    because its stock is processed the day before. Secret `customer_cutoff_hours`,
+    e.g. {Zepto = 1}."""
+    v = get("customer_cutoff_hours", {"Zepto": 1})
+    try:
+        return {str(k).strip().casefold(): min(23, max(0, int(h))) for k, h in dict(v).items()}
+    except (TypeError, ValueError):
+        return {"zepto": 1}
+
+
+def multi_po_customers() -> set[str]:
+    """Customers that may send several POs for one indent (e.g. one per SKU); the
+    indent stays open for more POs until someone presses End of POs.
+    Secret `multi_po_customers`, default ["Swiggy"]."""
+    v = get("multi_po_customers", ["Swiggy"])
+    v = [v] if isinstance(v, str) else list(v or [])
+    return {str(x).strip().casefold() for x in v if str(x).strip()}
+
+
 def owner_email() -> str:
     return str(get("owner_email", "") or "").strip().lower()
 

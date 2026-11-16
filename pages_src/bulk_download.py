@@ -34,13 +34,7 @@ def build_xlsx(lines: pd.DataFrame, ids: list[str], po: dict | None = None) -> b
 
 
 def _po_info() -> dict:
-    try:
-        po = indents.read_po_freeze()
-    except Exception:  # noqa: BLE001 - PO numbers are optional in the download
-        return {}
-    if po is None or po.empty or "indent_id" not in po.columns:
-        return {}
-    return {str(r.get("indent_id", "")): r for r in po.to_dict("records")}
+    return indents.latest_po()
 
 
 def render(user: User, lines: pd.DataFrame, shown_ids: list[str], key: str, po: dict | None = None) -> None:

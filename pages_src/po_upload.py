@@ -13,7 +13,7 @@ import streamlit as st
 
 from core import config, indents
 from core.auth import User
-from core.schema import STATUS_FROZEN, STATUS_SUBMITTED
+from core.schema import STATUS_FROZEN, STATUS_LOCKED, STATUS_SUBMITTED, WAITING_FOR_PO
 from core.sheets import SheetError
 from pages_src import common, indent_actions
 
@@ -31,17 +31,7 @@ def _fmt_day(iso: str) -> str:
 
 
 def _po_info() -> dict[str, dict]:
-    """Latest PO_Freeze row per indent."""
-    try:
-        po = indents.read_po_freeze()
-    except SheetError:
-        return {}
-    if po is None or po.empty or "indent_id" not in po.columns:
-        return {}
-    out = {}
-    for r in po.to_dict("records"):
-        out[str(r.get("indent_id", ""))] = r
-    return out
+    return indents.latest_po()
 
 
 def _tile(label: str, value, sub: str = "", tone: str = "") -> str:
@@ -62,7 +52,7 @@ def _items_table(lines: pd.DataFrame, indent_id: str) -> None:
 
 
 def _card(r, lines: pd.DataFrame, po: dict, today: str) -> None:
-    waiting = r.status == STATUS_SUBMITTED
+    waiting = r.status in WAITING_FOR_PO
     late = waiting and str(r.delivery_date) < today
     who = escape(str(r.created_by).split("@")[0])
     with st.container(border=True, key=f"mtcard_po_{r.indent_id}"):
@@ -83,6 +73,10 @@ def _card(r, lines: pd.DataFrame, po: dict, today: str) -> None:
             label = f"<a href='{escape(link)}' target='_blank'>{shown}</a>" if link.startswith("http") else shown
             st.markdown(f"<div class='mt-muted'>✅ PO {label} · {escape(when)}{' · ' + by if by else ''}</div>",
                         unsafe_allow_html=True)
+        if waiting and r.indent_id in po:
+            n = po[r.indent_id]["_pos"]
+            st.markdown(f"<div class='mt-muted'>📄 {n} PO{'s' if n != 1 else ''} received so far · "
+                        "press End of POs when the last one is in</div>", unsafe_allow_html=True)
         c = st.columns(2)
         with c[0].popover(f"{r.lines} item{'s' if r.lines != 1 else ''}", icon=":material/list:", width="stretch"):
             st.markdown(f"**{r.indent_id}** · {r.customer} · {r.store} · delivery {r.delivery_date}")
@@ -112,7 +106,7 @@ def _page(user: User) -> None:
         common.sheet_error(e, "Indents could not be loaded.")
         return
     summ = indents.visible_to(indents.summary(df), user)
-    summ = summ[summ["status"].isin([STATUS_SUBMITTED, STATUS_FROZEN])] if not summ.empty else summ
+    summ = summ[summ["status"].isin([STATUS_SUBMITTED, STATUS_LOCKED, STATUS_FROZEN])] if not summ.empty else summ
     lines = indents.current_rows(df) if not df.empty else pd.DataFrame(columns=["indent_id"])
     po = _po_info()
 
@@ -129,7 +123,7 @@ def _page(user: User) -> None:
         indent_actions.show_dialog(user)
         return
 
-    waiting = summ[summ["status"] == STATUS_SUBMITTED]
+    waiting = summ[summ["status"].isin(WAITING_FOR_PO)]
     done = summ[summ["status"] == STATUS_FROZEN]
     today = config.now_ist().date().isoformat()
     overdue = waiting[waiting["delivery_date"].astype(str) < today]
@@ -173,7 +167,7 @@ def _page(user: User) -> None:
         return
 
     # waiting first, oldest delivery first; done newest first
-    rows = rows.assign(_w=(rows["status"] != STATUS_SUBMITTED).astype(int),
+    rows = rows.assign(_w=(~rows["status"].isin(WAITING_FOR_PO)).astype(int),
                        _d=rows["delivery_date"].astype(str))
     rows = pd.concat([rows[rows["_w"] == 0].sort_values(["_d", "customer", "store"]),
                       rows[rows["_w"] == 1].sort_values(["_d", "customer", "store"],

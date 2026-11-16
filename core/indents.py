@@ -10,6 +10,8 @@ the next number (new indent) or reports a conflict (correction / freeze).
 """
 from __future__ import annotations
 
+import json
+
 import re
 from datetime import date, datetime, timedelta
 
@@ -20,8 +22,8 @@ from core import changelog, config
 from core.lots import lot_size, normalize_lot
 from core.masters import Masters
 from core.models import IndentHeader, IndentLine, IndentSnapshot, fmt_num, to_number
-from core.schema import (CHANGE_LOG, DRAFTS, INDENT_LINES, LOTS, PO_FREEZE, STATUS_CANCELLED, TABS,
-                         STATUS_FROZEN, STATUS_SUBMITTED)
+from core.schema import (CHANGE_LOG, DRAFTS, INDENT_LINES, LOTS, PO_END, PO_FREEZE, PO_KIND,
+                         STATUS_CANCELLED, STATUS_FROZEN, STATUS_LOCKED, STATUS_SUBMITTED, TABS)
 from core.sheets import SheetError, get_backend
 
 
@@ -81,23 +83,30 @@ def _ist(iso: str) -> datetime:
     return dt.astimezone(config.IST)
 
 
-def edit_deadline(delivery_date: str) -> datetime:
-    """An indent can be edited / deleted until `edit_cutoff_hour` (2:00 PM) IST
-    on its DELIVERY date (`edit_cutoff_days` = 0)."""
+def cutoff_hour(customer: str = "") -> int:
+    """Edit cutoff hour on the delivery day: the customer's own (Zepto: 1 AM) or
+    the general `edit_cutoff_hour` (2 PM)."""
+    return config.customer_cutoff_hours().get(str(customer or "").strip().casefold(),
+                                              config.edit_cutoff_hour())
+
+
+def edit_deadline(delivery_date: str, customer: str = "") -> datetime:
+    """An indent can be edited / deleted until its cutoff hour IST on its
+    DELIVERY date (`edit_cutoff_days` = 0): 2:00 PM, Zepto 1:00 AM."""
     d = date.fromisoformat(str(delivery_date)[:10]) + timedelta(days=config.edit_cutoff_days())
-    return datetime(d.year, d.month, d.day, config.edit_cutoff_hour(), tzinfo=config.IST)
+    return datetime(d.year, d.month, d.day, cutoff_hour(customer), tzinfo=config.IST)
 
 
-def can_edit(delivery_date: str, now: datetime | None = None) -> bool:
+def can_edit(delivery_date: str, now: datetime | None = None, customer: str = "") -> bool:
     try:
-        return (now or config.now_ist()) < edit_deadline(delivery_date)
+        return (now or config.now_ist()) < edit_deadline(delivery_date, customer)
     except (TypeError, ValueError):
         return False
 
 
-def deadline_text(delivery_date: str) -> str:
+def deadline_text(delivery_date: str, customer: str = "") -> str:
     try:
-        return edit_deadline(delivery_date).strftime("%d %b %Y, %I:%M %p")
+        return edit_deadline(delivery_date, customer).strftime("%d %b %Y, %I:%M %p")
     except (TypeError, ValueError):
         return ""
 
@@ -115,13 +124,14 @@ def delivery_bounds(keep: str | None = None) -> tuple[date, date]:
     return lo, hi
 
 
-def date_allowed(delivery_date: str, keep: str | None = None) -> bool:
-    """T or T+1, and not after that date's cutoff (2 PM). A correction may keep
-    its own date (its cutoff is checked separately)."""
+def date_allowed(delivery_date: str, keep: str | None = None, customer: str = "") -> bool:
+    """T or T+1, and not after that date's cutoff (2 PM; Zepto 1 AM). A correction
+    may keep its own date (its cutoff is checked separately)."""
     if keep and delivery_date == keep:
         return True
     lo, hi = delivery_bounds()
-    return lo.isoformat() <= str(delivery_date) <= hi.isoformat() and can_edit(delivery_date)
+    return lo.isoformat() <= str(delivery_date) <= hi.isoformat() and can_edit(delivery_date,
+                                                                              customer=customer)
 
 
 def date_rule_text() -> str:
@@ -221,12 +231,13 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
                    last_edited_by=("submitted_by", "first")))
     out = agg.join(first).reset_index()
     out["total_amount"] = out["total_amount"].round(2)
-    out["can_edit"] = (out["delivery_date"].map(can_edit)
-                       & ~out["status"].isin([STATUS_FROZEN, STATUS_CANCELLED]))
+    out["can_edit"] = (pd.Series([can_edit(d, customer=c) for d, c in zip(out["delivery_date"], out["customer"])],
+                                 index=out.index, dtype=bool)
+                       & ~out["status"].isin([STATUS_FROZEN, STATUS_LOCKED, STATUS_CANCELLED]))
     return open_first(out[cols])
 
 
-STATUS_ORDER = {STATUS_SUBMITTED: 0, STATUS_FROZEN: 1, STATUS_CANCELLED: 2}
+STATUS_ORDER = {STATUS_SUBMITTED: 0, STATUS_LOCKED: 0, STATUS_FROZEN: 1, STATUS_CANCELLED: 2}
 
 
 def open_first(df: pd.DataFrame, then: list[str] | None = None,
@@ -314,8 +325,12 @@ def validate(header: IndentHeader, lines: list[IndentLine], m: Masters,
     missing = header.missing()
     if missing:
         errors.append("Delivery details missing: " + ", ".join(missing) + ".")
-    if check_date and header.delivery_date and not date_allowed(header.delivery_date, keep_date):
-        errors.append(f"Delivery date must be {date_rule_text()}.")
+    if check_date and header.delivery_date and not date_allowed(header.delivery_date, keep_date,
+                                                                header.customer):
+        errors.append(f"Delivery date must be {date_rule_text()}."
+                      + (f" {header.customer} orders for {header.delivery_date} closed at "
+                         f"{deadline_text(header.delivery_date, header.customer)}."
+                         if cutoff_hour(header.customer) != config.edit_cutoff_hour() else ""))
     start, end = config.delivery_window()
     if header.expected_time and not start <= header.expected_time <= end:
         errors.append(f"Expected delivery time must be between {start} and {end}.")
@@ -440,7 +455,7 @@ def _append_verified(backend, rows: list[dict], indent_id: str, version: int,
 
 
 def submit_new(header: IndentHeader, lines: list[IndentLine], user: str) -> str:
-    if not date_allowed(header.delivery_date):
+    if not date_allowed(header.delivery_date, customer=header.customer):
         raise SheetError(f"The delivery date must be {date_rule_text()}.")
     backend = get_backend()
     for _ in range(3):
@@ -461,9 +476,12 @@ def submit_new(header: IndentHeader, lines: list[IndentLine], user: str) -> str:
                      "the same moment. Your draft is safe; please press Submit again.")
 
 
-def _check_editable(cur: IndentSnapshot | None, indent_id: str, base_version: int) -> None:
+def _check_editable(cur: IndentSnapshot | None, indent_id: str, base_version: int,
+                    allow_locked: bool = False) -> None:
     if cur is None:
         raise SheetError(f"Indent {indent_id} was not found in the sheet.")
+    if cur.status == STATUS_LOCKED and not allow_locked:
+        raise FrozenError(f"{indent_id} is locked (processing started) and can no longer be changed.")
     if cur.status == STATUS_FROZEN:
         raise FrozenError(f"{indent_id} is frozen with a PO and can no longer be changed.")
     if cur.status == STATUS_CANCELLED:
@@ -487,11 +505,11 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
     backend = get_backend()
     df = prepare(backend.read(INDENT_LINES))
     cur = snapshot(df, indent_id)
-    _check_editable(cur, indent_id, base_version)
+    _check_editable(cur, indent_id, base_version, allow_locked=po_fix)
     saved_date = cur.header.delivery_date
-    if not po_fix and not can_edit(saved_date):
+    if not po_fix and not can_edit(saved_date, customer=cur.header.customer):
         raise CutoffError(f"{indent_id} can no longer be edited: editing closed at "
-                          f"{deadline_text(saved_date)} (delivery day cutoff).")
+                          f"{deadline_text(saved_date, cur.header.customer)} (delivery day cutoff).")
     locked = [f.replace("_", " ") for f in LOCKED_FIELDS
               if str(getattr(header, f, "")).strip() != str(getattr(cur.header, f, "")).strip()]
     if locked:
@@ -501,7 +519,7 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
     if gone:
         raise SheetError("Items cannot be removed from a saved indent; set their qty to 0 instead: "
                          + ", ".join(gone) + ".")
-    if not date_allowed(header.delivery_date, keep=cur.header.delivery_date):
+    if not date_allowed(header.delivery_date, keep=cur.header.delivery_date, customer=header.customer):
         raise SheetError(f"The delivery date must be {date_rule_text()}.")
     dup = find_duplicate(df, header, exclude_id=indent_id)
     if dup:
@@ -513,8 +531,8 @@ def submit_update(indent_id: str, base_version: int, header: IndentHeader,
     stamp = config.now_iso()
     creator = creator_of(df, indent_id)
     detail = ("to match PO: " if po_fix else "") + summarize_changes(changes)
-    rows = build_rows(indent_id, new_v, STATUS_SUBMITTED, stamp, user, header, lines,
-                      note=change_note("Edited", user, creator, stamp, detail))
+    rows = build_rows(indent_id, new_v, STATUS_LOCKED if cur.status == STATUS_LOCKED else STATUS_SUBMITTED,
+                      stamp, user, header, lines, note=change_note("Edited", user, creator, stamp, detail))
     if not _append_verified(backend, rows, indent_id, new_v, stamp, user):
         clear_cache()
         raise ConflictError(f"Someone else saved {indent_id} at the same moment. "
@@ -554,51 +572,170 @@ def po_lines_text(lines: list[IndentLine]) -> str:
     return "; ".join(f"{x.customer_sku_name} = {fmt_num(x.qty)} {x.lot}" for x in lines)
 
 
-def freeze(indent_id: str, base_version: int, po_file_name: str, user: str,
-           po_file_link: str = "", po_qty: dict | None = None, po_number: str = "",
-           po_has_extra: bool = False) -> int:
-    """Freeze with the customer's PO. When po_qty (SKU -> qty on the PO) is
-    given, every indent item must match it, else POMismatchError."""
-    backend = get_backend()
-    df = prepare(backend.read(INDENT_LINES))
-    cur = snapshot(df, indent_id)
-    _check_editable(cur, indent_id, base_version)
-    if po_has_extra:
-        raise POMismatchError("The PO has items that are not in this indent. Edit the indent and "
-                              "add them first.", [])
-    if po_qty is not None:
-        cmp = po_compare(cur.lines, po_qty)
-        bad = [r for r in cmp if not r["ok"]]
-        if bad:
-            raise POMismatchError(f"{len(bad)} item(s) on the PO do not match the indent.", cmp)
+def is_multi_po(customer: str) -> bool:
+    """Customers (Swiggy) that may send several POs for one indent."""
+    return str(customer or "").strip().casefold() in config.multi_po_customers()
+
+
+def _status_row(backend, df, cur, new_status: str, user: str, action: str, detail: str) -> tuple[int, str]:
+    """Append a copy of the current version with a new status (+ Change_Log row)."""
     new_v = cur.version + 1
     stamp = config.now_iso()
-    rows = build_rows(indent_id, new_v, STATUS_FROZEN, stamp, user, cur.header, cur.lines,
-                      note=change_note("PO uploaded", user, creator_of(df, indent_id), stamp,
-                                       f"{po_file_name}; indent frozen"))
-    if not _append_verified(backend, rows, indent_id, new_v, stamp, user):
+    rows = build_rows(cur.indent_id, new_v, new_status, stamp, user, cur.header, cur.lines,
+                      note=change_note(action, user, creator_of(df, cur.indent_id), stamp, detail))
+    if not _append_verified(backend, rows, cur.indent_id, new_v, stamp, user):
         clear_cache()
-        raise ConflictError(f"Someone else saved {indent_id} at the same moment. Please try again.")
-    backend.append_dicts(PO_FREEZE, [{
-        "indent_id": indent_id, "version": new_v, "po_file_name": po_file_name,
-        "po_customer": cur.header.customer, "po_store": cur.header.store,
-        "confirmed_by": user, "confirmed_at": stamp, "po_file_link": po_file_link,
-        "po_number": po_number, "po_total_qty": sum(to_number(x.qty) for x in cur.lines),
-        "po_lines": po_lines_text(cur.lines)}])
+        raise ConflictError(f"Someone else saved {cur.indent_id} at the same moment. Please try again.")
     try:
         backend.append_dicts(CHANGE_LOG, changelog.to_rows(
             [{"change_type": "header_changed", "customer_sku_name": "", "field": "status",
-              "old_value": STATUS_SUBMITTED, "new_value": STATUS_FROZEN}],
-            indent_id=indent_id, from_version=cur.version, to_version=new_v,
+              "old_value": cur.status, "new_value": new_status}],
+            indent_id=cur.indent_id, from_version=cur.version, to_version=new_v,
             changed_by=user, changed_at=stamp))
     except SheetError:
         pass
+    return new_v, stamp
+
+
+def _po_row(cur, version: int, kind: str, user: str, stamp: str, file_name: str = "", link: str = "",
+            po_number: str = "", po_qty: dict | None = None) -> dict:
+    qty = {k: float(v) for k, v in (po_qty or {}).items() if v is not None}
+    return {"indent_id": cur.indent_id, "version": version, "po_file_name": file_name,
+            "po_customer": cur.header.customer, "po_store": cur.header.store,
+            "confirmed_by": user, "confirmed_at": stamp, "po_file_link": link,
+            "po_number": po_number, "po_total_qty": sum(qty.values()),
+            "po_lines": "; ".join(f"{k} = {fmt_num(v)}" for k, v in qty.items()),
+            "kind": kind, "po_qty_json": json.dumps(qty, ensure_ascii=False)}
+
+
+def lock(indent_id: str, base_version: int, user: str) -> int:
+    """Freeze by hand (processing started): no more edits, still waiting for its PO."""
+    backend = get_backend()
+    df = prepare(backend.read(INDENT_LINES))
+    cur = snapshot(df, indent_id)
+    if cur is not None and cur.status == STATUS_LOCKED:
+        raise FrozenError(f"{indent_id} is already locked.")
+    _check_editable(cur, indent_id, base_version)
+    new_v, _ = _status_row(backend, df, cur, STATUS_LOCKED, user, "Locked",
+                           "frozen by hand: processing started")
     clear_cache()
     return new_v
 
 
+def freeze(indent_id: str, base_version: int, po_file_name: str, user: str,
+           po_file_link: str = "", po_qty: dict | None = None, po_number: str = "",
+           po_has_extra: bool = False) -> tuple[int, bool]:
+    """Record a customer's PO for the indent. A difference with the indent never
+    blocks the upload; it is shown on the indent and in the hourly tracker.
+    - Most customers: one PO, which freezes the indent (status Frozen).
+    - Multi-PO customers (Swiggy): each PO is added; the indent stays open for
+      more POs until End of POs (`end_pos`).
+    Returns (indent version, frozen)."""
+    backend = get_backend()
+    df = prepare(backend.read(INDENT_LINES))
+    cur = snapshot(df, indent_id)
+    _check_editable(cur, indent_id, base_version, allow_locked=True)
+    stamp = config.now_iso()
+    extra = " (PO has items not on the indent)" if po_has_extra else ""
+    if is_multi_po(cur.header.customer):
+        backend.append_dicts(PO_FREEZE, [_po_row(cur, cur.version, PO_KIND, user, stamp, po_file_name,
+                                                 po_file_link, po_number, po_qty)])
+        clear_cache()
+        return cur.version, False
+    new_v, stamp = _status_row(backend, df, cur, STATUS_FROZEN, user, "PO uploaded",
+                               f"{po_file_name}; indent frozen{extra}")
+    backend.append_dicts(PO_FREEZE, [_po_row(cur, new_v, PO_KIND, user, stamp, po_file_name,
+                                             po_file_link, po_number, po_qty)])
+    clear_cache()
+    return new_v, True
+
+
+def end_pos(indent_id: str, base_version: int, user: str) -> int:
+    """Multi-PO customers: no more POs are coming for this indent -> freeze it."""
+    backend = get_backend()
+    df = prepare(backend.read(INDENT_LINES))
+    cur = snapshot(df, indent_id)
+    _check_editable(cur, indent_id, base_version, allow_locked=True)
+    n = po_info(read_po_freeze(), indent_id)["pos"]
+    new_v, stamp = _status_row(backend, df, cur, STATUS_FROZEN, user, "End of POs",
+                               f"{n} PO(s) received; indent frozen")
+    backend.append_dicts(PO_FREEZE, [_po_row(cur, new_v, PO_END, user, stamp)])
+    clear_cache()
+    return new_v
+
+
+def _qty_json(raw) -> dict:
+    try:
+        d = json.loads(str(raw or "") or "{}")
+        return {str(k): float(v) for k, v in d.items()} if isinstance(d, dict) else {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def po_info(po: pd.DataFrame | None, indent_id: str) -> dict:
+    """POs of one indent: count, End of POs pressed?, PO qty per SKU (sum of all
+    POs; None when no PO has qty per item), PO numbers."""
+    out = {"pos": 0, "ended": False, "qty": None, "numbers": []}
+    if po is None or po.empty or "indent_id" not in po.columns:
+        return out
+    rows = po[po["indent_id"].astype(str) == str(indent_id)]
+    kind = rows["kind"].astype(str).str.strip().str.lower() if "kind" in rows.columns else pd.Series(
+        [""] * len(rows), index=rows.index)
+    pos = rows[kind != PO_END]
+    out["pos"] = len(pos)
+    out["ended"] = bool((kind == PO_END).any())
+    out["numbers"] = [str(x) for x in pos.get("po_number", pd.Series(dtype=str)) if str(x or "").strip()]
+    if "po_qty_json" in pos.columns and pos["po_qty_json"].astype(str).str.strip().ne("").any():
+        tot: dict[str, float] = {}
+        for raw in pos["po_qty_json"]:
+            for k, v in _qty_json(raw).items():
+                tot[k] = tot.get(k, 0.0) + v
+        out["qty"] = tot
+    return out
+
+
+def latest_po() -> dict[str, dict]:
+    """Per indent: its latest uploaded PO row, plus `_pos` (how many POs) and
+    `po_number` = all PO numbers joined (multi-PO customers)."""
+    try:
+        po = read_po_freeze()
+    except SheetError:
+        return {}
+    if po is None or po.empty or "indent_id" not in po.columns:
+        return {}
+    out: dict[str, dict] = {}
+    for r in po.to_dict("records"):
+        if str(r.get("kind", "") or "").strip().lower() == PO_END:
+            continue
+        iid = str(r.get("indent_id", ""))
+        prev = out.get(iid)
+        nums = ([prev["po_number"]] if prev and prev.get("po_number") else []) + \
+            ([str(r.get("po_number", "") or "").strip()] if str(r.get("po_number", "") or "").strip() else [])
+        out[iid] = {**r, "_pos": (prev["_pos"] if prev else 0) + 1, "po_number": ", ".join(nums)}
+    return out
+
+
+def po_vs_indent(lines: list[IndentLine], info: dict) -> list[dict]:
+    """Indent qty vs PO qty (all POs together), per item; PO-only items too."""
+    if info["qty"] is None:
+        return []
+    by = {k.strip().casefold(): (k, v) for k, v in info["qty"].items()}
+    out = []
+    for x in lines:
+        k = x.customer_sku_name.strip().casefold()
+        po = by.pop(k, (None, 0.0))[1] if k in by else 0.0
+        ind = to_number(x.qty)
+        out.append({"customer_sku_name": x.customer_sku_name, "lot": x.lot, "indent_qty": ind,
+                    "po_qty": po, "diff": po - ind, "ok": abs(po - ind) < 1e-9})
+    for name, v in by.values():
+        out.append({"customer_sku_name": name, "lot": "", "indent_qty": 0.0, "po_qty": v, "diff": v,
+                    "ok": abs(v) < 1e-9})
+    return out
+
+
 __all__ = ["find_duplicate", "DuplicateError", "edit_deadline", "can_edit", "deadline_text", "delivery_bounds", "date_allowed", "created_at", "CutoffError", "read_lines", "current_rows", "summary", "versions", "snapshot", "validate",
-           "submit_new", "submit_update", "freeze", "next_indent_id", "build_rows",
+           "submit_new", "submit_update", "freeze", "lock", "end_pos", "po_info", "po_vs_indent", "is_multi_po",
+           "next_indent_id", "build_rows",
            "ConflictError", "FrozenError", "NothingChangedError", "fmt_num"]
 
 
@@ -639,9 +776,9 @@ def cancel(indent_id: str, base_version: int, user: str, owner: bool = False) ->
                               "date and can no longer be deleted.")
     else:
         _check_editable(cur, indent_id, base_version)
-        if not can_edit(cur.header.delivery_date):
+        if not can_edit(cur.header.delivery_date, customer=cur.header.customer):
             raise CutoffError(f"{indent_id} can no longer be deleted: editing closed at "
-                              f"{deadline_text(cur.header.delivery_date)}.")
+                              f"{deadline_text(cur.header.delivery_date, cur.header.customer)}.")
     new_v = cur.version + 1
     stamp = config.now_iso()
     rows = build_rows(indent_id, new_v, STATUS_CANCELLED, stamp, user, cur.header, cur.lines,

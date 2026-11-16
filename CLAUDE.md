@@ -1,6 +1,6 @@
 # CLAUDE.md: MT Indent app (project context for Claude sessions)
 
-Last updated: 16 Nov 2026. Owner of this work: MT Direct Sales team, Ninjacart (PTP Bangalore).
+Last updated: 17 Nov 2026. Owner of this work: MT Direct Sales team, Ninjacart (PTP Bangalore).
 
 Read automatically by Claude Code. Keep it current when rules change.
 The live user list and e-mail lists are NOT kept here (this repo is public); see the app's Access tab.
@@ -102,12 +102,12 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 ### Output tabs (written by the app, append-only)
 
 - **Indent_Lines**: one row per item per version. Columns:
-  - indent_id, version, status (Submitted / Frozen / Cancelled), submitted_at, submitted_by
+  - indent_id, version, status (Submitted / Locked / Frozen / Cancelled), submitted_at, submitted_by
   - delivery_date, city, customer, store, expected_time
   - parent_sku, customer_sku_name, variety, lot, lot_size, qty, price, amount
   - change_note
 - **Change_Log**: changed_at, indent_id, from_version, to_version, changed_by, change_type (header_changed / line_added / line_removed / qty…), customer_sku_name, field, old_value, new_value.
-- **PO_Freeze**: indent_id, version, po_file_name, po_customer, po_store, confirmed_by, confirmed_at, po_file_link, po_number, po_total_qty, po_lines.
+- **PO_Freeze**: indent_id, version, po_file_name, po_customer, po_store, confirmed_by, confirmed_at, po_file_link, po_number, po_total_qty, po_lines, kind (po / end = End of POs), po_qty_json (this PO's qty per SKU).
 - **Drafts**: draft_id, user_email, updated_at, payload_json. Autosaved drafts; the "draft restored" message was removed.
 - **Mail_Recipients**: Email, Name, Team (Ground/Central), Hourly_Indent, SO_PO, Cities, Customers, Stores, Active, Updated_At, Updated_By. Customers and Stores are ignored now.
 - **Mail_Log**: sent_at, kind (hourly / so / sample / test), slot, to, status, detail.
@@ -137,8 +137,16 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 
 - Upload PO is on Home, on All indents and as its own page. It has cards, filters (Show / Delivery date / City / Search / Customer) and 3 tiles.
 - PO number is optional. The user enters the PO qty per item.
-- **PO qty must match the indent for every item.** A mismatch **blocks** the upload. The fix flow, "Edit indent to match PO", is allowed even after the cutoff (`po_fix`).
-- Once it matches, the indent is **Frozen** (no more edits) and the **SO/PO e-mail** goes out immediately to the PO list, with a PDF + Excel.
+- **A PO that differs from the indent is still uploaded (17 Nov)** and the difference is **flagged**: qty
+  differences, indent items not on the PO (blank = not on it), PO-only items (entered in the dialog). Shown on the
+  indent's PO tab, in the SO/PO mail (PO qty + Diff columns) and in the tracker's **Indent vs PO** view.
+- Most customers: one PO → indent **Frozen** and the **SO/PO e-mail** goes out at once (PDF + Excel).
+- **Multi-PO customers** (secret `multi_po_customers`, default ["Swiggy"] = WH1/WH2): any number of POs, each
+  e-mailed; the indent stays open until **End of POs** is pressed, which freezes it and shows the differences
+  (all POs summed).
+- **Lock** (manual freeze, "processing started"): status **Locked**: no edits, still waiting for its PO; a later
+  PO upload still freezes it and sends the SO/PO mail.
+- **Zepto cutoff 1 AM on the delivery day** (secret `customer_cutoff_hours`, default {Zepto = 1}); others 2 PM.
 
 ### Production, batching and tracker (owner + warehouse only)
 
@@ -179,7 +187,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
     Lot Size as on production, so batching matches the production sheet; missing SKUs show "not in New tab (name)"
     and are listed in a warning. Without a New tab it falls back to Mapping Whole. The user will decide the
     permanent master (where production and batching pull from) later.
-- **Hourly tracker:** 8 AM–2 PM columns per customer/store row. Changed cells are amber (▲/▼) and unchanged cells green. It has a Status column and a detail dialog when a cell is clicked. Owner and warehouse only.
+- **Hourly tracker:** two tabs. **Indent changes**: 8 AM–2 PM columns per customer/store row; changed cells are amber, shown as previous → new (▲/▼), unchanged cells green. **Indent vs PO**: per store and item, indent qty, PO qty (all POs), difference, status (Match / Differs / Not on PO / Not on indent / No PO yet / more coming); differences in red. It has a Status column and a detail dialog when a cell is clicked. Owner and warehouse only.
 - The City/SKU report was removed.
 
 ### Home page
@@ -247,7 +255,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **140 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **143 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 
@@ -264,6 +272,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 ## 8. Open items and next steps
 
+0. **Next step (user)**: a separate Zepto D+1 table on the Production page (process today, dispatch tomorrow).
+   Later: PO reader (auto-read PDFs; needs a PO_Item_Map tab for Flipkart/Firstclub/Swiggy, and a More PO).
 1. Add the **Production e-mails** recipients (Access → E-mails). The user will do this later. Until then the 8 AM run reports "no active recipients".
 7. **Remind the user**: box packs ("1 Box", e.g. Namdhari green apple) show only "N Box" on the make-ready list;
    box kg / pieces per box are not known yet. Also box counts for kg and gram packs need box weights.

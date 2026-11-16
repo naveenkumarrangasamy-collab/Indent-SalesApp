@@ -15,7 +15,7 @@ import streamlit as st
 
 from core import config, indents
 from core.auth import User
-from core.schema import STATUS_FROZEN, STATUS_SUBMITTED
+from core.schema import STATUS_FROZEN, WAITING_FOR_PO
 from core.sheets import SheetError
 from pages_src import common, indent_actions
 
@@ -60,7 +60,7 @@ def _page(user: User) -> None:
     if k not in st.session_state or st.session_state[k] not in days:
         st.session_state[k] = today.isoformat()
     rows_all = summ
-    waiting_all = int((summ["status"] == STATUS_SUBMITTED).sum()) if not summ.empty else 0
+    waiting_all = int(summ["status"].isin(WAITING_FOR_PO).sum()) if not summ.empty else 0
     with st.container(key="mtbar_home"):
         c = st.columns([1.35, 2.05, 1, 1], vertical_alignment="center", gap="small")
         c[0].markdown(f"<div class='mt-h'>Daily operations<span>{escape(indents.scope_text(user))}</span></div>",
@@ -88,7 +88,7 @@ def _page(user: User) -> None:
         return
 
     done = int((rows["status"] == STATUS_FROZEN).sum())
-    waiting = int((rows["status"] == STATUS_SUBMITTED).sum())
+    waiting = int(rows["status"].isin(WAITING_FOR_PO).sum())
     n = len(rows)
     st.markdown("<div class='mt-tiles k3'>" + "".join([
         _tile("Indents", n, f"{rows['customer'].nunique()} customer(s)", "info"),
@@ -102,11 +102,11 @@ def _page(user: User) -> None:
     # ---- one line per customer with an indent; the list scrolls inside its box
     groups = list(rows.groupby(["customer", "city"], sort=True))
     # customers still waiting first
-    groups.sort(key=lambda g: (int((g[1]["status"] == STATUS_SUBMITTED).sum()) == 0, str(g[0][0]).casefold()))
+    groups.sort(key=lambda g: (int(g[1]["status"].isin(WAITING_FOR_PO).sum()) == 0, str(g[0][0]).casefold()))
     html = []
     for (cust, c_city), part in groups:
         d = int((part["status"] == STATUS_FROZEN).sum())
-        w = int((part["status"] == STATUS_SUBMITTED).sum())
+        w = int(part["status"].isin(WAITING_FOR_PO).sum())
         stores = len(part)
         tip = escape("; ".join(f"{r.store}: {'PO uploaded' if r.status == STATUS_FROZEN else 'waiting for PO'}"
                                for r in part.itertuples()))

@@ -159,12 +159,13 @@ def _duplicate_notice(hdr) -> bool:
         return False
     cur = indents.snapshot(df, dup)
     st.warning(indents.duplicate_message(dup, hdr))
-    if cur is not None and cur.status != "Frozen" and indents.can_edit(cur.header.delivery_date):
+    if cur is not None and cur.status == "Submitted" and indents.can_edit(cur.header.delivery_date,
+                                                                          customer=cur.header.customer):
         st.button(f"Edit {dup}", icon=":material/edit:", on_click=_open_existing, args=(dup,),
                   type="primary",
                   help="Opens the existing indent; anything entered here for a new indent is replaced.")
     else:
-        st.caption(f"{dup} can no longer be edited (frozen with a PO or past 2 PM on its delivery day).")
+        st.caption(f"{dup} can no longer be edited (locked, frozen with a PO or past its cutoff).")
     return True
 
 
@@ -345,8 +346,7 @@ def render(m: Masters) -> bool:
         if ind["mode"] == "edit" and ind.get("po_fix"):
             c6.caption("Correcting this indent to match the customer's PO (allowed after the 2 PM cutoff).")
         elif hdr.delivery_date:
-            c6.caption(f"Edits allowed until **{indents.deadline_text(hdr.delivery_date)}** "
-                       "(2 PM on the delivery day).")
+            c6.caption(f"Edits allowed until **{indents.deadline_text(hdr.delivery_date, hdr.customer)}**.")
 
     hdr = state.header()
     if hdr.city and hdr.customer and not m.has_sku_mapping(hdr.city, hdr.customer):

@@ -184,7 +184,7 @@ def connection_banner() -> None:
 
 
 def badge(status: str) -> str:
-    cls = {"Frozen": "frz", "Cancelled": "cnl"}.get(status, "sub")
+    cls = {"Frozen": "frz", "Locked": "frz", "Cancelled": "cnl"}.get(status, "sub")
     return f'<span class="mt-badge {cls}">{status}</span>'
 
 

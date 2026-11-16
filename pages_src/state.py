@@ -129,7 +129,7 @@ def drop_closed_edit() -> str | None:
     if ind["mode"] != "edit" or ind.get("po_fix"):
         return None
     day = keep_date()
-    if day and not can_edit(day):
+    if day and not can_edit(day, customer=header().customer):
         start_new()
         return ind["indent_id"]
     return None

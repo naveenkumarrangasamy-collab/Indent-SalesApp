@@ -517,8 +517,9 @@ def render(m: Masters, user: User) -> None:
     if ind["mode"] == "edit":
         saved_date = state.keep_date() or ""
         fix = state.po_fix()
-        open_ = indents.can_edit(saved_date) or bool(fix)
-        deadline = indents.deadline_text(saved_date)
+        cust = state.header().customer
+        open_ = indents.can_edit(saved_date, customer=cust) or bool(fix)
+        deadline = indents.deadline_text(saved_date, cust)
         changed = state.changed_vs_base()
         c = st.columns([1, 1, 2])
         if c[0].button("Discard changes", width="stretch"):

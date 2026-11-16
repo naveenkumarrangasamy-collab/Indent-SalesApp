@@ -78,8 +78,8 @@ def test_nothing_changed(backend):
 
 def test_freeze_blocks_edits(backend):
     iid = indents.submit_new(H, [HASS], "s@x.com")
-    v = indents.freeze(iid, 1, "PO-123.pdf", "s@x.com")
-    assert v == 2
+    v, frozen = indents.freeze(iid, 1, "PO-123.pdf", "s@x.com")
+    assert v == 2 and frozen
     df = indents.read_lines(fresh=True)
     assert indents.snapshot(df, iid).status == "Frozen"
     po = backend.read(PO_FREEZE)
@@ -181,6 +181,7 @@ def test_update_blocked_after_cutoff(backend, monkeypatch):
 def test_delivery_date_today_or_tomorrow(backend, monkeypatch):
     morning = datetime.combine(config.now_ist().date(), datetime.min.time(), tzinfo=config.IST) + timedelta(hours=9)
     monkeypatch.setattr(indents.config, "now_ist", lambda: morning)
+    monkeypatch.setattr(indents.config, "customer_cutoff_hours", lambda: {})
     today = morning.date()
     day_after = (today + timedelta(days=2)).isoformat()
     with pytest.raises(indents.SheetError, match="today"):
@@ -323,28 +324,56 @@ def test_qty_zero_only_for_saved_items(backend):
     assert not [e for e in indents.validate(H, [zero], m, zero_ok={HASS.customer_sku_name}) if "Qty" in e]
 
 
-def test_po_must_match_indent_per_item(backend):
+def test_po_mismatch_is_uploaded_and_flagged(backend):
     iid = indents.submit_new(H, [HASS, BLUE], "s@x.com")
-    with pytest.raises(indents.POMismatchError) as e:
-        indents.freeze(iid, 1, "po.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 30,
-                                                           BLUE.customer_sku_name: 25})
-    bad = [r for r in e.value.rows if not r["ok"]]
-    assert [(r["customer_sku_name"], r["indent_qty"], r["po_qty"]) for r in bad] == [
-        ("1PC - Blueberry Imported", BLUE.qty, 25)]
-    with pytest.raises(indents.POMismatchError):        # an item missing from the PO entry
-        indents.freeze(iid, 1, "po.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 30})
-    with pytest.raises(indents.POMismatchError):
-        indents.freeze(iid, 1, "po.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 30,
-                                                           BLUE.customer_sku_name: BLUE.qty},
-                       po_has_extra=True)
-    # fix the indent to the PO (allowed as a PO correction), then it freezes
-    v, _ = indents.submit_update(iid, 1, H, [HASS, IndentLine(**{**BLUE.to_dict(), "qty": 25})],
-                                 "s@x.com", po_fix=True)
-    assert indents.freeze(iid, v, "po.pdf", "s@x.com", po_number="PO-77",
-                          po_qty={HASS.customer_sku_name: 30, BLUE.customer_sku_name: 25}) == v + 1
+    v, frozen = indents.freeze(iid, 1, "po.pdf", "s@x.com", po_number="PO-77",
+                               po_qty={HASS.customer_sku_name: 30, "Extra Kiwi": 5})
+    assert frozen and v == 2
+    info = indents.po_info(indents.read_po_freeze(), iid)
+    assert info["pos"] == 1 and not info["ended"]
+    rows = {r["customer_sku_name"]: r for r in indents.po_vs_indent(
+        indents.snapshot(indents.read_lines(fresh=True), iid).lines, info)}
+    assert rows[HASS.customer_sku_name]["ok"]
+    assert rows[BLUE.customer_sku_name]["po_qty"] == 0 and not rows[BLUE.customer_sku_name]["ok"]
+    assert rows["Extra Kiwi"]["diff"] == 5
     po = backend.read("PO_Freeze").iloc[-1]
-    assert po["po_number"] == "PO-77" and float(po["po_total_qty"]) == 55
-    assert "1PC - Blueberry Imported = 25" in po["po_lines"]
+    assert po["po_number"] == "PO-77" and float(po["po_total_qty"]) == 35
+
+
+def test_swiggy_many_pos_until_end(backend):
+    hdr = IndentHeader(**{**H.to_dict(), "customer": "Swiggy"})
+    iid = indents.submit_new(hdr, [HASS, BLUE], "s@x.com")
+    assert indents.freeze(iid, 1, "a.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 20}) == (1, False)
+    assert indents.freeze(iid, 1, "b.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 10,
+                                                             BLUE.customer_sku_name: BLUE.qty}) == (1, False)
+    cur = indents.snapshot(indents.read_lines(fresh=True), iid)
+    assert cur.status == "Submitted"
+    info = indents.po_info(indents.read_po_freeze(), iid)
+    assert info["pos"] == 2 and all(r["ok"] for r in indents.po_vs_indent(cur.lines, info))
+    v = indents.end_pos(iid, 1, "s@x.com")
+    cur = indents.snapshot(indents.read_lines(fresh=True), iid)
+    assert cur.status == "Frozen" and cur.version == v == 2
+    assert indents.po_info(indents.read_po_freeze(), iid)["ended"]
+    assert indents.latest_po()[iid]["_pos"] == 2
+
+
+def test_lock_then_po(backend):
+    iid = indents.submit_new(H, [HASS], "s@x.com")
+    v = indents.lock(iid, 1, "s@x.com")
+    assert indents.snapshot(indents.read_lines(fresh=True), iid).status == "Locked"
+    with pytest.raises(indents.FrozenError):
+        indents.submit_update(iid, v, H, [IndentLine(**{**HASS.to_dict(), "qty": 1})], "s@x.com")
+    v2, frozen = indents.freeze(iid, v, "po.pdf", "s@x.com", po_qty={HASS.customer_sku_name: 30})
+    assert frozen and indents.snapshot(indents.read_lines(fresh=True), iid).status == "Frozen"
+
+
+def test_zepto_cutoff_1am(backend, monkeypatch):
+    day = config.now_ist().date()
+    at = lambda h, m=0: datetime.combine(day, datetime.min.time(), tzinfo=config.IST) + timedelta(hours=h, minutes=m)
+    assert indents.cutoff_hour("Zepto") == 1 and indents.cutoff_hour("More") == 14
+    assert indents.can_edit(day.isoformat(), now=at(0, 30), customer="Zepto")
+    assert not indents.can_edit(day.isoformat(), now=at(1), customer="zepto")
+    assert indents.can_edit(day.isoformat(), now=at(9), customer="More")
 
 
 def test_po_correction_allowed_after_cutoff(backend, monkeypatch):

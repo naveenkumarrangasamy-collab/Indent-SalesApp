@@ -24,7 +24,7 @@ from core.pdf_report import sections_pdf, table_pdf
 from core.schema import STATUS_CANCELLED, STATUS_FROZEN
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-STATUS_WORDS = {"Submitted": "Waiting for PO", "Frozen": "PO received"}
+STATUS_WORDS = {"Submitted": "Waiting for PO", "Locked": "Locked, waiting for PO", "Frozen": "PO received"}
 
 OVERALL_COLS = production_calc.PRODUCTION_COLUMNS
 CUSTOMER_COLS = ["Customer", "Store", "City", "Indent", "Status", "Parent SKU", "Customer SKU Name",
@@ -167,11 +167,27 @@ def production_mail_html(rows: pd.DataFrame, m: Masters | None, day: str,
 
 # ------------------------------------------------------------------ SO / PO
 
-def so_df(cur) -> pd.DataFrame:
-    return pd.DataFrame([{"Parent SKU": x.parent_sku, "Customer SKU Name": x.customer_sku_name,
-                          "Variety": x.variety, "Lot": x.lot, "Lot Size": lot_size(x.customer_sku_name),
-                          "Qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
-                          "Price": round(x.price, 2), "Amount": round(x.amount, 2)} for x in cur.lines])
+def so_df(cur, po_qty: dict | None = None) -> pd.DataFrame:
+    """The SO items. With po_qty (this PO's qty per SKU), adds PO qty and the
+    difference (PO - indent) per item, and items that are only on the PO."""
+    df = pd.DataFrame([{"Parent SKU": x.parent_sku, "Customer SKU Name": x.customer_sku_name,
+                        "Variety": x.variety, "Lot": x.lot, "Lot Size": lot_size(x.customer_sku_name),
+                        "Qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
+                        "Price": round(x.price, 2), "Amount": round(x.amount, 2)} for x in cur.lines])
+    if po_qty is None:
+        return df
+    by = {str(k).strip().casefold(): (k, float(v)) for k, v in po_qty.items() if v is not None}
+    po, diff = [], []
+    for x in cur.lines:
+        v = by.pop(x.customer_sku_name.strip().casefold(), (None, 0.0))[1]
+        po.append(fmt_num(v))
+        d = v - float(x.qty)
+        diff.append("" if abs(d) < 1e-9 else ("+" if d > 0 else "") + fmt_num(d))
+    df["PO qty"], df["Diff"] = po, diff
+    extra = [{"Parent SKU": "", "Customer SKU Name": k, "Variety": "", "Lot": "", "Lot Size": "", "Qty": 0,
+              "Price": 0.0, "Amount": 0.0, "PO qty": fmt_num(v), "Diff": "+" + fmt_num(v) + " (not on indent)"}
+             for k, v in by.values()]
+    return pd.concat([df, pd.DataFrame(extra)], ignore_index=True) if extra else df
 
 
 def so_info(cur, po_number: str, po_file: str, uploaded_by: str) -> list[tuple[str, str]]:
@@ -185,23 +201,27 @@ def so_info(cur, po_number: str, po_file: str, uploaded_by: str) -> list[tuple[s
             ("PO uploaded at", config.now_ist().strftime("%d %b %Y %I:%M %p"))]
 
 
-def so_files(cur, po_number: str, po_file: str, uploaded_by: str) -> list[tuple[str, bytes, str]]:
+def so_files(cur, po_number: str, po_file: str, uploaded_by: str,
+             po_qty: dict | None = None) -> list[tuple[str, bytes, str]]:
     info = so_info(cur, po_number, po_file, uploaded_by)
-    df = so_df(cur)
+    df = so_df(cur, po_qty)
     pdf = table_pdf(f"SO placed - {cur.header.customer} - {cur.header.store}",
                     [f"{k}: {v}" for k, v in info], df, footer=f"MT Indent - {cur.indent_id}")
     x = xlsx({"SO": pd.DataFrame(info, columns=["Field", "Value"]), "Items": df})
     return [(f"SO_{cur.indent_id}.pdf", pdf, "application/pdf"), (f"SO_{cur.indent_id}.xlsx", x, XLSX)]
 
 
-def so_html(cur, po_number: str, po_file: str, uploaded_by: str) -> str:
+def so_html(cur, po_number: str, po_file: str, uploaded_by: str, po_qty: dict | None = None) -> str:
     info = so_info(cur, po_number, po_file, uploaded_by)
+    df = so_df(cur, po_qty)
+    n_diff = int((df["Diff"].astype(str) != "").sum()) if "Diff" in df.columns else 0
     rows = "".join(f"<tr><td style='padding:2px 10px 2px 0;color:#555'>{html.escape(k)}</td>"
                    f"<td><b>{html.escape(str(v))}</b></td></tr>" for k, v in info)
     return (f"<p>SO placed for <b>{html.escape(cur.header.customer)}</b> · "
-            f"{html.escape(cur.header.store)}. The customer's PO matched the indent and the indent "
-            "is now frozen.</p>"
-            f"<table>{rows}</table><br>"
-            + _html_table(so_df(cur), {"Qty", "Price", "Amount"})
+            f"{html.escape(cur.header.store)}. "
+            + (f"<b style='color:#b45309'>{n_diff} item(s) on this PO differ from the indent</b> "
+               "(see Diff).</p>" if n_diff else "The customer's PO matches the indent.</p>")
+            + f"<table>{rows}</table><br>"
+            + _html_table(df, {"Qty", "Price", "Amount", "PO qty"})
             + "<p style='color:#888;font-size:12px'>Attached: the customer's PO, and the SO as PDF and "
               "Excel. Sent by the MT Indent app.</p>")
