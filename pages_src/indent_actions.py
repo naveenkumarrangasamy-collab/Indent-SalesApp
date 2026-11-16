@@ -147,16 +147,16 @@ def _po_dialog(indent_id: str, user: User) -> None:
                + (to or "nobody yet (add recipients on the Access page)") + ".")
     b = st.columns(3 if multi else 2)
     label = "Add this PO" if multi else ("Upload with differences" if diffs else "Upload PO")
-    if not file_bytes:
-        st.caption("⚠️ No PDF picked up yet. You can still upload: the PO is saved without the file "
-                   "(re-send the e-mail with the PDF later from the indent's PO tab).")
+    need = [w for w, ok in (("choose the PO PDF", file_bytes), ("type the PO qty of at least one item",
+                                                                this_po)) if not ok]
+    if need:
+        st.caption("To upload: " + " and ".join(need) + ".")
     if b[0].button(label, icon=":material/upload_file:", type="primary", width="stretch",
-                   disabled=not this_po):
+                   disabled=bool(need)):
         link, note = "", ""
-        file_name = file_name or "(no PDF)"
         folder = config.po_drive_folder_id()
         backend = get_backend()
-        if file_bytes and (folder or backend.mode == "local"):
+        if folder or backend.mode == "local":
             try:
                 with st.spinner("Saving the PO file…"):
                     link = backend.upload_pdf(f"{indent_id} - {file_name}", file_bytes, folder)
