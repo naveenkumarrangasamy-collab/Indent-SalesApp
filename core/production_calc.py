@@ -172,7 +172,7 @@ def production(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
 
 
 MAKE_READY_COLUMNS = ["City", "Parent SKU", "Variety", "Repacking", "Pack", "Make ready", "Fruit needed",
-                      "By size"]
+                      "Spec size"]
 _BULK = {"tray", "box", "crate", "carton", "bulk", "loose"}   # containers that hold loose fruit
 
 
@@ -217,7 +217,7 @@ def make_ready(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
             make.append(f"{fmt_num(q)} {rep or 'packs'}".strip())
             need.append(f"{fmt_num(q * pcs)} pcs" if pcs else f"{fmt_num(q * kg)} kg" if kg else "")
     g["Make ready"], g["Fruit needed"] = make, need
-    g["By size"] = _by_size(df, keys, g)
+    g["Spec size"] = _by_size(df, keys, g)
     return g.sort_values(keys, key=_SORT)[MAKE_READY_COLUMNS].reset_index(drop=True)
 
 
