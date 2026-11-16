@@ -21,6 +21,11 @@ def to_number(v, default: float = 0.0) -> float:
     return default if math.isnan(f) or math.isinf(f) else f
 
 
+def fmt_q(v) -> str:
+    """Like fmt_num, but None (not on the PO / not on the indent) stays blank, never 0."""
+    return "" if v is None else fmt_num(v)
+
+
 def fmt_num(v) -> str:
     """40.0 -> '40', 12.5 -> '12.5', 1/3 -> '0.333' (for sheet text and diffs)."""
     n = to_number(v)

@@ -153,8 +153,7 @@ def render(user: User) -> None:
         st.caption("For the ground team: **all customers and all sizes together**. Punnets / packs are counted as "
                    "packs; fruit going **loose** into a tray or box shows as pieces or kg (7 pcs loose, not "
                    "7 trays); a box pack counts boxes. **Fruit needed**: pieces for piece packs, kg for kg packs. "
-                   "**Spec size 1, 2…**: one cell per spec size (New tab): count; pieces "
-                   "(22C; 300 pcs); “or” = the same fruit may go at that count instead; otherwise the spec.")
+                   "**Spec Size**: pieces at each count of the spec (New tab), e.g. 20C : 100PC | 22C : 100PC; otherwise the spec.")
         st.session_state["mr_desc"] = st.session_state.get("ps_desc", "")
         _downloads("Make-ready list", mr, f"make_ready_{label}", "mr", lines)
     _next_day(m)

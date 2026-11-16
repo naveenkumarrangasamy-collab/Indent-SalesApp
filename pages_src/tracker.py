@@ -11,7 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from core import config, hourly, indents, reports
-from core.models import fmt_num
+from core.models import fmt_num, fmt_q
 from core.auth import User
 from core.sheets import SheetError
 from pages_src import common
@@ -270,13 +270,13 @@ def _po_tracker(lines: pd.DataFrame, ids: set) -> None:
         for r in rows:
             out.append({"Customer": h.customer, "Store": h.store, "Indent": iid,
                         "Customer SKU Name": r["customer_sku_name"],
-                        "Indent qty": fmt_num(r["indent_qty"]),
-                        "PO qty": "" if r["po_qty"] is None else fmt_num(r["po_qty"]),
+                        "Indent qty": fmt_q(r["indent_qty"]),
+                        "PO qty": fmt_q(r["po_qty"]),
                         "Difference": "" if r["diff"] is None or r["ok"] else
                         ("+" if r["diff"] > 0 else "") + fmt_num(r["diff"]),
                         "Status": state_ or ("Match" if r["ok"] else
-                                             "Not on PO" if not r["po_qty"] else
-                                             "Not on indent" if not r["indent_qty"] else "Differs")})
+                                             "Not on PO" if r["po_qty"] is None else
+                                             "Not on indent" if r["indent_qty"] is None else "Differs")})
     if not out:
         st.info("No indents with these filters.")
         return

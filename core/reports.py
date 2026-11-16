@@ -179,10 +179,11 @@ def so_df(cur, po_qty: dict | None = None) -> pd.DataFrame:
     by = {str(k).strip().casefold(): (k, float(v)) for k, v in po_qty.items() if v is not None}
     po, diff = [], []
     for x in cur.lines:
-        v = by.pop(x.customer_sku_name.strip().casefold(), (None, 0.0))[1]
-        po.append(fmt_num(v))
-        d = v - float(x.qty)
-        diff.append("" if abs(d) < 1e-9 else ("+" if d > 0 else "") + fmt_num(d))
+        hit = by.pop(x.customer_sku_name.strip().casefold(), None)
+        po.append("" if hit is None else fmt_num(hit[1]))
+        d = (hit[1] if hit else 0.0) - float(x.qty)
+        diff.append("" if abs(d) < 1e-9 else ("+" if d > 0 else "") + fmt_num(d)
+                    + (" (not on PO)" if hit is None else ""))
     df["PO qty"], df["Diff"] = po, diff
     extra = [{"Parent SKU": "", "Customer SKU Name": k, "Variety": "", "Lot": "", "Lot Size": "", "Qty": 0,
               "Price": 0.0, "Amount": 0.0, "PO qty": fmt_num(v), "Diff": "+" + fmt_num(v) + " (not on indent)"}

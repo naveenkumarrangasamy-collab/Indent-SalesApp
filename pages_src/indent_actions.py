@@ -9,8 +9,8 @@ import streamlit as st
 from core import config, indents, mailer, po_reader
 from core.masters import load_masters
 from core.auth import User
-from core.models import fmt_num
-from core.schema import PO_ITEM_MAP, WAITING_FOR_PO
+from core.models import fmt_num, fmt_q
+from core.schema import PO_ITEM_MAP, STATUS_FROZEN, WAITING_FOR_PO
 from core.sheets import SheetError, get_backend
 from pages_src import common, state
 
@@ -55,8 +55,8 @@ def _clear_po_state(indent_id: str) -> None:
 
 def _diff_table(rows: list[dict]) -> None:
     st.dataframe(pd.DataFrame([{
-        "Customer SKU Name": r["customer_sku_name"], "Indent qty": fmt_num(r["indent_qty"]),
-        "PO qty": fmt_num(r["po_qty"]),
+        "Customer SKU Name": r["customer_sku_name"], "Indent qty": fmt_q(r["indent_qty"]),
+        "PO qty": fmt_q(r["po_qty"]),
         "Difference": ("+" if r["diff"] > 0 else "") + fmt_num(r["diff"])} for r in rows]),
         hide_index=True, width="stretch")
 
@@ -72,7 +72,10 @@ def _po_dialog(indent_id: str, user: User) -> None:
     multi = indents.is_multi_po(cur.header.customer)
     info = indents.po_info(indents.read_po_freeze(), indent_id) if multi else None
     blocked = ""
-    if cur.status not in WAITING_FOR_PO:
+    replacing = cur.status == STATUS_FROZEN and user.is_owner and not multi
+    if replacing:
+        st.warning("This indent already has a PO. Uploading again **replaces** it (only the new PO counts).")
+    elif cur.status not in WAITING_FOR_PO:
         blocked = f"This indent is {cur.status.lower()}; no more POs can be added."
     elif _unsaved_here(indent_id):
         blocked = ("You have unsaved changes to this indent on the Indent page. "
@@ -129,8 +132,9 @@ def _po_dialog(indent_id: str, user: User) -> None:
     st.caption(("Each PO is e-mailed (SO / PO) at once to " if multi else
                 "Uploading freezes the indent. The SO / PO e-mail goes at once to ")
                + (to or "nobody yet (add recipients on the Access page)") + ".")
+    mail_again = replacing and st.checkbox("E-mail the replaced PO again", value=False, key=f"po_mail_{indent_id}")
     b = st.columns(3 if multi else 2)
-    label = "Add this PO" if multi else ("Upload with differences" if diffs else "Upload PO")
+    label = "Replace PO" if replacing else "Add this PO" if multi else ("Upload with differences" if diffs else "Upload PO")
     need = [w for w, ok in (("choose the PO PDF", file_bytes), ("type the PO qty of at least one item",
                                                                 this_po)) if not ok]
     if need:
@@ -152,16 +156,19 @@ def _po_dialog(indent_id: str, user: User) -> None:
                 v, frozen_now = indents.freeze(indent_id, cur.version, file_name, user.email, po_file_link=link,
                                                po_qty=this_po, po_number=po_number.strip(),
                                                po_has_extra=any(k not in {x.customer_sku_name for x in cur.lines}
-                                                                for k in this_po))
+                                                                for k in this_po), replace=replacing)
         except SheetError as e:
             st.error(f"PO not saved. {e}")
             return
         if state.get()["mode"] == "edit" and state.get()["indent_id"] == indent_id:
             state.start_new()
         snap = indents.snapshot(indents.read_lines(fresh=True), indent_id) or cur
-        with st.spinner("E-mailing the SO / PO…"):
-            sent, mail_msg = mailer.send_so_mail(snap, file_name, file_bytes, user.email,
-                                                 po_number=po_number.strip(), po_qty=this_po)
+        if replacing and not mail_again:
+            sent, mail_msg = True, "No e-mail sent (PO replaced)."
+        else:
+            with st.spinner("E-mailing the SO / PO…"):
+                sent, mail_msg = mailer.send_so_mail(snap, file_name, file_bytes, user.email,
+                                                     po_number=po_number.strip(), po_qty=this_po)
         _clear_po_state(indent_id)
         _close()
         what = f"PO {po_number or file_name}"
@@ -234,7 +241,8 @@ def _read_table(cur, read, po_number: str, indent_id: str) -> tuple[dict, list[d
     'Our SKU'. Returns (PO qty per SKU, new matches to remember)."""
     h = cur.header
     cands = _candidates(cur)
-    lines = po_reader.match(read.lines, cands, _item_map(h.customer))
+    lines = po_reader.match(read.lines, cands, _item_map(h.customer),
+                            prefer=[x.customer_sku_name for x in cur.lines])
     ok = not read.checks
     msg = (f"**Read from the PDF:** {len(lines)} line(s) · qty **{fmt_num(read.total_qty)}**"
            + (f" · PO value ₹{read.total:,.2f}" if read.total else "")

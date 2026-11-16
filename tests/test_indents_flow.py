@@ -334,10 +334,21 @@ def test_po_mismatch_is_uploaded_and_flagged(backend):
     rows = {r["customer_sku_name"]: r for r in indents.po_vs_indent(
         indents.snapshot(indents.read_lines(fresh=True), iid).lines, info)}
     assert rows[HASS.customer_sku_name]["ok"]
-    assert rows[BLUE.customer_sku_name]["po_qty"] == 0 and not rows[BLUE.customer_sku_name]["ok"]
+    assert rows[BLUE.customer_sku_name]["po_qty"] is None and not rows[BLUE.customer_sku_name]["ok"]  # never 0
     assert rows["Extra Kiwi"]["diff"] == 5
     po = backend.read("PO_Freeze").iloc[-1]
     assert po["po_number"] == "PO-77" and float(po["po_total_qty"]) == 35
+
+
+def test_owner_replaces_a_wrong_po(backend):
+    iid = indents.submit_new(H, [HASS], "s@x.com")
+    indents.freeze(iid, 1, "a.pdf", "o", po_qty={"Avocado Hass Imported - 1 pc": 30})
+    lines = indents.snapshot(indents.read_lines(fresh=True), iid).lines
+    assert not indents.po_vs_indent(lines, indents.po_info(indents.read_po_freeze(), iid))[0]["ok"]
+    v, frozen = indents.freeze(iid, 2, "b.pdf", "o", po_qty={" 1PC - Hass  Avocado Imported": 30}, replace=True)
+    info = indents.po_info(indents.read_po_freeze(), iid)
+    assert v == 2 and frozen and info["pos"] == 1                       # only the latest PO counts
+    assert all(r["ok"] for r in indents.po_vs_indent(lines, info))      # spaces / case ignored
 
 
 def test_swiggy_many_pos_until_end(backend):

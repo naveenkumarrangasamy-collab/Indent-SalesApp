@@ -148,7 +148,12 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   unit cost, value), fills the PO number, checks qty × cost = value and lines = PO total, and matches lines to our
   SKUs: 1) **PO_Item_Map** tab (Customer, PO Item Code, PO Item Name, Customer SKU Name; filled automatically when a
   user picks/confirms a SKU), 2) same words + same pack ("2PC - X" = "X - 2 pcs (…)"), 3) close name ("? check").
-  The user reviews "Our SKU" per line, then uploads. Scans/photos give no lines → type quantities by hand.
+  **PO lines are matched to the indent's own items first** (same words; pack may be written differently, e.g.
+  "Kiwi Sungold - 2 pcs" = "1Pack - Kiwi Sungold"), then to the master (the live master has look-alike names
+  that made matches ambiguous on 17 Nov: IN-001's PO was read right but 7 items didn't match). The check is
+  only: same Customer SKU Name (spaces/case ignored) → same qty? An item not on the PO shows a **blank** PO qty
+  ("Not on PO"), never 0. **Owner: Replace PO** on a frozen indent (one-PO customers): only the latest PO counts;
+  e-mail again is optional (off). The user reviews "Our SKU" per line, then uploads. Scans/photos give no lines → type quantities by hand.
   Swiggy: PO number M… = WH1, B… = WH2 (secret `po_store_prefixes`); a mismatch with the indent's store is shown.
   Tested on the 4 sample POs: Zepto 22/22 lines read, totals ✓, 20 matched by name.
 - **Lock** (manual freeze, "processing started"): status **Locked**: no edits, still waiting for its PO; a later
@@ -185,10 +190,9 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
     packs (10 × 2 Pcs = "20 pcs"), kilos for kg packs, **blank for gram packs** (the packet count is the answer).
   - **Loose**: Repacking Tray/Box/Crate with a piece or kg pack → the fruit goes in loose: "7 pcs loose"
     (More's 7 avocados into trays, NOT 7 trays), "700 kg loose".
-  - **Spec size 1, 2…** (17 Nov, last columns): one cell per New-tab Spec-Size: piece packs at a count →
-    "22C; 300 pcs" (no cases: user wants it simple); a spec allowing several counts gives one cell per
-    count, later ones "or 24C; …"; kg packs → "18C; 70 kg"; else the spec ("16mm"). Counts always shown with C
-    (also Spec-Size on the production sheet). Also in the production e-mail's make-ready table.
+  - **Spec Size** (17 Nov, ONE last column, user's format): pieces at each count of the New-tab spec, joined by
+    " | ": "20C : 100PC | 22C : 100PC"; kg packs "18C : 70KG"; else the spec text. No other extra columns.
+    Counts always shown with C (also Spec-Size on the production sheet). Also in the production e-mail.
   - The pack itself a container ("1 Box", Namdhari green apple) → "10 Box", Fruit needed blank. **Known gap**
     (user asked to be reminded): box packs have no kg/pieces yet; fix later.
   - Mapping Whole / spec labels are only a fallback for the Batching sheet when there is no New tab. A permanent
@@ -277,7 +281,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **148 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **149 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 

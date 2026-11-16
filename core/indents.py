@@ -624,7 +624,7 @@ def lock(indent_id: str, base_version: int, user: str) -> int:
 
 def freeze(indent_id: str, base_version: int, po_file_name: str, user: str,
            po_file_link: str = "", po_qty: dict | None = None, po_number: str = "",
-           po_has_extra: bool = False) -> tuple[int, bool]:
+           po_has_extra: bool = False, replace: bool = False) -> tuple[int, bool]:
     """Record a customer's PO for the indent. A difference with the indent never
     blocks the upload; it is shown on the indent and in the hourly tracker.
     - Most customers: one PO, which freezes the indent (status Frozen).
@@ -634,8 +634,14 @@ def freeze(indent_id: str, base_version: int, po_file_name: str, user: str,
     backend = get_backend()
     df = prepare(backend.read(INDENT_LINES))
     cur = snapshot(df, indent_id)
-    _check_editable(cur, indent_id, base_version, allow_locked=True)
     stamp = config.now_iso()
+    if replace and cur is not None and cur.status == STATUS_FROZEN and not is_multi_po(cur.header.customer):
+        # owner: a wrong PO is replaced by a new upload; only the latest PO counts
+        backend.append_dicts(PO_FREEZE, [_po_row(cur, cur.version, PO_KIND, user, stamp, po_file_name,
+                                                 po_file_link, po_number, po_qty)])
+        clear_cache()
+        return cur.version, True
+    _check_editable(cur, indent_id, base_version, allow_locked=True)
     extra = " (PO has items not on the indent)" if po_has_extra else ""
     if is_multi_po(cur.header.customer):
         backend.append_dicts(PO_FREEZE, [_po_row(cur, cur.version, PO_KIND, user, stamp, po_file_name,
@@ -674,7 +680,8 @@ def _qty_json(raw) -> dict:
 
 def po_info(po: pd.DataFrame | None, indent_id: str) -> dict:
     """POs of one indent: count, End of POs pressed?, PO qty per SKU (sum of all
-    POs; None when no PO has qty per item), PO numbers."""
+    POs for multi-PO customers, else the latest PO; None when no PO has qty per
+    item), PO numbers."""
     out = {"pos": 0, "ended": False, "qty": None, "numbers": []}
     if po is None or po.empty or "indent_id" not in po.columns:
         return out
@@ -682,6 +689,8 @@ def po_info(po: pd.DataFrame | None, indent_id: str) -> dict:
     kind = rows["kind"].astype(str).str.strip().str.lower() if "kind" in rows.columns else pd.Series(
         [""] * len(rows), index=rows.index)
     pos = rows[kind != PO_END]
+    if len(pos) > 1 and not is_multi_po(str(pos["po_customer"].iloc[-1]) if "po_customer" in pos.columns else ""):
+        pos = pos.iloc[[-1]]                     # one-PO customers: a re-upload replaces the PO
     out["pos"] = len(pos)
     out["ended"] = bool((kind == PO_END).any())
     out["numbers"] = [str(x) for x in pos.get("po_number", pd.Series(dtype=str)) if str(x or "").strip()]
@@ -715,20 +724,27 @@ def latest_po() -> dict[str, dict]:
     return out
 
 
+def _nkey(s: str) -> str:
+    return " ".join(str(s or "").split()).casefold()
+
+
 def po_vs_indent(lines: list[IndentLine], info: dict) -> list[dict]:
-    """Indent qty vs PO qty (all POs together), per item; PO-only items too."""
+    """Indent qty vs PO qty, per item (same Customer SKU Name, spaces/case ignored).
+    An indent item that is not on the PO has po_qty None (never shown as 0);
+    PO-only items come last with indent_qty None."""
     if info["qty"] is None:
         return []
-    by = {k.strip().casefold(): (k, v) for k, v in info["qty"].items()}
+    by = {_nkey(k): (k, v) for k, v in info["qty"].items()}
     out = []
     for x in lines:
-        k = x.customer_sku_name.strip().casefold()
-        po = by.pop(k, (None, 0.0))[1] if k in by else 0.0
+        hit = by.pop(_nkey(x.customer_sku_name), None)
         ind = to_number(x.qty)
+        po = None if hit is None else hit[1]
         out.append({"customer_sku_name": x.customer_sku_name, "lot": x.lot, "indent_qty": ind,
-                    "po_qty": po, "diff": po - ind, "ok": abs(po - ind) < 1e-9})
+                    "po_qty": po, "diff": (po or 0.0) - ind,
+                    "ok": (po is None and abs(ind) < 1e-9) or (po is not None and abs(po - ind) < 1e-9)})
     for name, v in by.values():
-        out.append({"customer_sku_name": name, "lot": "", "indent_qty": 0.0, "po_qty": v, "diff": v,
+        out.append({"customer_sku_name": name, "lot": "", "indent_qty": None, "po_qty": v, "diff": v,
                     "ok": abs(v) < 1e-9})
     return out
 

@@ -173,33 +173,62 @@ def po_key(name: str) -> tuple[frozenset, str]:
     return _words(parts[0]), pack
 
 
-def match(lines: list[POLine], candidates: list[str], item_map: dict[str, str] | None = None) -> list[POLine]:
-    """Fill .sku/.how on every line. candidates: our SKU names (the indent's first)."""
+def _norm(s: str) -> str:
+    return " ".join(str(s or "").split()).casefold()
+
+
+def _keys(names: list[str]) -> list[tuple]:
+    seen, out = set(), []
+    for c in names:
+        if _norm(c) and _norm(c) not in seen:       # the master can list a name twice
+            seen.add(_norm(c))
+            out.append((c, *our_key(c)))
+    return out
+
+
+def _find(name: str, keys: list[tuple], close_at: float, loose: bool = False) -> tuple[str, str]:
+    """loose (the indent's own items): the same words are enough when only one
+    item has them, even if the pack is written differently (1Pack vs 2 pcs)."""
+    words, pack = po_key(name)
+    same = [c for c, w, p in keys if w == words and (not pack or not p or p == pack)]
+    if not same and loose:
+        same = [c for c, w, p in keys if w == words]
+    if len(same) > 1 and pack:
+        same = [c for c, w, p in keys if w == words and p == pack] or same
+    if len(same) == 1:
+        return same[0], "name"
+    if same:
+        return "", ""                              # ambiguous: let the user choose
+    best, score = "", 0.0
+    for c, w, p in keys:
+        if pack and p and p != pack or not w or not words:
+            continue
+        sc = len(w & words) / len(w | words)
+        if sc > score:
+            best, score = c, sc
+    return (best, "close") if score >= close_at else ("", "")
+
+
+def match(lines: list[POLine], candidates: list[str], item_map: dict[str, str] | None = None,
+          prefer: list[str] | None = None) -> list[POLine]:
+    """Fill .sku/.how on every line. prefer: the indent's own SKU names; a PO line
+    is matched to them first (only the indent's items matter for the check),
+    then to the rest of the master."""
     item_map = {k.strip().casefold(): v for k, v in (item_map or {}).items() if k and v}
-    keys = [(c, *our_key(c)) for c in dict.fromkeys(candidates)]
+    own = _keys(prefer or [])
+    own_names = {_norm(c) for c, _, _ in own}
+    rest = _keys([c for c in candidates if _norm(c) not in own_names])
     for x in lines:
         hit = item_map.get(x.code.strip().casefold()) or item_map.get(x.name.strip().casefold())
-        if hit:
-            x.sku, x.how = hit, "map"
+        if hit and (not own or _norm(hit) in own_names):
+            x.sku, x.how = next((c for c, _, _ in own if _norm(c) == _norm(hit)), hit), "map"
             continue
-        words, pack = po_key(x.name)
-        same = [c for c, w, p in keys if w == words and (not pack or not p or p == pack)]
-        if len(same) > 1 and pack:
-            same = [c for c, w, p in keys if w == words and p == pack] or same
-        if len(same) == 1 or (same and len(set(same)) == 1):
-            x.sku, x.how = same[0], "name"
-            continue
-        if same:
-            continue                              # ambiguous: let the user choose
-        best, score = "", 0.0
-        for c, w, p in keys:
-            if pack and p and p != pack or not w or not words:
-                continue
-            s = len(w & words) / len(w | words)
-            if s > score:
-                best, score = c, s
-        if score >= 0.6:
-            x.sku, x.how = best, "close"
+        sku, how = _find(x.name, own, 0.5, loose=True) if own else ("", "")
+        if not sku and hit:
+            sku, how = hit, "map"
+        if not sku:
+            sku, how = _find(x.name, rest, 0.6)
+        x.sku, x.how = sku, how
     return lines
 
 

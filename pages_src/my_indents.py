@@ -10,7 +10,7 @@ import streamlit as st
 
 from core import indents, masters
 from core.lots import lot_size
-from core.models import IndentLine, fmt_num, to_number
+from core.models import IndentLine, fmt_num, fmt_q, to_number
 from core.auth import User
 from core.schema import STATUS_FROZEN, STATUS_LOCKED
 from core.sheets import SheetError
@@ -164,8 +164,11 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
                        help="Open the indent on the Indent page to change delivery details or add items"
                        if can else why):
             _request_open(cur)
-        if c[1].button("Upload PO", icon=":material/upload_file:", disabled=has_po,
-                       help="Upload the customer's PO (PDF)" if not has_po else "PO already uploaded"):
+        can_replace = has_po and user.is_owner and not indents.is_multi_po(h.customer)
+        if c[1].button("Replace PO" if can_replace else "Upload PO", icon=":material/upload_file:",
+                       disabled=has_po and not can_replace,
+                       help="Owner: upload the PO again; the new one replaces the old" if can_replace
+                       else "Upload the customer's PO (PDF)" if not has_po else "PO already uploaded"):
             indent_actions.ask("po", indent_id)
         if not frozen and c[3].button("Lock", icon=":material/lock:", key=f"lock_{indent_id}",
                                       help="Processing started: stop all edits. The PO can still be "
@@ -266,7 +269,7 @@ def _po(cur, user: User) -> None:
     if bad:
         st.warning(f"{len(bad)} item(s) differ between the indent and the PO(s):")
         st.dataframe(pd.DataFrame([{"Customer SKU Name": r["customer_sku_name"],
-                                    "Indent qty": fmt_num(r["indent_qty"]), "PO qty": fmt_num(r["po_qty"]),
+                                    "Indent qty": fmt_q(r["indent_qty"]), "PO qty": fmt_q(r["po_qty"]),
                                     "Difference": ("+" if r["diff"] > 0 else "") + fmt_num(r["diff"])}
                                    for r in bad]), hide_index=True, width="stretch")
     elif rows:

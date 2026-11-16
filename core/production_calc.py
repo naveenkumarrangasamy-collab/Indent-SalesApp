@@ -171,8 +171,8 @@ def production(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return g[PRODUCTION_COLUMNS + extra].reset_index(drop=True)
 
 
-MAKE_READY_COLUMNS = ["City", "Parent SKU", "Variety", "Repacking", "Pack", "Make ready", "Fruit needed"]
-SIZE_COL = "Spec size {}"   # Spec size 1, 2, ... (one cell per size)
+MAKE_READY_COLUMNS = ["City", "Parent SKU", "Variety", "Repacking", "Pack", "Make ready", "Fruit needed",
+                      "Spec Size"]
 _BULK = {"tray", "box", "crate", "carton", "bulk", "loose"}   # containers that hold loose fruit
 
 
@@ -217,12 +217,8 @@ def make_ready(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
             make.append(f"{fmt_num(q)} {rep or 'packs'}".strip())
             need.append(f"{fmt_num(q * pcs)} pcs" if pcs else f"{fmt_num(q * kg)} kg" if kg else "")
     g["Make ready"], g["Fruit needed"] = make, need
-    cells = _by_size(df, keys, g)
-    n = max((len(c) for c in cells), default=0)
-    extra = [SIZE_COL.format(j + 1) for j in range(n)]
-    for j, col in enumerate(extra):
-        g[col] = [c[j] if j < len(c) else "" for c in cells]
-    return g.sort_values(keys, key=_SORT)[MAKE_READY_COLUMNS + extra].reset_index(drop=True)
+    g["Spec Size"] = [" | ".join(c) for c in _by_size(df, keys, g)]
+    return g.sort_values(keys, key=_SORT)[MAKE_READY_COLUMNS].reset_index(drop=True)
 
 
 def _count_label(spec: str) -> str:
@@ -235,10 +231,10 @@ def _count_label(spec: str) -> str:
 
 
 def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[list[str]]:
-    """Per make-ready row, one cell per spec size (from the New tab):
-    piece packs at a count -> '22C; 300 pcs'; a spec allowing several counts gives
-    one cell per count, the later ones starting with 'or' ('or 24C; 80 pcs');
-    kg packs -> '18C; 70 kg'; otherwise just the spec ('16mm')."""
+    """Per make-ready row, the parts of its 'Spec Size' cell (joined with ' | '),
+    from the New tab: piece packs -> pieces at each count of the spec
+    ('20C : 100PC | 22C : 100PC' for a 20C/22C spec); kg packs -> '18C : 70KG';
+    otherwise just the spec ('16mm')."""
     fold = lambda r: tuple(str(r[k]).casefold() for k in keys)  # noqa: E731
     parts: dict[tuple, dict[str, float]] = {}
     for r in df.to_dict("records"):
@@ -258,10 +254,10 @@ def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[list[st
             counts = _counts(spec)
             if pcs and counts:
                 n = q * pcs
-                for i, c in enumerate(counts):
-                    cells.append(f"{'or ' if i else ''}{c}C; {fmt_num(n)} pcs")
+                for c in counts:
+                    cells.append(f"{c}C : {fmt_num(n)}PC")
             elif kg:
-                cells.append(f"{_count_label(spec)}; {fmt_num(q * kg)} kg")
+                cells.append(f"{_count_label(spec)} : {fmt_num(q * kg)}KG")
             else:
                 cells.append(_count_label(spec))
         out.append(cells)
