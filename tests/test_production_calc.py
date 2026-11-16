@@ -180,8 +180,8 @@ def test_make_ready_list_mixes_sizes_and_handles_loose_and_boxes():
     size = {(r["Parent SKU"], r["Repacking"], r["Pack"]): r["By size"] for r in mr.to_dict("records")}
     assert size[("Avocado", "Punnet", "1 Pcs")] == "22C: 30 pcs · 24C: 20 pcs"
     assert size[("Avocado", "Tray", "1 Pcs")] == "18C, 20C: 7 pcs"
-    assert size[("Apple", "Punnet", "200 gm")] == "135, 150"                         # spec only
-    assert size[("Apple", "Box", "1 Box")] == "90, 110"
+    assert size[("Apple", "Punnet", "200 gm")] == "135C, 150C"                       # spec only
+    assert size[("Apple", "Box", "1 Box")] == "90C, 110C"
 
 
 def test_batching_takes_spec_and_variety_from_new_tab():

@@ -219,6 +219,15 @@ def make_ready(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return g.sort_values(keys, key=_SORT)[MAKE_READY_COLUMNS].reset_index(drop=True)
 
 
+def _count_label(spec: str) -> str:
+    """Mark counts with C so they are not read as pieces: '90, 110' -> '90C, 110C'."""
+    import re
+    if not _counts(spec):
+        return spec
+    return re.sub(r"(?<![\d.])(\d{2,3})(?![\d.])(?!\s*[Cc])", lambda m: m.group(1) + "C"
+                  if int(m.group(1)) >= 10 else m.group(1), spec)
+
+
 def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[str]:
     """Per make-ready row, the fruit split by Spec-Size (from the New tab):
     piece packs -> pieces per size ('22C: 300 pcs · 24C: 120 pcs'; a SKU whose spec
@@ -240,12 +249,13 @@ def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[str]:
             pcs = kg = None
         bits = []
         for spec, q in sorted(d.items(), key=lambda kv: (_counts(kv[0]) or [999])[0]):
+            label = _count_label(spec)
             if pcs and _counts(spec):
-                bits.append(f"{spec}: {fmt_num(q * pcs)} pcs")
+                bits.append(f"{label}: {fmt_num(q * pcs)} pcs")
             elif kg:
-                bits.append(f"{spec}: {fmt_num(q * kg)} kg")
+                bits.append(f"{label}: {fmt_num(q * kg)} kg")
             else:
-                bits.append(spec)
+                bits.append(label)
         out.append(" · ".join(bits))
     return out
 
