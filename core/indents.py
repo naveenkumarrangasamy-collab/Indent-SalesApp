@@ -835,6 +835,43 @@ def cancel(indent_id: str, base_version: int, user: str, owner: bool = False) ->
     return new_v
 
 
+def move_date(indent_id: str, base_version: int, new_date: str, user: str) -> int:
+    """Owner: change an indent's delivery date (e.g. a retro order that was placed
+    for the wrong day), ignoring the cutoff. Same status; a new version and a
+    Change_Log row are written. Refused if that store already has an indent that day."""
+    backend = get_backend()
+    df = prepare(backend.read(INDENT_LINES))
+    cur = snapshot(df, indent_id)
+    if cur is None or cur.status == STATUS_CANCELLED:
+        raise SheetError(f"{indent_id} was not found or is deleted.")
+    if cur.version != int(base_version):
+        raise ConflictError(f"{indent_id} was changed meanwhile. Please try again.")
+    old = cur.header.delivery_date
+    if str(new_date) == str(old):
+        raise NothingChangedError("That is already the delivery date.")
+    header = IndentHeader(**{**cur.header.to_dict(), "delivery_date": str(new_date)})
+    dup = find_duplicate(df, header, exclude_id=indent_id)
+    if dup:
+        raise DuplicateError(duplicate_message(dup, header), dup)
+    new_v = cur.version + 1
+    stamp = config.now_iso()
+    rows = build_rows(indent_id, new_v, cur.status, stamp, user, header, cur.lines,
+                      note=change_note("Date moved", user, creator_of(df, indent_id), stamp,
+                                       f"delivery date {old} -> {new_date} (owner)"))
+    if not _append_verified(backend, rows, indent_id, new_v, stamp, user):
+        clear_cache()
+        raise ConflictError(f"Someone else saved {indent_id} at the same moment. Please try again.")
+    try:
+        backend.append_dicts(CHANGE_LOG, changelog.to_rows(
+            [{"change_type": "header_changed", "customer_sku_name": "", "field": "delivery_date",
+              "old_value": old, "new_value": str(new_date)}],
+            indent_id=indent_id, from_version=cur.version, to_version=new_v, changed_by=user, changed_at=stamp))
+    except SheetError:
+        pass
+    clear_cache()
+    return new_v
+
+
 RESET_TABS = (INDENT_LINES, CHANGE_LOG, PO_FREEZE, DRAFTS)
 
 

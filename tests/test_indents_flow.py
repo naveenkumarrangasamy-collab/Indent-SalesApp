@@ -424,3 +424,11 @@ def test_backup_and_clear_starts_fresh(backend):
     assert done[INDENT_LINES] == 1 and indents.read_lines(fresh=True).empty
     assert any(t.startswith("Backup_") and t.endswith(INDENT_LINES) for t in backend.list_tabs())
     assert indents.submit_new(H, [HASS], "s@x.com") == "IN-001"
+
+
+def test_owner_moves_delivery_date_past_cutoff(backend):
+    iid = indents.submit_new(H, [HASS], "s@x.com")
+    yesterday = (config.now_ist().date() - timedelta(days=1)).isoformat()
+    v = indents.move_date(iid, 1, yesterday, "owner@x.com")
+    cur = indents.snapshot(indents.read_lines(fresh=True), iid)
+    assert v == 2 and cur.header.delivery_date == yesterday and cur.status == "Submitted"

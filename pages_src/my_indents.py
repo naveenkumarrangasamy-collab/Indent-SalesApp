@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from html import escape
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import streamlit as st
 
-from core import indents, masters
+from core import config, indents, masters
 from core.lots import lot_size
 from core.models import IndentLine, fmt_num, fmt_q, to_number
 from core.auth import User
@@ -183,6 +183,21 @@ def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:
                            help="Owner: delete this indent (allowed until 2 days after the delivery date, "
                                 "also after the cutoff and after a PO)"):
                 indent_actions.ask("delete", indent_id)
+        if user.is_owner:
+            with c[4].popover("Change date", icon=":material/event:"):
+                today = config.now_ist().date()
+                opts = [(today + timedelta(days=k)).isoformat() for k in (-2, -1, 0, 1)]
+                opts = [d for d in opts if d != h.delivery_date]
+                nd = st.selectbox("New delivery date", opts, key=f"mvd_{indent_id}",
+                                  format_func=lambda d: date.fromisoformat(d).strftime("%a %d %b"))
+                if st.button("Move indent", key=f"mvd_go_{indent_id}", type="primary"):
+                    try:
+                        indents.move_date(indent_id, cur.version, nd, user.email)
+                    except SheetError as e:
+                        st.error(str(e))
+                    else:
+                        common.flash("success", f"{indent_id} moved to {nd}.")
+                        st.rerun()
         if has_po:
             c[4].caption("Frozen with a PO: read-only.")
         elif locked:
