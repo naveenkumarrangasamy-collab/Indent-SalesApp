@@ -291,6 +291,7 @@ def _tab_peek() -> None:
             for t in [t for t in tabs if any(w in t.lower() for w in ("inventor", "stock", "live"))]:
                 vals = be.read_values(t)
                 st.markdown(f"**{t}**: {max(len(vals) - 1, 0)} rows")
-                st.code("\n".join(" | ".join(str(c) for c in r) for r in vals[:400]), language=None)
+                keep = [vals[0]] + [r for r in vals[1:] if r and "beng" in str(r[0]).lower()]
+                st.code("\n".join(" | ".join(str(c) for c in r) for r in keep), language=None)
         except Exception as e:  # never break the page
             st.caption(f"Could not read: {e}")
