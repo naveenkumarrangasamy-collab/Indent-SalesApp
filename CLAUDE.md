@@ -192,7 +192,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 
 - **Production e-mail** (list "Production e-mails", Team = Ground; was called "Indent e-mails"): **at 8 AM and
   9 AM IST, exactly on the hour** (secret `production_mail_hours`, default [8, 9]). Exact timing: **cron-job.org**
-  starts the GitHub workflow (workflow_dispatch, via a token kept only in cron-job.org) at 7:54 and 8:54 IST; the
+  starts the GitHub workflow (workflow_dispatch, via a token kept only in cron-job.org) at 7:54 and 8:54 IST
+  (cron-job.org account kathiramirthees@gmail.com, job "MT Indent production mail (8 & 9 AM IST)", crontab
+  `24 2,3 * * *` UTC, POST .../actions/workflows/hourly-indent-mail.yml/dispatches body {"ref":"main"}, classic
+  token "MT Indent exact mail trigger (cron-job.org)" of GitHub user Kathiramirtheeswaraa, repo scope, no expiry;
+  test run 16 Nov 08:39 → 204 OK); the
   job wakes the app, waits until hh:00:00 and opens `?hourly=run`. Backup: GitHub's hourly schedule (often 10-60
   min late). The app accepts a run from 5 min before a send hour to 3 h after (later slot wins) and sends each slot
   once via Mail_Log. 16 Nov: GitHub's scheduled 8 AM run never came; the mail was sent by a manual run at 8:11. Content: **both tables**: 1) Make-ready list, 2) By spec size, in the body and as PDF
