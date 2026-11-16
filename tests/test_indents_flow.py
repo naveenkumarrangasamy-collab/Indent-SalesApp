@@ -296,7 +296,6 @@ def test_open_indents_first_and_city_scope(backend):
     assert set(indents.visible_to(s, own)["indent_id"]) == {a, c}          # no city: own indents
     owner = User("o@x.com", "", "owner")
     assert len(indents.visible_to(s, owner)) == 3
-    assert blr.can_work_on("Bangalore", "a@x.com") and not blr.can_work_on("Chennai", "b@x.com")
 
 
 

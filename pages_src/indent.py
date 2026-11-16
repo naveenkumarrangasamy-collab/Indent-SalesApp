@@ -52,7 +52,6 @@ def render(user: User) -> None:
         c = st.columns([1, 3])
         if c[0].button("Discard changes", icon=":material/close:"):
             st.session_state["pending_action"] = "discard"
-            st.rerun()
         items.dialogs_only(m, user)
     state.autosave()
     indent_actions.show_dialog(user)

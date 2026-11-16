@@ -62,12 +62,6 @@ def state_at(lines: pd.DataFrame, when: datetime) -> pd.DataFrame:
     return cur[cur["status"] != STATUS_CANCELLED]
 
 
-def overall_df(rows: pd.DataFrame, m: Masters | None) -> pd.DataFrame:
-    if rows is None or rows.empty:
-        return pd.DataFrame(columns=OVERALL_COLS)
-    return production_calc.production(rows, m)
-
-
 def customer_df(rows: pd.DataFrame) -> pd.DataFrame:
     if rows is None or rows.empty:
         return pd.DataFrame(columns=CUSTOMER_COLS)
@@ -103,41 +97,6 @@ def xlsx(sheets: dict[str, pd.DataFrame]) -> bytes:
     return buf.getvalue()
 
 
-def _customer_sections(cdf: pd.DataFrame) -> list[tuple[str, str, pd.DataFrame]]:
-    sections = []
-    for cust, part in cdf.groupby("Customer", sort=True):
-        stores = part["Store"].nunique()
-        sections.append((f"{cust}", f"{stores} store(s) - total qty {fmt_num(part['Qty'].sum())} - "
-                                    f"Rs {part['Amount'].sum():,.0f}", None))
-        for (store, iid, status), sp in part.groupby(["Store", "Indent", "Status"], sort=True):
-            sections.append((f"   {store}", f"{iid} - {status} - {sp['City'].iloc[0]}",
-                             sp[["Parent SKU", "Customer SKU Name", "Variety", "Lot", "Lot Size",
-                                 "Qty", "Price", "Amount"]].reset_index(drop=True)))
-    return sections   # customer headings carry no table (None)
-
-
-def indent_mail_files(rows: pd.DataFrame, m: Masters | None, day: str, slot_label: str,
-                      scope: str = "everything") -> list[tuple[str, bytes, str]]:
-    """The 4 attachments of the hourly indent e-mail."""
-    odf, cdf = overall_df(rows, m), customer_df(rows)
-    sub = [f"Delivery {fmt_day(day)} - as of {slot_label} - scope: {scope}",
-           f"{rows['indent_id'].nunique() if rows is not None and not rows.empty else 0} indents"]
-    stamp = str(day).replace("-", "")
-    hh = slot_label.split(",")[0].replace(":", "").replace(" ", "")   # "11:00 AM, Sun 15 Nov" -> 1100AM
-    overall_pdf = table_pdf("Overall indent - all SKUs", sub, odf, footer=f"MT Indent - {slot_label}")
-    cust_pdf = sections_pdf("Customer-level indent", sub, _customer_sections(cdf),
-                            footer=f"MT Indent - {slot_label}")
-    per_customer = {"All customers": cdf}
-    for cust, part in cdf.groupby("Customer", sort=True):
-        per_customer[str(cust)] = part.reset_index(drop=True)
-    return [
-        (f"Overall_indent_{stamp}_{hh}.pdf", overall_pdf, "application/pdf"),
-        (f"Customer_indent_{stamp}_{hh}.pdf", cust_pdf, "application/pdf"),
-        (f"Overall_indent_{stamp}_{hh}.xlsx", xlsx({"Overall indent": odf}), XLSX),
-        (f"Customer_indent_{stamp}_{hh}.xlsx", xlsx(per_customer), XLSX),
-    ]
-
-
 def _html_table(df: pd.DataFrame, num: set[str]) -> str:
     if df is None or df.empty:
         return "<p style='color:#666'>No indents.</p>"
@@ -155,35 +114,9 @@ def _html_table(df: pd.DataFrame, num: set[str]) -> str:
             f"<tr style='background:#1c6b49;color:#fff'>{head}</tr>{''.join(body)}</table>")
 
 
-def indent_mail_html(rows: pd.DataFrame, m: Masters | None, day: str, slot_label: str,
-                     name: str = "", scope: str = "everything") -> str:
-    odf, cdf = overall_df(rows, m), customer_df(rows)
-    n_ind = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
-    waiting = rows[rows["status"] != STATUS_FROZEN]["indent_id"].nunique() if n_ind else 0
-    parts = [f"<p>Hello{(' ' + html.escape(name)) if name else ''},</p>",
-             f"<p>Indents for delivery on <b>{fmt_day(day)}</b>, as of <b>{slot_label}</b> "
-             f"(scope: {html.escape(scope)}). {n_ind} indent(s), {waiting} still waiting for a PO. "
-             "PDF and Excel copies are attached.</p>",
-             "<h3 style='color:#1c6b49'>1. Overall indent (all SKUs)</h3>",
-             _html_table(odf, {"Total"}),
-             "<h3 style='color:#1c6b49'>2. Customer-level indent</h3>"]
-    if cdf.empty:
-        parts.append("<p style='color:#666'>No indents.</p>")
-    for cust, part in cdf.groupby("Customer", sort=True):
-        parts.append(f"<h4 style='margin:14px 0 4px'>{html.escape(str(cust))}</h4>")
-        for (store, iid, status), sp in part.groupby(["Store", "Indent", "Status"], sort=True):
-            parts.append(f"<div style='margin:6px 0 2px'><b>{html.escape(str(store))}</b> "
-                         f"<span style='color:#666'>· {html.escape(str(iid))} · {html.escape(str(status))}"
-                         "</span></div>")
-            parts.append(_html_table(sp[["Customer SKU Name", "Variety", "Lot", "Lot Size", "Qty"]],
-                                     {"Qty"}))
-    parts.append("<p style='color:#888;font-size:12px'>Sent by the MT Indent app.</p>")
-    return "".join(parts)
-
-
 # ------------------------------------------------------------------ hourly production e-mail
 
-def production_view(rows: pd.DataFrame, m: Masters | None, rules: list | None) -> pd.DataFrame:
+def production_view(rows: pd.DataFrame, m: Masters | None) -> pd.DataFrame:
     """Production sheet 'by spec size' (Variety dropped when empty)."""
     p = production_calc.production(rows, m)
     if not p.empty and not p["Variety"].astype(bool).any():
@@ -199,11 +132,10 @@ def make_ready_view(rows: pd.DataFrame, m: Masters | None) -> pd.DataFrame:
     return mr
 
 
-def production_mail_files(rows: pd.DataFrame, m: Masters | None, rules: list | None, day: str,
+def production_mail_files(rows: pd.DataFrame, m: Masters | None, day: str,
                           slot_label: str, scope: str = "everything") -> list[tuple[str, bytes, str]]:
     """The production e-mail attachments: both tables (make-ready list + by spec size) as PDF and Excel."""
-    from core.pdf_report import sections_pdf
-    p, mr = production_view(rows, m, rules), make_ready_view(rows, m)
+    p, mr = production_view(rows, m), make_ready_view(rows, m)
     n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
     sub = [f"Delivery {fmt_day(day)} - as of {slot_label} - {scope}", f"{n} indents - all customers together"]
     stamp = str(day).replace("-", "")
@@ -216,9 +148,9 @@ def production_mail_files(rows: pd.DataFrame, m: Masters | None, rules: list | N
             (f"Production_{stamp}_{hh}.xlsx", xlsx({"Make-ready list": mr, "By spec size": p}), XLSX)]
 
 
-def production_mail_html(rows: pd.DataFrame, m: Masters | None, rules: list | None, day: str,
+def production_mail_html(rows: pd.DataFrame, m: Masters | None, day: str,
                          slot_label: str, name: str = "", scope: str = "everything") -> str:
-    p, mr = production_view(rows, m, rules), make_ready_view(rows, m)
+    p, mr = production_view(rows, m), make_ready_view(rows, m)
     n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
     waiting = rows[rows["status"] != STATUS_FROZEN]["indent_id"].nunique() if n else 0
     return "".join([

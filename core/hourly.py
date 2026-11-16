@@ -1,20 +1,19 @@
-"""Production e-mail to the ground team: once a day at 8 AM IST by default
-(secret `production_mail_hours`, e.g. [8, 11]). The GitHub schedule still runs
-every hour 8 AM-2 PM; runs that are not a send hour do nothing.
+"""Production e-mail to the ground team: every hour 8 AM-2 PM IST, on the hour
+(secret `production_mail_hours`, default hourly_mail_from..hourly_mail_to).
 
 Each active ground-team address gets, for the delivery day(s), the
-production report of the indents in its cities / customers (all customers
-clubbed, with boxes) in the body, plus the same report as PDF and Excel.
+production report (make-ready list + by spec size, all customers together)
+of the indents in its cities, in the body and as PDF and Excel.
 
-Run every hour by the GitHub Actions workflow (.github/workflows/hourly-indent-mail.yml
--> scripts/hourly_mail.py), or from the Access page with "Send now".
+Started by cron-job.org (exact time) or the GitHub schedule (backup) through
+scripts/wake_and_send.py, or from the Access page with "Send sample".
 Mail_Log keeps one line per e-mail, so a slot is never sent twice to a person.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from core import boxes, config, indents, mailer, masters, recipients, reports
+from core import config, indents, mailer, masters, recipients, reports
 
 
 def hours() -> tuple[int, int]:
@@ -90,20 +89,19 @@ def run(now: datetime | None = None, force: bool = False, only: str | None = Non
         return [{"to": "-", "status": "skipped", "detail": "no active recipients with the hourly e-mail"}]
     lines = indents.read_lines(fresh=True)
     m = masters.load_masters()
-    rules = boxes.read_rules()
     days = [(slot.date() + timedelta(days=k)).isoformat() for k in delivery_offsets()]
     results = []
     for r in people:
         if not force and recipients.already_sent("hourly", key, r.email):
             results.append({"to": r.email, "status": "skipped", "detail": f"already sent for {key}"})
             continue
-        ok, why, n = _send_one([r.email], r, lines, m, rules, days, slot, label)
+        ok, why, n = _send_one([r.email], r, lines, m, days, slot, label)
         recipients.log("hourly", key, r.email, ok, why)
         results.append({"to": r.email, "status": "sent" if ok else "failed", "detail": why, "indents": n})
     return results
 
 
-def _send_one(to: list[str], scope: recipients.Recipient | None, lines, m, rules, days, slot, label,
+def _send_one(to: list[str], scope: recipients.Recipient | None, lines, m, days, slot, label,
               sample: bool = False) -> tuple[bool, str, int]:
     html_parts, files, n = [], [], 0
     scope_txt = scope.scope_text() if scope else "everything"
@@ -112,9 +110,9 @@ def _send_one(to: list[str], scope: recipients.Recipient | None, lines, m, rules
         if scope is not None:
             rows = scope.filter(rows)
         n += 0 if rows is None or rows.empty else rows["indent_id"].nunique()
-        html_parts.append(reports.production_mail_html(rows, m, rules, day, label,
+        html_parts.append(reports.production_mail_html(rows, m, day, label,
                                                        scope.name if scope else "", scope_txt))
-        files += reports.production_mail_files(rows, m, rules, day, label, scope_txt)
+        files += reports.production_mail_files(rows, m, day, label, scope_txt)
     day_txt = " + ".join(reports.fmt_day(d) for d in days)
     subject = (("[SAMPLE] " if sample else "") + f"Production {slot:%I:%M %p} - delivery {day_txt} - "
                f"{n} indent(s)").replace(" 0", " ", 1)
@@ -131,7 +129,7 @@ def send_sample(to: str, scope: recipients.Recipient | None = None) -> tuple[boo
     slot = now.replace(minute=0, second=0, microsecond=0)
     days = [(slot.date() + timedelta(days=k)).isoformat() for k in delivery_offsets()]
     ok, why, n = _send_one([to], scope, indents.read_lines(fresh=True), masters.load_masters(),
-                           boxes.read_rules(), days, slot, slot_label(slot), sample=True)
+                           days, slot, slot_label(slot), sample=True)
     recipients.log("sample-hourly", f"{slot:%Y-%m-%d %H:%M}", to, ok, why)
     return ok, (f"Sample production e-mail sent to {to} ({n} indents)." if ok
                 else f"Sample e-mail not sent: {why}")
@@ -142,6 +140,6 @@ def preview(day: str, scope: recipients.Recipient | None = None) -> list[tuple[s
     rows = reports.day_rows(indents.read_lines(), day)
     if scope is not None:
         rows = scope.filter(rows)
-    return reports.production_mail_files(rows, masters.load_masters(), boxes.read_rules(), day,
+    return reports.production_mail_files(rows, masters.load_masters(), day,
                                          slot_label(config.now_ist()),
                                          scope.scope_text() if scope else "everything")

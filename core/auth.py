@@ -72,13 +72,6 @@ class User:
             return True
         return " ".join(str(store or "").split()).casefold() in {s.casefold() for s in self.stores}
 
-    def can_work_on(self, city: str, created_by: str, store: str = "") -> bool:
-        """May this user see / edit / delete an indent of this city, store and creator?"""
-        if self.is_owner:
-            return True
-        if self.cities:
-            return self.in_my_cities(city) and (not store or self.in_my_stores(store))
-        return str(created_by or "").strip().lower() == self.email
 
     @property
     def label(self) -> str:
@@ -92,11 +85,6 @@ class User:
     def from_dict(cls, d: dict) -> "User":
         return cls(email=d.get("email", ""), name=d.get("name", ""), role=d.get("role", ""),
                    cities=list(d.get("cities") or []), stores=list(d.get("stores") or []))
-
-
-def parse_stores(value) -> list[str]:
-    """Stores are separated by ';' or new lines (store names may contain commas)."""
-    return parse_cities(value, seps=r"[;\n]")
 
 
 def parse_cities(value, seps: str = r"[,;\n]") -> list[str]:

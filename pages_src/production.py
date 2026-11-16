@@ -12,7 +12,7 @@ from core import config, indents, masters
 from core.auth import User
 from core.pdf_report import sections_pdf, table_pdf
 from core.production_calc import (batching, default_date, delivery_dates, filter_lines, make_ready,
-                                  not_in_base, production, spec_mapping_list, unmapped)
+                                  not_in_base, production, unmapped)
 from core.sheets import SheetError
 from pages_src import common
 
@@ -163,19 +163,6 @@ def render(user: User) -> None:
             st.dataframe(gaps, hide_index=True, width="stretch")
     if user.is_owner:
         _publish("Production sheet", PRODUCTION_TAB, show, lines, user, "ps")
-        with st.expander("Spec mapping list (what production uses for every SKU name, and what is missing)"):
-            lst = spec_mapping_list(m)
-            if lst.empty:
-                st.caption("No SKU mapping found.")
-            else:
-                todo = int((lst["To fill in"] != "complete").sum())
-                st.caption(f"{len(lst)} SKU names · {todo} still need Spec-Size and/or Grade in **Mapping Whole** "
-                           "(add a **Grade** column there, e.g. 'Regular imported', 'Mini TRM').")
-                st.dataframe(lst, hide_index=True, width="stretch")
-                from core.reports import xlsx
-                st.download_button("Spec mapping list (Excel)", xlsx({"Spec mapping": lst}),
-                                   file_name="spec_mapping_list.xlsx", icon=":material/download:",
-                                   mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 def render_batching(user: User) -> None:

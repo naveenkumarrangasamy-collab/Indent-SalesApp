@@ -58,11 +58,6 @@ def set_lines(new_lines: list[IndentLine], structural: bool) -> None:
     mark_dirty()
 
 
-def set_step(step: str) -> None:
-    get()["step"] = step
-    mark_dirty(force=True)
-
-
 def bump_editor() -> None:
     st.session_state["editor_rev"] = st.session_state.get("editor_rev", 0) + 1
 
@@ -99,11 +94,6 @@ def keep_date() -> str | None:
     if ind["mode"] == "edit" and ind.get("base"):
         return ind["base"]["header"].get("delivery_date") or None
     return None
-
-
-def date_bounds():
-    from core.indents import delivery_bounds
-    return delivery_bounds(keep_date())
 
 
 def saved_names() -> set[str]:

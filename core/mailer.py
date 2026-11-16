@@ -15,7 +15,6 @@ Settings (Streamlit secrets):
 """
 from __future__ import annotations
 
-import html
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -48,44 +47,6 @@ def settings() -> dict:
 def configured() -> bool:
     s = settings()
     return bool(s["user"] and s["password"] and s["to"])
-
-
-def build_po_message(cur, file_name: str, pdf: bytes, uploaded_by: str, sender: str,
-                     to: list[str], cc: list[str] | None = None) -> EmailMessage:
-    h = cur.header
-    msg = EmailMessage()
-    msg["Subject"] = h.customer or "PO"
-    msg["From"] = sender
-    msg["To"] = ", ".join(to)
-    if cc:
-        msg["Cc"] = ", ".join(cc)
-    total = sum(x.amount for x in cur.lines)
-    lines_txt = "\n".join(f"  - {x.customer_sku_name}{' (' + x.variety + ')' if x.variety else ''}: "
-                          f"{x.qty:g} {x.lot} @ {x.price:,.2f} = {x.amount:,.2f}" for x in cur.lines)
-    text = (f"PO received for {h.customer}.\n\n"
-            f"Indent: {cur.indent_id}\nCustomer: {h.customer}\nStore: {h.store}\nCity: {h.city}\n"
-            f"Delivery: {h.delivery_date} at {h.expected_time}\nPO file: {file_name}\n"
-            f"Uploaded by: {uploaded_by}\n\nItems:\n{lines_txt}\n\nTotal amount: {total:,.2f}\n")
-    msg.set_content(text)
-    rows = "".join(f"<tr><td>{html.escape(x.customer_sku_name)}</td><td>{html.escape(x.variety)}</td>"
-                   f"<td>{html.escape(x.lot)}</td><td align='right'>{x.qty:g}</td>"
-                   f"<td align='right'>{x.price:,.2f}</td><td align='right'>{x.amount:,.2f}</td></tr>"
-                   for x in cur.lines)
-    msg.add_alternative(
-        f"<p>PO received for <b>{html.escape(h.customer)}</b>.</p>"
-        f"<table cellpadding='3'><tr><td>Indent</td><td><b>{cur.indent_id}</b></td></tr>"
-        f"<tr><td>Store</td><td>{html.escape(h.store)}</td></tr>"
-        f"<tr><td>City</td><td>{html.escape(h.city)}</td></tr>"
-        f"<tr><td>Delivery</td><td>{h.delivery_date} at {h.expected_time}</td></tr>"
-        f"<tr><td>PO file</td><td>{html.escape(file_name)}</td></tr>"
-        f"<tr><td>Uploaded by</td><td>{html.escape(uploaded_by)}</td></tr></table><br>"
-        f"<table border='1' cellspacing='0' cellpadding='4' style='border-collapse:collapse'>"
-        f"<tr style='background:#1c6b49;color:#fff'><th>Customer SKU Name</th><th>Variety</th><th>Lot</th>"
-        f"<th>Qty</th><th>Price</th><th>Amount</th></tr>{rows}"
-        f"<tr><td colspan='5' align='right'><b>Total</b></td><td align='right'><b>{total:,.2f}</b></td></tr>"
-        f"</table>", subtype="html")
-    msg.add_attachment(pdf, maintype="application", subtype="pdf", filename=file_name or "PO.pdf")
-    return msg
 
 
 _STAGE_HELP = {
@@ -202,16 +163,6 @@ def send_so_mail(cur, file_name: str, pdf: bytes, uploaded_by: str,
     return False, f"SO / PO e-mail not sent: {why}"
 
 
-def send_po_mail(cur, file_name: str, pdf: bytes, uploaded_by: str) -> tuple[bool, str]:
-    """Returns (sent, message for the user)."""
-    s = settings()
-    msg = build_po_message(cur, file_name, pdf, uploaded_by, s["sender"] or s["user"], s["to"], s["cc"])
-    ok, why = deliver(msg)
-    if ok:
-        return True, f"PO e-mailed to {', '.join(s['to'] + s['cc'])} (subject '{msg['Subject']}')."
-    return False, f"PO e-mail not sent: {why}"
-
-
 def send_test_mail(sent_by: str, to: str | None = None) -> tuple[bool, str]:
     s = settings()
     msg = EmailMessage()
@@ -232,11 +183,3 @@ def send_test_mail(sent_by: str, to: str | None = None) -> tuple[bool, str]:
     return ok, (f"Test e-mail sent to {dest}: {why}." if ok else f"Test e-mail failed: {why}")
 
 
-def status_text() -> str:
-    s = settings()
-    pw = "set" if s["password"] else "missing"
-    pw_len = len(s["password"])
-    hint = "" if not s["password"] or pw_len == 16 else \
-        f" (it is {pw_len} characters; a Gmail App password has 16)"
-    return (f"Sender: {s['user'] or 'missing'} · password: {pw}{hint} · server: {s['host']}:{s['port']} · "
-            f"to: {', '.join(s['to'])}" + (f" · cc: {', '.join(s['cc'])}" if s["cc"] else ""))

@@ -96,7 +96,6 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Customer List**: the stores. Columns: `Customer List` (customer), `Store names`, optional `City` (no city = every city).
   - Stores include Zepto - Yalachanayakanapura, Swiggy WH1, Swiggy WH2, Flipkart, FIRST CLUB PTP BLR, More_BLR EKRAJPURA, and Namdhari (store not given). The last was added 16 Nov; rename it when the real store is known.
 - **Apple Varity / Apple Variety** tab (optional): the list of Apple varieties. The default list is used when there is none.
-- **Box_Conversion** (optional): columns Parent SKU, Spec, Box, Pcs per box, Kg per box. It can be created from the Production page.
 - **SKU_Map / Store_Map / Varieties**: legacy fallbacks, used only when All Cux City / Customer List are absent.
 - **Access**: columns Email, Name, Role, Status (active/revoked), PIN_Hash, Updated_At, Updated_By, City (comma list), Stores (unused). It is edited only from the app.
 
@@ -173,7 +172,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
     (More's 7 avocados into trays, NOT 7 trays), "700 kg loose".
   - The pack itself a container ("1 Box", Namdhari green apple) → "10 Box", Fruit needed blank. **Known gap**
     (user asked to be reminded): box packs have no kg/pieces yet; fix later.
-  - Mapping Whole / spec labels are still used by the Batching sheet and the spec mapping list. A permanent
+  - Mapping Whole / spec labels are only a fallback for the Batching sheet when there is no New tab. A permanent
     master for production is to be fixed later (user: "take it from New for now").
 - **Batching sheet:** **one table** with columns City, Customer, Delivery point, Parent SKU, **Customer SKU Name**, Variety, Lot, Lot Size, Spec, Qty, Indent. Downloads: PDF/Excel/CSV.
   - **Temporary (16 Nov)**: when the New tab exists, Spec = New tab Spec-Size, Variety = Apple only (New tab first),
@@ -236,7 +235,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `masters.py`: master lookups, cached.
   - `importer.py`: builds the SKU/store maps from All Cux City, Mapping Whole and Customer List.
   - `indents.py`: submit/update/freeze/cancel, versions, the IN-### numbering, `backup_and_clear`.
-  - `models.py`, `lots.py`, `boxes.py`.
+  - `models.py`, `lots.py`, `boxes.py` (only `per_lot`: what one lot is in pcs / kg).
   - `production_calc.py`: production, batching, unmapped and the spec list.
   - `reports.py`: e-mail/report frames, xlsx, PDFs via `pdf_report.py`.
   - `hourly.py`, `mailer.py`, `recipients.py`.
@@ -248,7 +247,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **142 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **140 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 
@@ -274,7 +273,22 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 5. Revoke the unused Gmail App password "MT Indent".
 6. Upgrade the GitHub Actions versions later; GitHub warns about the Node 20 deprecation, but it is harmless for now.
 
+## 7. Speed rules (16 Nov night: "make it light and fast")
+
+- Item form (Create indent), Home, All indents and Upload PO bodies are `st.fragment`s: their toggles and filters
+  rerun only that part. Adding an item reruns the whole app once (to refresh the table).
+- Downloads (PDF / Excel / CSV) are built only when clicked (`data=lambda: ...`, `on_click="ignore"`).
+- Draft autosave writes to the Drafts tab at most once a minute (`state.THROTTLE_SECONDS = 60`); adding or
+  removing an item does not force a write. An edit draft whose edit time has closed (and is not a PO fix) is
+  cleared instead of reopening (`state.drop_closed_edit`), so Create indent never gets stuck on it.
+- Indent_Lines is cached 60 s, already prepared (`indents._cached_lines`); every save clears the cache at once.
+- Dialog buttons set `pending_*` and the dialog opens in the same run (no extra `st.rerun()`).
+- Removed dead code: Box_Conversion / box conversion, spec mapping list, Mapping Whole "Repacking" column,
+  the old hourly indent mail (overall / customer level), send_po_mail, unused helpers.
+
 ## 9. Working style the user expects
+
+- Keep replies short: what changed and what the user must do. The user finds long, back-and-forth messages heavy.
 
 - Short, plain-language replies. Do the work end to end (including in Chrome when asked). Ask only when the choice really matters.
 - On-screen labels stay short, with no explanations inside dropdowns (e.g. roles show as "Owner", "Owner L").

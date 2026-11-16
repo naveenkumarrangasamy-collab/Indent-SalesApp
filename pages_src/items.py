@@ -187,14 +187,12 @@ def _lines_phone(m: Masters, lines) -> None:
             if c[0].button("Edit", icon=":material/edit:", key=f"it_me_{i}_{x.customer_sku_name}",
                            width="stretch"):
                 st.session_state["pending_edit"] = x.customer_sku_name
-                st.rerun()
             if state.is_saved_line(x.customer_sku_name):
                 c[1].button("Saved item", icon=":material/lock:", key=f"it_ml_{i}_{x.customer_sku_name}",
                             disabled=True, width="stretch", help=SAVED_HELP)
             elif c[1].button("Delete", icon=":material/delete:", key=f"it_md_{i}_{x.customer_sku_name}",
                              width="stretch"):
                 st.session_state["pending_remove"] = [x.customer_sku_name]
-                st.rerun()
 
 
 def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
@@ -218,14 +216,12 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
         if c[8].button("Edit", icon=":material/edit:", key=f"it_e_{i}_{x.customer_sku_name}",
                        width="stretch", help="Change qty, price or variety"):
             st.session_state["pending_edit"] = x.customer_sku_name
-            st.rerun()
         if state.is_saved_line(x.customer_sku_name):
             c[9].markdown("<span class='mt-muted' title='Saved items cannot be removed; set qty to 0'>"
                           "🔒 saved</span>", unsafe_allow_html=True)
         elif c[9].button("Delete", icon=":material/delete:", key=f"it_d_{i}_{x.customer_sku_name}",
                          width="stretch", help="Remove this item"):
             st.session_state["pending_remove"] = [x.customer_sku_name]
-            st.rerun()
 
 
 @st.dialog("Edit item", dismissible=False)
@@ -527,7 +523,6 @@ def render(m: Masters, user: User) -> None:
         c = st.columns([1, 1, 2])
         if c[0].button("Discard changes", width="stretch"):
             s["pending_action"] = "discard"
-            st.rerun()
         if c[1].button("Update indent", type="primary", disabled=not (changed and open_),
                        width="stretch"):
             errors = _check(m)
@@ -536,7 +531,6 @@ def render(m: Masters, user: User) -> None:
                     st.error(e)
             else:
                 s["review_open"] = True
-                st.rerun()
         if not open_:
             st.error(f"Editing of {ind['indent_id']} closed at {deadline} (2 PM on the delivery day). "
                      "It can no longer be changed.")
@@ -552,7 +546,6 @@ def render(m: Masters, user: User) -> None:
         c = st.columns([1, 1, 2])
         if c[0].button("Clear form", width="stretch", disabled=not state.has_work()):
             s["pending_action"] = "clear"
-            st.rerun()
         if c[1].button("Submit indent", type="primary", width="stretch",
                        disabled=not state.lines()):
             errors = _check(m)
@@ -561,7 +554,6 @@ def render(m: Masters, user: User) -> None:
                     st.error(e)
             else:
                 s["review_open"] = True
-                st.rerun()
 
     dialogs_only(m, user)
 

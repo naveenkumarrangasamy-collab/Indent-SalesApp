@@ -199,7 +199,6 @@ def test_variety_column_with_parent_header():
     assert importer.build_varieties(headerless) == []
 
 
-
 def test_variety_tab_and_sheet_only_customers():
     from core.masters import frames_from_values, masters_from_frames
 
@@ -247,14 +246,17 @@ def test_cities_on_access_and_users():
     assert auth.parse_cities("A; b ,A") == ["A", "b"]
 
 
+def _send(name="po.pdf", pdf=b"%PDF"):
+    from core import mailer
+    msg = mailer.build_message(["rakeshdhasa@gmail.com"], "Zepto", "<p>PO</p>", "PO",
+                               [(name, pdf, "application/pdf")])
+    return mailer.deliver(msg)
+
+
 def test_po_mail(monkeypatch):
     from core import mailer
-    from core.models import IndentHeader, IndentLine, IndentSnapshot
-    cur = IndentSnapshot("IND-1", 2, "Submitted", "", "a@x.com",
-                         IndentHeader("2026-11-15", "PTP Bangalore", "Zepto", "Zepto - A", "11:00"),
-                         [IndentLine("Avocado", "1PC - Hass Avocado Imported", "", "Pcs", 30, 120)])
     monkeypatch.setattr(mailer.config, "get", lambda k, d=None: {}.get(k, d))
-    ok, msg = mailer.send_po_mail(cur, "po.pdf", b"%PDF-1.4", "a@x.com")
+    ok, msg = _send("po.pdf", b"%PDF-1.4")
     assert not ok and "smtp_user" in msg                                   # not configured
     sent = {}
 
@@ -269,7 +271,7 @@ def test_po_mail(monkeypatch):
     secrets = {"smtp_user": "sender@gmail.com", "smtp_password": "abcd efgh ijkl mnop"}
     monkeypatch.setattr(mailer.config, "get", lambda k, d=None: secrets.get(k, d))
     monkeypatch.setattr(mailer.smtplib, "SMTP", FakeSMTP)
-    ok, msg = mailer.send_po_mail(cur, "PO-778.pdf", b"%PDF-1.4 test", "a@x.com")
+    ok, msg = _send("PO-778.pdf", b"%PDF-1.4 test")
     m = sent["msg"]
     assert ok and m["Subject"] == "Zepto" and m["To"] == "rakeshdhasa@gmail.com"
     assert sent["login"] == ("sender@gmail.com", "abcdefghijklmnop") and sent["tls"]
@@ -280,14 +282,6 @@ def test_po_mail(monkeypatch):
 def test_user_label():
     assert auth.User("a@x.com", "", "sales").label == "a@x.com"
     assert auth.User("a@x.com", "Asha", "sales", ["X"]).label == "Asha"
-
-
-
-def _po_cur():
-    from core.models import IndentHeader, IndentLine, IndentSnapshot
-    return IndentSnapshot("IND-1", 2, "Submitted", "", "a@x.com",
-                          IndentHeader("2026-11-15", "PTP Bangalore", "Zepto", "Zepto - A", "11:00"),
-                          [IndentLine("Avocado", "1PC - Hass Avocado Imported", "", "Pcs", 30, 120)])
 
 
 def test_po_mail_falls_back_when_connection_closes(monkeypatch):
@@ -313,12 +307,12 @@ def test_po_mail_falls_back_when_connection_closes(monkeypatch):
 
     monkeypatch.setattr(mailer.smtplib, "SMTP", Plain)
     monkeypatch.setattr(mailer.smtplib, "SMTP_SSL", SSL)
-    ok, msg = mailer.send_po_mail(_po_cur(), "po.pdf", b"%PDF", "a@x.com")
+    ok, msg = _send()
     assert ok and log == [("plain", 587), ("ssl", 465), ("sent", "Zepto")]
 
     # both fail -> the message says where and why
     monkeypatch.setattr(mailer.smtplib, "SMTP_SSL", lambda *a, **k: (_ for _ in ()).throw(OSError("blocked")))
-    ok, msg = mailer.send_po_mail(_po_cur(), "po.pdf", b"%PDF", "a@x.com")
+    ok, msg = _send()
     assert not ok and "587 STARTTLS - the server closed the connection at login" in msg and "465 SSL" in msg
 
 
@@ -336,9 +330,8 @@ def test_po_mail_bad_password_message(monkeypatch):
         def starttls(self, context=None): pass
         def login(self, u, p): raise smtplib.SMTPAuthenticationError(535, b"5.7.8 Username and Password not accepted")
     monkeypatch.setattr(mailer.smtplib, "SMTP", Plain)
-    ok, msg = mailer.send_po_mail(_po_cur(), "po.pdf", b"%PDF", "a@x.com")
+    ok, msg = _send()
     assert not ok and "App password" in msg and "535" in msg
-    assert "14 characters" in mailer.status_text()
 
 
 def test_warehouse_role_sees_production_not_indents(monkeypatch):

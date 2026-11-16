@@ -1,7 +1,7 @@
 import pandas as pd
 
 from core.masters import masters_from_frames
-from core.production_calc import batching, production, spec_mapping_list
+from core.production_calc import batching, production
 from core.schema import ACCESS, SKU_MAP, STORE_MAP, TABS, VARIETIES
 from core import indents
 
@@ -34,9 +34,6 @@ def _lines(rows):
 BASE = dict(status="Submitted", delivery_date="2026-11-15", city="Bangalore", lot="Pcs", price="100")
 
 
-
-
-
 def test_batching_per_delivery_point_adds_up_to_production():
     df = _lines([
         dict(BASE, indent_id="A", version="1", customer="Swiggy", store="WH1", parent_sku="Avocado",
@@ -50,15 +47,6 @@ def test_batching_per_delivery_point_adds_up_to_production():
     assert list(b["Delivery point"]) == ["WH1", "WH2", "S1"]
     assert list(b["Customer"]) == ["Swiggy", "Swiggy", "Zepto"] and list(b["Qty"]) == [40, 15, 30]
     assert b["Qty"].sum() == production(df, _masters())["Qty"].sum() == 85
-
-
-def test_spec_mapping_list_shows_what_is_missing():
-    lst = spec_mapping_list(_masters())
-    hass = lst[(lst["Customer"] == "Zepto") & (lst["Customer SKU Name"] == "1PC - Hass Avocado Imported")].iloc[0]
-    assert hass["Spec-Size"] == "20C, 22C" and hass["Active origin"] == "Tanzania"
-    assert hass["To fill in"] == "Grade"
-    kiwi = lst[lst["Customer SKU Name"] == "2PC - Green Kiwi"].iloc[0]
-    assert kiwi["Spec used in production"] == "spec not mapped" and "Spec-Size" in kiwi["To fill in"]
 
 
 def test_pdf_of_production_sheet():
@@ -154,7 +142,6 @@ def test_new_tab_read_from_sheet_values():
     m = masters_from_frames(frames, src)
     info = m.prod_info("bangalore", "SWIGGY", "1kg - nectr  royal gala apple")
     assert info["Repacking"] == "Box" and info["Spec-Origin"] == "Turkey" and info["Variety"] == "Royal Gala"
-
 
 
 def test_make_ready_list_mixes_sizes_and_handles_loose_and_boxes():

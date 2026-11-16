@@ -32,36 +32,6 @@ def _clear_items(reason: str) -> None:
                                 "SKU names are mapped per city and customer.")
 
 
-def _on_city(key: str) -> None:
-    new = st.session_state.get(key) or ""
-    hdr = state.header()
-    if new == hdr.city:
-        return
-    state.set_header_field("city", new)
-    state.set_header_field("store", "")
-    _clear_items("City")
-    _bump()
-
-
-def _on_customer(key: str) -> None:
-    new = st.session_state.get(key) or ""
-    if new == state.header().customer:
-        return
-    state.set_header_field("customer", new)
-    state.set_header_field("store", "")
-    _clear_items("Customer")
-    _bump()
-
-
-def _on_simple(key: str, field: str) -> None:
-    v = st.session_state.get(key)
-    if isinstance(v, date):
-        v = v.isoformat()
-    elif isinstance(v, time):
-        v = v.strftime("%H:%M")
-    state.set_header_field(field, v or "")
-
-
 def _index(options: list[str], value: str) -> int | None:
     return options.index(value) if value in options else None
 

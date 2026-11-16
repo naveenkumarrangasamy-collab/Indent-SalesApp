@@ -17,8 +17,6 @@ from core.masters import Masters
 from core.models import fmt_num, to_number
 
 
-
-
 def _whole(col: pd.Series) -> pd.Series:
     """Quantities as whole numbers (30, not 30.0) when they all are."""
     vals = col.map(lambda v: float(fmt_num(v)))
@@ -68,29 +66,7 @@ def _spec_rows(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     df["Parent SKU"] = df["parent_sku"].map(lambda v: " ".join(str(v).split()))
     df["Customer SKU Name"] = df["customer_sku_name"].map(lambda v: " ".join(str(v).split()))
     df["Lot"] = df["lot"]
-    mapped = ([masters.repacking(r.city, r.customer, r.customer_sku_name) for r in df.itertuples()]
-              if masters is not None else [""] * len(df))
-    df["Repacking"] = [m or _pack_label(size, lot) for m, size, lot in zip(mapped, df["Lot Size"], df["lot"])]
-    df["Unit"] = df["lot"].map(lambda v: " ".join(str(v or "").split()))
-    # what the qty means physically (for the box conversion)
-    unit = [boxes.per_lot(lot, size) for lot, size in zip(df["lot"], df["Lot Size"])]
-    df["_pcs"] = [q * n if u == "pcs" else 0.0 for (u, n), q in zip(unit, df["qty"])]
-    df["_kg"] = [q * n if u == "kg" else 0.0 for (u, n), q in zip(unit, df["qty"])]
-    df["_box"] = [q if u == "box" else 0.0 for (u, _), q in zip(unit, df["qty"])]
-    df["_boxkg"] = ([masters.box_kg(r.city, r.customer, r.customer_sku_name) for r in df.itertuples()]
-                    if masters is not None else None)
     return df
-
-
-def _pack_label(size: str, lot: str) -> str:
-    """Repacking spec from the SKU name when the mapping has none:
-    '2 Pcs' + Pack -> '2 Pcs Pack', '' + Kg -> 'Kg', '17.5 Kg Box' + Box -> '17.5 Kg Box'."""
-    size, lot = " ".join(str(size or "").split()), " ".join(str(lot or "").split())
-    if not size:
-        return lot
-    if not lot or lot.casefold() in size.casefold().split():
-        return size
-    return f"{size} {lot}"
 
 
 _SORT = lambda s: s.astype(str).str.casefold()  # noqa: E731
@@ -156,8 +132,7 @@ def _base_rows(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return df
 
 
-def production(lines: pd.DataFrame, masters: Masters | None,
-               box_rules: list | None = None) -> pd.DataFrame:
+def production(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     """Production sheet (base: the 'New' tab), all customers together.
     One row per City + Parent SKU + Variety + Repacking + Spec-Size + Lot Size.
     'Total' clubs every customer for the same City + Parent SKU + Repacking +
@@ -166,8 +141,7 @@ def production(lines: pd.DataFrame, masters: Masters | None,
     - otherwise in repacking units: 10 + 20 packs of 2 pcs = '30 Punnet'.
     'Boxes @ count N' columns: for a piece lot (1 Pcs, 2 Pcs) and a Spec-Size with
     counts (22C, 24C), the boxes needed if packed at each count = pieces / count,
-    rounded up (440 pcs: 22C -> 20, 24C -> 19). Blank when not computable.
-    `box_rules` is accepted for older callers and ignored."""
+    rounded up (440 pcs: 22C -> 20, 24C -> 19). Blank when not computable."""
     import math
     df = _base_rows(lines, masters) if lines is not None and not lines.empty else None
     if df is None or df.empty:
@@ -293,31 +267,6 @@ def unmapped(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return (bad[["City", "customer", "Parent SKU", "customer_sku_name"]].drop_duplicates()
             .rename(columns={"customer": "Customer", "customer_sku_name": "Customer SKU Name"})
             .reset_index(drop=True))
-
-
-def spec_mapping_list(masters: Masters) -> pd.DataFrame:
-    """Every customer SKU name of the mapping with what production uses for
-    it, and what is still missing (the backend list to complete)."""
-    sku = masters.sku
-    if sku is None or sku.empty:
-        return pd.DataFrame()
-    base = sku[["City", "Customer", "Parent SKU", "Customer SKU Name"]].drop_duplicates()
-    rows = []
-    for r in base.itertuples(index=False):
-        city, cust, parent, name = r
-        origin, _ = masters.spec(city, cust, name)
-        size, grade = masters.spec_size(city, cust, name), masters.spec_grade(city, cust, name)
-        variety = masters.mapped_variety(city, cust, name)
-        missing = [w for w, v in (("Spec-Size", size), ("Grade", grade)) if not v]
-        rows.append({"City": city, "Customer": cust, "Parent SKU": parent, "Customer SKU Name": name,
-                     "Variety": variety, "Lot": masters.lot_for(city, cust, name), "Lot Size": lot_size(name),
-                     "Repacking": masters.repacking(city, cust, name)
-                     or _pack_label(lot_size(name), masters.lot_for(city, cust, name)),
-                     "Active origin": origin, "Spec-Size": size, "Grade": grade,
-                     "Spec used in production": " - ".join(x for x in (size, grade) if x) or NOT_MAPPED,
-                     "To fill in": ", ".join(missing) or "complete"})
-    out = pd.DataFrame(rows)
-    return out.sort_values(["City", "Parent SKU", "Customer", "Customer SKU Name"], key=_SORT).reset_index(drop=True)
 
 
 def filter_lines(current: pd.DataFrame, *, delivery_date: str | None, city: str | None,

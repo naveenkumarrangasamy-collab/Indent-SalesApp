@@ -21,13 +21,6 @@ def to_number(v, default: float = 0.0) -> float:
     return default if math.isnan(f) or math.isinf(f) else f
 
 
-def clean_str(v) -> str:
-    """'' for None / NaN, else the stripped string."""
-    if v is None or (isinstance(v, float) and math.isnan(v)):
-        return ""
-    return str(v).strip()
-
-
 def fmt_num(v) -> str:
     """40.0 -> '40', 12.5 -> '12.5', 1/3 -> '0.333' (for sheet text and diffs)."""
     n = to_number(v)
@@ -51,8 +44,6 @@ class IndentHeader:
 
     FIELDS = ("delivery_date", "city", "customer", "store", "expected_time")
 
-    def is_complete(self) -> bool:
-        return all(str(getattr(self, f) or "").strip() for f in self.FIELDS)
 
     def missing(self) -> list[str]:
         labels = {"delivery_date": "Delivery date", "city": "City", "customer": "Customer",

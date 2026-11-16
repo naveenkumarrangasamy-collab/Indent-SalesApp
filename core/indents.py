@@ -355,10 +355,6 @@ def validate(header: IndentHeader, lines: list[IndentLine], m: Masters,
 
 # ------------------------------------------------------------------ writing
 
-def city_code(city: str) -> str:
-    letters = re.sub(r"[^A-Za-z]", "", city or "").upper()
-    return (letters[:3] or "XXX").ljust(3, "X")
-
 
 ID_PREFIX = "IN-"
 

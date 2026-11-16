@@ -126,10 +126,6 @@ def ground() -> list[Recipient]:
     return [r for r in read_all() if r.hourly]
 
 
-def central() -> list[Recipient]:
-    return [r for r in read_all() if r.so]
-
-
 # ------------------------------------------------------------------ log
 
 def log(kind: str, slot: str, to: list[str] | str, ok: bool, detail: str) -> None:

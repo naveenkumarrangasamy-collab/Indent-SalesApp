@@ -75,14 +75,6 @@ class Masters:
                  + list(self.sku.loc[self.sku["City"].map(_key) == _key(city), "Customer"]))
         return _unique_in_order(found) or list(DEFAULT_CUSTOMERS)
 
-    def store_index(self) -> dict[str, str]:
-        """Every store name -> 'Customer · City' (for pickers)."""
-        out: dict[str, str] = {}
-        for city, customer, store in zip(self.stores["City"], self.stores["Customer"], self.stores["Store Name"]):
-            store = " ".join(str(store).split())
-            if store and store not in out:
-                out[store] = f"{customer} · {city or 'all cities'}"
-        return out
 
     def has_sku_mapping(self, city: str, customer: str) -> bool:
         return not self._sku_for(city, customer).empty
@@ -148,29 +140,6 @@ class Masters:
         vals = {str(v).strip() for v in rows.get("Spec-Grade", pd.Series(dtype=str)) if str(v).strip()}
         return sorted(vals)[0] if vals else ""
 
-    def box_kg(self, city: str, customer: str, sku_name: str) -> float | None:
-        """'Box Kgs' of Mapping Whole for this SKU (active origin first)."""
-        from core.boxes import kg_of
-        rows = self.active_rows(city, customer, sku_name)
-        df = self._sku_for(city, customer)
-        alln = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
-        for frame in (rows, alln):
-            for v in frame.get("Box-Kg", pd.Series(dtype=str)):
-                kg = kg_of(v) if str(v).strip() else None
-                if kg:
-                    return kg
-        return None
-
-    def repacking(self, city: str, customer: str, sku_name: str) -> str:
-        """'Repacking' of the mapping for this SKU (active origin first); ''."""
-        rows = self.active_rows(city, customer, sku_name)
-        df = self._sku_for(city, customer)
-        alln = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
-        for frame in (rows, alln):
-            for v in frame.get("Repacking", pd.Series(dtype=str)):
-                if str(v).strip() and str(v).strip().lower() != "nan":
-                    return " ".join(str(v).split())
-        return ""
 
     def spec_label(self, city: str, customer: str, sku_name: str) -> str:
         """The agreed spec used to club production: size + grade,
@@ -309,7 +278,7 @@ def frames_from_values(raw: dict[str, list[list]]) -> tuple[dict[str, pd.DataFra
     if any(any(str(c).strip() for c in row) for row in raw.get(importer.ALL_CUX_CITY, [])[1:]):
         sku_rows = importer.build_sku_map(raw.get(importer.MAPPING_WHOLE, []),
                                           raw[importer.ALL_CUX_CITY])
-        frames[SKU_MAP] = pd.DataFrame(sku_rows, columns=TABS[SKU_MAP] + ["Spec-Grade", "Box-Kg", "Repacking"])
+        frames[SKU_MAP] = pd.DataFrame(sku_rows, columns=TABS[SKU_MAP] + ["Spec-Grade", "Box-Kg"])
         frames[SKU_MAP]["_row"] = 0
         var = pd.DataFrame(importer.build_varieties(raw[importer.ALL_CUX_CITY]),
                            columns=TABS[VARIETIES])

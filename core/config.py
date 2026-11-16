@@ -66,10 +66,6 @@ def service_account_info() -> dict | None:
     return info
 
 
-def use_google() -> bool:
-    return bool(sheet_id() and service_account_info())
-
-
 _SA_REQUIRED = ("type", "project_id", "private_key", "client_email", "token_uri")
 
 
