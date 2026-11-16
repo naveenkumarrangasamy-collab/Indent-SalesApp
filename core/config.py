@@ -176,12 +176,19 @@ def po_store_prefixes() -> dict[str, str]:
         return {}
 
 
-def next_day_customers() -> list[str]:
-    """Customers processed the day before delivery (D+1): shown in their own table
-    on the Production page. Secret `next_day_customers`, default ["Zepto"]."""
-    v = get("next_day_customers", ["Zepto"])
-    v = [v] if isinstance(v, str) else list(v or [])
-    return [str(x).strip() for x in v if str(x).strip()]
+def next_day_customers() -> dict[str, list[str]]:
+    """Customers processed the day before delivery (D+1), per city: shown in their own
+    section on the Production page (today's order + the next day's order) and left
+    out of the main production tables. Secret `next_day_customers`, e.g.
+    {Zepto = ["Bangalore"]} (a word of the city name; [] = every city).
+    Default: Zepto in Bangalore. Each customer / city can be added later."""
+    v = get("next_day_customers", {"Zepto": ["Bangalore"]})
+    if isinstance(v, str):
+        v = {v: []}
+    elif not isinstance(v, dict):
+        v = {str(x): [] for x in (v or [])}
+    return {str(k).strip(): [str(c).strip() for c in (cs or []) if str(c).strip()]
+            for k, cs in dict(v).items() if str(k).strip()}
 
 
 def owner_email() -> str:

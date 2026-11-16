@@ -233,7 +233,8 @@ def _learn(rows: list[dict]) -> None:
             pass
 
 
-HOW = {"map": "✓ saved match", "name": "✓ same name", "close": "? check", "": "✗ pick SKU"}
+HOW = {"map": "✓ saved match", "name": "✓ same name", "close": "✓ close name", "guess": "? best guess",
+       "": "✗ pick SKU"}
 
 
 def _read_table(cur, read, po_number: str, indent_id: str) -> tuple[dict, list[dict]]:

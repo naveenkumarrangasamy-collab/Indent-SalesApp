@@ -12,7 +12,7 @@ from core import config, indents, masters
 from core.auth import User
 from core.pdf_report import sections_pdf, table_pdf
 from core.production_calc import (batching, default_date, delivery_dates, filter_lines, make_ready,
-                                  not_in_base, production, unmapped)
+                                  next_day_mask, not_in_base, production, unmapped)
 from core.sheets import SheetError
 from pages_src import common
 
@@ -130,8 +130,19 @@ def render(user: User) -> None:
     except SheetError as e:
         common.sheet_error(e)
         return
+    all_lines = lines
+    d1 = next_day_mask(lines)
+    if d1.any() and st.session_state.get("ps_ctx", (None, ALL_DATES))[1] != ALL_DATES:
+        lines = lines[~d1]            # D+1 customers (Zepto Bangalore) get their own section below
+    if lines.empty:
+        st.info("Only D+1 customer orders for this date: see their section below.")
+        _next_day(m)
+        return
     prod = production(lines, m)
     _count_tiles(lines)
+    if d1.any():
+        st.caption(f"{' / '.join(config.next_day_customers())} orders are not in these tables: "
+                   "see their own section at the bottom.")
     v1, v2 = st.tabs(["By spec size", "Make-ready list"])
     with v1:
         show = prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"])
@@ -157,7 +168,7 @@ def render(user: User) -> None:
         st.session_state["mr_desc"] = st.session_state.get("ps_desc", "")
         _downloads("Make-ready list", mr, f"make_ready_{label}", "mr", lines)
     _next_day(m)
-    gaps = not_in_base(lines, m)
+    gaps = not_in_base(all_lines, m)
     if not gaps.empty:
         with st.expander(f"⚠️ {len(gaps)} SKU name(s) are not in the New tab: they show as "
                          "\"not in New tab\" and are kept on separate lines", expanded=False):
@@ -169,35 +180,38 @@ def render(user: User) -> None:
 
 
 def _next_day(m) -> None:
-    """D+1 customers (Zepto): their orders for the NEXT delivery day are processed
-    today, so they get their own table below the day's production."""
+    """D+1 customers (Zepto in Bangalore): processed the day before delivery, so
+    they are kept out of the tables above and shown here: today's order first,
+    then the next day's order (processed today)."""
     current, d, city = st.session_state.get("ps_ctx", (None, ALL_DATES, None))
-    custs = {c.casefold() for c in config.next_day_customers()}
-    if current is None or d == ALL_DATES or not custs:
+    rules = config.next_day_customers()
+    if current is None or d == ALL_DATES or not rules:
         return
+    names = " / ".join(rules)
     nxt = (date.fromisoformat(d) + timedelta(days=1)).isoformat()
-    rows = filter_lines(current, delivery_date=nxt, city=city, allowed_ids=None)
-    rows = rows[rows["customer"].astype(str).str.strip().str.casefold().isin(custs)] if not rows.empty else rows
-    names = " / ".join(config.next_day_customers())
-    st.markdown(f"#### {names} · D+1 · process today for delivery {_fmt_date(nxt)}")
-    if rows.empty:
-        st.caption(f"No {names} indents for {_fmt_date(nxt)} yet.")
-        return
-    st.caption(f"{rows['indent_id'].nunique()} indent(s) · {rows['store'].nunique()} delivery point(s). "
-               "Not included in the table above (that is for delivery on the selected date).")
-    t1, t2 = st.tabs(["Make-ready list", "By spec size"])
-    with t1:
-        mr = make_ready(rows, m)
-        if len(mr["City"].unique()) <= 1:
-            mr = mr.drop(columns=["City"])
-        st.dataframe(mr, hide_index=True, width="stretch")
-        _downloads(f"{names} D+1 make-ready", mr, f"d1_make_ready_{nxt}", "d1mr", rows)
-    with t2:
-        p = production(rows, m)
-        p = p if p["Variety"].astype(bool).any() else p.drop(columns=["Variety"])
-        st.dataframe(p, hide_index=True, width="stretch",
-                     column_config={"Qty": st.column_config.NumberColumn(format="%g")})
-        _downloads(f"{names} D+1 production", p, f"d1_production_{nxt}", "d1ps", rows)
+    st.divider()
+    st.markdown(f"### {names} orders")
+    for day, title, key in ((d, "Today's order", "d0"), (nxt, "Next-day order (process today)", "d1")):
+        rows = filter_lines(current, delivery_date=day, city=city, allowed_ids=None)
+        rows = rows[next_day_mask(rows)] if not rows.empty else rows
+        st.markdown(f"#### {names} · {title} · delivery {_fmt_date(day)}")
+        if rows.empty:
+            st.caption(f"No {names} indents for {_fmt_date(day)}.")
+            continue
+        st.caption(f"{rows['indent_id'].nunique()} indent(s) · {rows['store'].nunique()} delivery point(s).")
+        t1, t2 = st.tabs(["Make-ready list", "By spec size"])
+        with t1:
+            mr = make_ready(rows, m)
+            if len(mr["City"].unique()) <= 1:
+                mr = mr.drop(columns=["City"])
+            st.dataframe(mr, hide_index=True, width="stretch")
+            _downloads(f"{names} {title} make-ready", mr, f"{key}_make_ready_{day}", f"{key}mr", rows)
+        with t2:
+            p = production(rows, m)
+            p = p if p["Variety"].astype(bool).any() else p.drop(columns=["Variety"])
+            st.dataframe(p, hide_index=True, width="stretch",
+                         column_config={"Qty": st.column_config.NumberColumn(format="%g")})
+            _downloads(f"{names} {title} production", p, f"{key}_production_{day}", f"{key}ps", rows)
 
 
 def render_batching(user: User) -> None:

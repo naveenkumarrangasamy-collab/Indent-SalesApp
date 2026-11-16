@@ -18,7 +18,7 @@ import re
 from dataclasses import dataclass, field
 
 UNITS = {"pc": "pc", "pcs": "pc", "piece": "pc", "pieces": "pc", "pack": "pc",
-         "g": "g", "gm": "g", "gms": "g", "gram": "g", "grams": "g", "kg": "kg"}
+         "piec": "pc", "g": "g", "gm": "g", "gms": "g", "gram": "g", "grams": "g", "kg": "kg"}
 NUM = re.compile(r"-?\d[\d,]*\.?\d*")
 
 
@@ -186,27 +186,53 @@ def _keys(names: list[str]) -> list[tuple]:
     return out
 
 
-def _find(name: str, keys: list[tuple], close_at: float, loose: bool = False) -> tuple[str, str]:
-    """loose (the indent's own items): the same words are enough when only one
-    item has them, even if the pack is written differently (1Pack vs 2 pcs)."""
+def _order(a: str, b: str) -> float:
+    """How alike two names read, word order included (tie-break only)."""
+    from difflib import SequenceMatcher
+    core = lambda n: " ".join(re.findall(r"[a-z]+", re.sub(r"\([^)]*\d[^)]*\)", " ", n.casefold())))  # noqa: E731
+    return SequenceMatcher(None, core(a), core(b)).ratio()
+
+
+def _sane(name: str, sku: str) -> bool:
+    """A saved match must still share a word with the name (guards against a wrong pick)."""
+    w1, _ = po_key(name)
+    w2, _ = our_key(sku)
+    return bool(w1 & w2) or not w1
+
+
+def _find(name: str, keys: list[tuple], close_at: float, loose: bool = False,
+          auto: bool = True) -> tuple[str, str]:
+    """Best SKU for one name.
+    1. the same words (and the same pack, when both say one) -> 'name';
+       loose (the indent's own items): the same words are enough;
+    2. most words in common, preferring the same pack -> 'close' (>= close_at);
+    3. auto: otherwise the SKU sharing the most words -> 'guess' (never left
+       blank while any SKU shares a word)."""
     words, pack = po_key(name)
+    if not words:
+        return "", ""
     same = [c for c, w, p in keys if w == words and (not pack or not p or p == pack)]
     if not same and loose:
         same = [c for c, w, p in keys if w == words]
     if len(same) > 1 and pack:
         same = [c for c, w, p in keys if w == words and p == pack] or same
-    if len(same) == 1:
-        return same[0], "name"
     if same:
-        return "", ""                              # ambiguous: let the user choose
-    best, score = "", 0.0
+        return max(same, key=lambda c: _order(name, c)), "name"   # same words: same word order first
+    best, rank, jac_b, pack_b = "", None, 0.0, 0
     for c, w, p in keys:
-        if pack and p and p != pack or not w or not words:
+        shared = len(w & words)
+        if not shared:
             continue
-        sc = len(w & words) / len(w | words)
-        if sc > score:
-            best, score = c, sc
-    return (best, "close") if score >= close_at else ("", "")
+        jac = shared / len(w | words)
+        pack_ok = 2 if pack and p == pack else (1 if not pack or not p else 0)
+        r = (jac + 0.1 * pack_ok, shared, _order(name, c))
+        if rank is None or r > rank:
+            best, rank, jac_b, pack_b = c, r, jac, pack_ok
+    if rank is None:
+        return "", ""
+    if jac_b >= close_at and (pack_b or loose):
+        return best, "close"
+    return (best, "guess") if auto else ("", "")
 
 
 def find_in_indent(name: str, indent_names: list[str]) -> tuple[str, str]:
@@ -238,10 +264,12 @@ def match(lines: list[POLine], candidates: list[str], item_map: dict[str, str] |
     rest = _keys([c for c in candidates if _norm(c) not in own_names])
     for x in lines:
         hit = item_map.get(x.code.strip().casefold()) or item_map.get(x.name.strip().casefold())
+        if hit and not _sane(x.name, hit):
+            hit = None
         if hit and (not own or _norm(hit) in own_names):
             x.sku, x.how = next((c for c, _, _ in own if _norm(c) == _norm(hit)), hit), "map"
             continue
-        sku, how = _find(x.name, own, 0.5, loose=True) if own else ("", "")
+        sku, how = _find(x.name, own, 0.5, loose=True, auto=False) if own else ("", "")
         if not sku and hit:
             sku, how = hit, "map"
         if not sku:

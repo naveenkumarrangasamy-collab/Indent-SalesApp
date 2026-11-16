@@ -343,3 +343,15 @@ def default_date(dates: list[str], today: str) -> str | None:
     """The first delivery date from today on that has indents, else the latest."""
     upcoming = [d for d in dates if d >= today]
     return upcoming[0] if upcoming else (dates[-1] if dates else None)
+
+
+def next_day_mask(lines: pd.DataFrame) -> pd.Series:
+    """Rows of the D+1 customers (config.next_day_customers: Zepto in Bangalore)."""
+    from core import config
+    rules = {k.casefold(): [c.casefold() for c in v] for k, v in config.next_day_customers().items()}
+    if lines is None or lines.empty or not rules:
+        return pd.Series(False, index=getattr(lines, "index", None), dtype=bool)
+    def hit(cust, city):
+        words = rules.get(str(cust).strip().casefold())
+        return words is not None and (not words or any(w in str(city).casefold() for w in words))
+    return pd.Series([hit(c, t) for c, t in zip(lines["customer"], lines["city"])], index=lines.index, dtype=bool)

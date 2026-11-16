@@ -42,3 +42,13 @@ def test_flipkart_style_table_and_store_hint():
     pre = {"Swiggy WH1": "M", "Swiggy WH2": "B"}
     assert r.store_hint("MBFPO177755", pre) == "Swiggy WH1" and r.store_hint("BBFPO1", pre) == "Swiggy WH2"
     assert r._po_number("PO No : MBFPO177755\nPO Date") == "MBFPO177755"
+
+
+def test_auto_match_never_leaves_a_line_blank_and_keeps_word_order():
+    cands = ["1PC - Hass Avocado Imported", "1PC - Avocado Hass Imported", "1PC - Snacky Avocado Imported"]
+    lines = r.match([r.POLine("Avocado Hass Imported - 1 PIECE", 1), r.POLine("Snacky Avocado Regular - 1 PIECE", 1),
+                     r.POLine("Kiwi Green - 3 PIECE", 1, code="9")], cands + ["3PC - Green Kiwi"],
+                    {"9": "1PC - Hass Avocado Imported"})          # a wrong saved pick is ignored
+    assert [(x.sku, x.how) for x in lines] == [("1PC - Avocado Hass Imported", "name"),
+                                              ("1PC - Snacky Avocado Imported", "guess"),
+                                              ("3PC - Green Kiwi", "name")]

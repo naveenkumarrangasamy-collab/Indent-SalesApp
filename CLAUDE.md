@@ -197,9 +197,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
     (user asked to be reminded): box packs have no kg/pieces yet; fix later.
   - Mapping Whole / spec labels are only a fallback for the Batching sheet when there is no New tab. A permanent
     master for production is to be fixed later (user: "take it from New for now").
-- **Zepto D+1** (17 Nov): below the production tabs, a separate table for `next_day_customers` (default
-  ["Zepto"]): their indents for the **next** delivery day (selected date + 1), processed today; two tabs
-  Make-ready list / By spec size, with CSV/PDF. Not part of the main tables or the e-mail.
+- **D+1 customers** (17 Nov 2:30 AM; secret `next_day_customers`, default {Zepto = ["Bangalore"]}, a word of the
+  city; per customer/city, more later): their rows are **left out of the main production tables** for the selected
+  date and shown in their own section at the bottom: **Today's order** (delivery = selected date) above, **Next-day
+  order (process today)** (delivery = date + 1) below; each with Make-ready list / By spec size + CSV/PDF.
+  The production e-mail is unchanged (all customers).
 - **Batching sheet:** **one table** with columns City, Customer, Delivery point, Parent SKU, **Customer SKU Name**, Variety, Lot, Lot Size, Spec, Qty, Indent. Downloads: PDF/Excel/CSV.
   - **Temporary (16 Nov)**: when the New tab exists, Spec = New tab Spec-Size, Variety = Apple only (New tab first),
     Lot Size as on production, so batching matches the production sheet; missing SKUs show "not in New tab (name)"
@@ -281,7 +283,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **149 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **150 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 
