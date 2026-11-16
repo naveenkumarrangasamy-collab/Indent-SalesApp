@@ -185,10 +185,16 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
     packs (10 × 2 Pcs = "20 pcs"), kilos for kg packs, **blank for gram packs** (the packet count is the answer).
   - **Loose**: Repacking Tray/Box/Crate with a piece or kg pack → the fruit goes in loose: "7 pcs loose"
     (More's 7 avocados into trays, NOT 7 trays), "700 kg loose".
+  - **By size** (17 Nov, last column): the fruit split by New-tab Spec-Size: piece packs → pieces per size
+    ("22C: 300 pcs · 24C: 120 pcs"; a SKU allowing several counts shows them together "22C, 24C: 80 pcs"),
+    kg packs → kg per size, else just the spec text. Also in the production e-mail's make-ready table.
   - The pack itself a container ("1 Box", Namdhari green apple) → "10 Box", Fruit needed blank. **Known gap**
     (user asked to be reminded): box packs have no kg/pieces yet; fix later.
   - Mapping Whole / spec labels are only a fallback for the Batching sheet when there is no New tab. A permanent
     master for production is to be fixed later (user: "take it from New for now").
+- **Zepto D+1** (17 Nov): below the production tabs, a separate table for `next_day_customers` (default
+  ["Zepto"]): their indents for the **next** delivery day (selected date + 1), processed today; two tabs
+  Make-ready list / By spec size, with CSV/PDF. Not part of the main tables or the e-mail.
 - **Batching sheet:** **one table** with columns City, Customer, Delivery point, Parent SKU, **Customer SKU Name**, Variety, Lot, Lot Size, Spec, Qty, Indent. Downloads: PDF/Excel/CSV.
   - **Temporary (16 Nov)**: when the New tab exists, Spec = New tab Spec-Size, Variety = Apple only (New tab first),
     Lot Size as on production, so batching matches the production sheet; missing SKUs show "not in New tab (name)"
@@ -279,8 +285,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 ## 8. Open items and next steps
 
-0. **Next step (user)**: a separate Zepto D+1 table on the Production page (process today, dispatch tomorrow).
-   PO reader built; needs a More PO sample to confirm its layout.
+0. PO reader built; needs a More PO sample to confirm its layout.
 1. Add the **Production e-mails** recipients (Access → E-mails). The user will do this later. Until then the 8 AM run reports "no active recipients".
 7. **Remind the user**: box packs ("1 Box", e.g. Namdhari green apple) show only "N Box" on the make-ready list;
    box kg / pieces per box are not known yet. Also box counts for kg and gram packs need box weights.

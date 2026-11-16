@@ -3,7 +3,7 @@
 2. Batching sheet   - the same stock split per delivery point for dispatch."""
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -68,6 +68,7 @@ def _filtered(user: User, prefix: str):
 
     lines = filter_lines(current, delivery_date=None if d == ALL_DATES else d,
                          city=None if city == "All cities" else city, allowed_ids=None)
+    st.session_state[f"{prefix}_ctx"] = (current, d, None if city == "All cities" else city)
     label = "_".join(x for x in ("all-dates" if d == ALL_DATES else d,
                                  "" if city == "All cities" else city) if x)
     st.session_state[f"{prefix}_desc"] = f"Delivery: {_fmt_date(d)}   City: {city}   All customers   Scope: {scope}"
@@ -151,9 +152,12 @@ def render(user: User) -> None:
         st.dataframe(mr, hide_index=True, width="stretch")
         st.caption("For the ground team: **all customers and all sizes together**. Punnets / packs are counted as "
                    "packs; fruit going **loose** into a tray or box shows as pieces or kg (7 pcs loose, not "
-                   "7 trays); a box pack counts boxes. **Fruit needed**: pieces for piece packs, kg for kg packs.")
+                   "7 trays); a box pack counts boxes. **Fruit needed**: pieces for piece packs, kg for kg packs. "
+                   "**By size**: that fruit split by spec size (New tab), e.g. 22C: 300 pcs · 24C: 120 pcs; "
+                   "a SKU allowing several counts shows them together; otherwise just the spec.")
         st.session_state["mr_desc"] = st.session_state.get("ps_desc", "")
         _downloads("Make-ready list", mr, f"make_ready_{label}", "mr", lines)
+    _next_day(m)
     gaps = not_in_base(lines, m)
     if not gaps.empty:
         with st.expander(f"⚠️ {len(gaps)} SKU name(s) are not in the New tab: they show as "
@@ -163,6 +167,38 @@ def render(user: User) -> None:
             st.dataframe(gaps, hide_index=True, width="stretch")
     if user.is_owner:
         _publish("Production sheet", PRODUCTION_TAB, show, lines, user, "ps")
+
+
+def _next_day(m) -> None:
+    """D+1 customers (Zepto): their orders for the NEXT delivery day are processed
+    today, so they get their own table below the day's production."""
+    current, d, city = st.session_state.get("ps_ctx", (None, ALL_DATES, None))
+    custs = {c.casefold() for c in config.next_day_customers()}
+    if current is None or d == ALL_DATES or not custs:
+        return
+    nxt = (date.fromisoformat(d) + timedelta(days=1)).isoformat()
+    rows = filter_lines(current, delivery_date=nxt, city=city, allowed_ids=None)
+    rows = rows[rows["customer"].astype(str).str.strip().str.casefold().isin(custs)] if not rows.empty else rows
+    names = " / ".join(config.next_day_customers())
+    st.markdown(f"#### {names} · D+1 · process today for delivery {_fmt_date(nxt)}")
+    if rows.empty:
+        st.caption(f"No {names} indents for {_fmt_date(nxt)} yet.")
+        return
+    st.caption(f"{rows['indent_id'].nunique()} indent(s) · {rows['store'].nunique()} delivery point(s). "
+               "Not included in the table above (that is for delivery on the selected date).")
+    t1, t2 = st.tabs(["Make-ready list", "By spec size"])
+    with t1:
+        mr = make_ready(rows, m)
+        if len(mr["City"].unique()) <= 1:
+            mr = mr.drop(columns=["City"])
+        st.dataframe(mr, hide_index=True, width="stretch")
+        _downloads(f"{names} D+1 make-ready", mr, f"d1_make_ready_{nxt}", "d1mr", rows)
+    with t2:
+        p = production(rows, m)
+        p = p if p["Variety"].astype(bool).any() else p.drop(columns=["Variety"])
+        st.dataframe(p, hide_index=True, width="stretch",
+                     column_config={"Qty": st.column_config.NumberColumn(format="%g")})
+        _downloads(f"{names} D+1 production", p, f"d1_production_{nxt}", "d1ps", rows)
 
 
 def render_batching(user: User) -> None:

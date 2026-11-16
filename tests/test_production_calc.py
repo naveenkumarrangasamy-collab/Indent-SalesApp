@@ -167,7 +167,8 @@ def test_make_ready_list_mixes_sizes_and_handles_loose_and_boxes():
                  row("Namdhari", "1Box - Green apple", "10", "Box", "Apple"),
                  row("Zepto", "200gm - Snacky Apple", "725", "Pack", "Apple")])
     mr = make_ready(df, m)
-    assert list(mr.columns) == ["City", "Parent SKU", "Variety", "Repacking", "Pack", "Make ready", "Fruit needed"]
+    assert list(mr.columns) == ["City", "Parent SKU", "Variety", "Repacking", "Pack", "Make ready", "Fruit needed",
+                                "By size"]
     got = {(r["Parent SKU"], r["Variety"], r["Repacking"], r["Pack"]): (r["Make ready"], r["Fruit needed"])
            for r in mr.to_dict("records")}
     assert got[("Avocado", "", "Punnet", "1 Pcs")] == ("50 Punnet", "50 pcs")       # 22C + 24C mixed
@@ -176,6 +177,11 @@ def test_make_ready_list_mixes_sizes_and_handles_loose_and_boxes():
     assert got[("Apple", "Queen", "Punnet", "2 Pcs")] == ("10 Punnet", "20 pcs")
     assert got[("Apple", "Granny Smith", "Box", "1 Box")] == ("10 Box", "")
     assert got[("Apple", "Gala", "Punnet", "200 gm")] == ("725 Punnet", "")         # packets, no kg
+    size = {(r["Parent SKU"], r["Repacking"], r["Pack"]): r["By size"] for r in mr.to_dict("records")}
+    assert size[("Avocado", "Punnet", "1 Pcs")] == "22C: 30 pcs · 24C: 20 pcs"
+    assert size[("Avocado", "Tray", "1 Pcs")] == "18C, 20C: 7 pcs"
+    assert size[("Apple", "Punnet", "200 gm")] == "135, 150"                         # spec only
+    assert size[("Apple", "Box", "1 Box")] == "90, 110"
 
 
 def test_batching_takes_spec_and_variety_from_new_tab():

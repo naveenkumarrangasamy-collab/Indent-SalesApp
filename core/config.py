@@ -176,6 +176,14 @@ def po_store_prefixes() -> dict[str, str]:
         return {}
 
 
+def next_day_customers() -> list[str]:
+    """Customers processed the day before delivery (D+1): shown in their own table
+    on the Production page. Secret `next_day_customers`, default ["Zepto"]."""
+    v = get("next_day_customers", ["Zepto"])
+    v = [v] if isinstance(v, str) else list(v or [])
+    return [str(x).strip() for x in v if str(x).strip()]
+
+
 def owner_email() -> str:
     return str(get("owner_email", "") or "").strip().lower()
 

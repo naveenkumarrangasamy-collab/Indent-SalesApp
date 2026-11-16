@@ -169,7 +169,8 @@ def production(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     return g.sort_values(keys, key=_SORT)[PRODUCTION_COLUMNS + extra].reset_index(drop=True)
 
 
-MAKE_READY_COLUMNS = ["City", "Parent SKU", "Variety", "Repacking", "Pack", "Make ready", "Fruit needed"]
+MAKE_READY_COLUMNS = ["City", "Parent SKU", "Variety", "Repacking", "Pack", "Make ready", "Fruit needed",
+                      "By size"]
 _BULK = {"tray", "box", "crate", "carton", "bulk", "loose"}   # containers that hold loose fruit
 
 
@@ -214,7 +215,39 @@ def make_ready(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
             make.append(f"{fmt_num(q)} {rep or 'packs'}".strip())
             need.append(f"{fmt_num(q * pcs)} pcs" if pcs else f"{fmt_num(q * kg)} kg" if kg else "")
     g["Make ready"], g["Fruit needed"] = make, need
+    g["By size"] = _by_size(df, keys, g)
     return g.sort_values(keys, key=_SORT)[MAKE_READY_COLUMNS].reset_index(drop=True)
+
+
+def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[str]:
+    """Per make-ready row, the fruit split by Spec-Size (from the New tab):
+    piece packs -> pieces per size ('22C: 300 pcs · 24C: 120 pcs'; a SKU whose spec
+    allows several counts shows them together: '22C, 24C: 80 pcs'), kg packs ->
+    kilos per size; otherwise just the spec ('16mm')."""
+    fold = lambda r: tuple(str(r[k]).casefold() for k in keys)  # noqa: E731
+    parts: dict[tuple, dict[str, float]] = {}
+    for r in df.to_dict("records"):
+        spec = str(r.get("Spec-Size") or "").strip()
+        if not spec or spec == "-" or spec.startswith(NOT_IN_BASE):
+            continue
+        d = parts.setdefault(fold(r), {})
+        d[spec] = d.get(spec, 0.0) + to_number(r["qty"])
+    out = []
+    for r in g.to_dict("records"):
+        d = parts.get(fold(r), {})
+        pcs, kg = _pcs_per_lot(r["Pack"]), _kg_per_lot(r["Pack"], r["_lot"])
+        if _is_container(r["Pack"]):
+            pcs = kg = None
+        bits = []
+        for spec, q in sorted(d.items(), key=lambda kv: (_counts(kv[0]) or [999])[0]):
+            if pcs and _counts(spec):
+                bits.append(f"{spec}: {fmt_num(q * pcs)} pcs")
+            elif kg:
+                bits.append(f"{spec}: {fmt_num(q * kg)} kg")
+            else:
+                bits.append(spec)
+        out.append(" · ".join(bits))
+    return out
 
 
 def not_in_base(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
