@@ -163,6 +163,7 @@ def render(user: User) -> None:
             st.dataframe(gaps, hide_index=True, width="stretch")
     if user.is_owner:
         _publish("Production sheet", PRODUCTION_TAB, show, lines, user, "ps")
+        _tab_peek()
         with st.expander("Spec mapping list (what production uses for every SKU name, and what is missing)"):
             lst = spec_mapping_list(m)
             if lst.empty:
@@ -277,3 +278,19 @@ def _publish(title: str, tab: str, table: pd.DataFrame, lines: pd.DataFrame, use
             return
         c[1].success(f"'{tab}' tab updated ({len(table)} rows).")
 
+
+
+def _tab_peek() -> None:
+    """TEMPORARY owner-only raw text view of inventory-like tabs (for design work)."""
+    from core.sheets import get_backend
+    with st.expander("Tab preview (temporary)"):
+        try:
+            be = get_backend()
+            tabs = be.list_tabs()
+            st.caption("Tabs: " + " · ".join(tabs))
+            for t in [t for t in tabs if any(w in t.lower() for w in ("inventor", "stock", "live"))]:
+                vals = be.read_values(t)
+                st.markdown(f"**{t}**: {max(len(vals) - 1, 0)} rows")
+                st.code("\n".join(" | ".join(str(c) for c in r) for r in vals[:400]), language=None)
+        except Exception as e:  # never break the page
+            st.caption(f"Could not read: {e}")
