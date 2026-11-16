@@ -166,7 +166,9 @@ def production(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     for j in sorted(box_cols):
         g[BOX_COL.format(j)] = box_cols[j]
         extra.append(BOX_COL.format(j))
-    return g.sort_values(keys, key=_SORT)[PRODUCTION_COLUMNS + extra].reset_index(drop=True)
+    g = g.sort_values(keys, key=_SORT)
+    g["Spec-Size"] = g["Spec-Size"].map(lambda v: _count_label(str(v)))   # 90, 110 -> 90C, 110C
+    return g[PRODUCTION_COLUMNS + extra].reset_index(drop=True)
 
 
 MAKE_READY_COLUMNS = ["City", "Parent SKU", "Variety", "Repacking", "Pack", "Make ready", "Fruit needed",
