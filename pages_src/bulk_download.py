@@ -55,6 +55,9 @@ def render(user: User, lines: pd.DataFrame, shown_ids: list[str], key: str, po: 
             st.caption("Tick **Select all** or choose indents to download.")
             return
         stamp = config.now_ist().strftime("%Y%m%d_%H%M")
-        st.download_button(f"Download {len(picked)} indents (Excel)", build_xlsx(lines, list(picked), po if po is not None else _po_info()),
+        po_now = po if po is not None else _po_info()
+        ids = list(picked)
+        st.download_button(f"Download {len(picked)} indents (Excel)", lambda: build_xlsx(lines, ids, po_now),
+                           on_click="ignore",
                            file_name=f"indents_{stamp}.xlsx", mime=reports.XLSX, type="primary",
                            icon=":material/download:", key=f"{key}_dl")

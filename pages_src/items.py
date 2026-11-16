@@ -90,9 +90,13 @@ def _add_line(m: Masters) -> None:
     state.set_lines(current, structural=True)
     s["a_rev"] = _arev() + 1  # fresh, empty add-line widgets
     s.pop("add_errors", None)
+    s["_item_added"] = True
 
 
+@st.fragment
 def _add_form(m: Masters) -> None:
+    """Only this box reruns while choosing parent / SKU / qty / price (fast);
+    the whole page reruns once an item is added, to show it in the table."""
     hdr = state.header()
     used = {x.customer_sku_name.casefold() for x in state.lines()}
     parents = m.parents(hdr.city, hdr.customer)
@@ -145,6 +149,8 @@ def _add_form(m: Masters) -> None:
             b2.caption(f"Amount: ₹ {qty * price:,.2f}")
         for e in s.pop("add_errors", []):
             st.error(e)
+    if s.pop("_item_added", False):
+        st.rerun()
 
 
 # ------------------------------------------------------------ lines table

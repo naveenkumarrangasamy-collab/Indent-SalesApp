@@ -148,14 +148,21 @@ def created_at(df: pd.DataFrame, indent_id: str) -> str:
 
 # ------------------------------------------------------------------ reading
 
-@st.cache_data(ttl=15, show_spinner=False)
+CACHE_SECONDS = 60   # other users' changes show within a minute; your own saves clear it at once
+
+
+@st.cache_data(ttl=CACHE_SECONDS, show_spinner=False)
 def _cached_tab(tab: str) -> pd.DataFrame:
     return get_backend().read(tab)
 
 
+@st.cache_data(ttl=CACHE_SECONDS, show_spinner=False)
+def _cached_lines() -> pd.DataFrame:
+    return prepare(get_backend().read(INDENT_LINES))
+
+
 def read_lines(fresh: bool = False) -> pd.DataFrame:
-    df = get_backend().read(INDENT_LINES) if fresh else _cached_tab(INDENT_LINES)
-    return prepare(df)
+    return prepare(get_backend().read(INDENT_LINES)) if fresh else _cached_lines()
 
 
 def read_change_log() -> pd.DataFrame:
@@ -168,6 +175,7 @@ def read_po_freeze() -> pd.DataFrame:
 
 def clear_cache() -> None:
     _cached_tab.clear()
+    _cached_lines.clear()
 
 
 def prepare(df: pd.DataFrame) -> pd.DataFrame:

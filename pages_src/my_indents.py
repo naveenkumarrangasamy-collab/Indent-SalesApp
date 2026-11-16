@@ -47,6 +47,14 @@ def _request_open(cur, load=None) -> None:
 
 
 def render(user: User) -> None:
+    _page(user)
+
+
+@st.fragment
+def _page(user: User) -> None:
+    """All indents page body as a fragment: its toggles and filters rerun only this
+    part, not the whole app (faster, smoother). st.rerun() inside still
+    reruns the whole app when a full refresh is needed."""
     common.show_flash()
     head = st.columns([3, 1.3], vertical_alignment="bottom")
     head[0].markdown("### All indents" if user.is_owner or user.city_scoped else "### My indents")

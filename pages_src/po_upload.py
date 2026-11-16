@@ -97,6 +97,14 @@ def _card(r, lines: pd.DataFrame, po: dict, today: str) -> None:
 
 
 def render(user: User) -> None:
+    _page(user)
+
+
+@st.fragment
+def _page(user: User) -> None:
+    """Upload PO page body as a fragment: its toggles and filters rerun only this
+    part, not the whole app (faster, smoother). st.rerun() inside still
+    reruns the whole app when a full refresh is needed."""
     common.show_flash()
     try:
         df = indents.read_lines()

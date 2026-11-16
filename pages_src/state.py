@@ -21,7 +21,7 @@ from core.models import IndentHeader, IndentLine, IndentSnapshot
 from core.sheets import SheetError
 
 KEY = "indent"
-THROTTLE_SECONDS = 15
+THROTTLE_SECONDS = 60   # draft autosave to the sheet at most once a minute (each save is a Google round trip)
 WIDGET_PREFIXES = ("w_", "a_", "ed_")
 
 
@@ -50,11 +50,12 @@ def lines() -> list[IndentLine]:
 
 
 def set_lines(new_lines: list[IndentLine], structural: bool) -> None:
-    """structural=True for add/remove (saved at once and resets the table)."""
+    """structural=True for add/remove (resets the table). The draft is saved by
+    the once-a-minute autosave, not at once, so adding an item stays fast."""
     get()["lines"] = [line.to_dict() for line in new_lines]
     if structural:
         bump_editor()
-    mark_dirty(force=structural)
+    mark_dirty()
 
 
 def set_step(step: str) -> None:
@@ -129,6 +130,21 @@ def has_unsaved_work() -> bool:
 
 # ---------------------------------------------------------------- transitions
 
+def drop_closed_edit() -> str | None:
+    """An edit of a saved indent whose edit time has closed (and is not a PO
+    fix) can never be saved: clear it so Create indent opens a fresh form.
+    Returns the indent id that was cleared, else None."""
+    from core.indents import can_edit
+    ind = get()
+    if ind["mode"] != "edit" or ind.get("po_fix"):
+        return None
+    day = keep_date()
+    if day and not can_edit(day):
+        start_new()
+        return ind["indent_id"]
+    return None
+
+
 def start_new() -> None:
     st.session_state[KEY] = blank()
     reset_widgets()
@@ -198,6 +214,8 @@ def restore_from_sheet(email: str) -> bool:
     ind.update({k: payload[k] for k in ind if k in payload})
     st.session_state[KEY] = ind
     st.session_state["draft_saved_at"] = updated
+    if drop_closed_edit():
+        return False
     reset_widgets()
     return bool(ind["lines"]) or any(ind["header"].values())
 

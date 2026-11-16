@@ -36,6 +36,14 @@ def _tile(label: str, value, sub: str = "", tone: str = "") -> str:
 
 
 def render(user: User) -> None:
+    _page(user)
+
+
+@st.fragment
+def _page(user: User) -> None:
+    """Home page body as a fragment: its toggles and filters rerun only this
+    part, not the whole app (faster, smoother). st.rerun() inside still
+    reruns the whole app when a full refresh is needed."""
     common.show_flash()
     try:
         df = indents.read_lines()

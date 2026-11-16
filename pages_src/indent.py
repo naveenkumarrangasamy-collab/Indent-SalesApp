@@ -30,6 +30,9 @@ def render(user: User) -> None:
         common.sheet_error(e, "Master data could not be loaded.")
         return
 
+    gone = state.drop_closed_edit()
+    if gone:
+        st.info(f"The open edit of {gone} was cleared: its edit time has closed. Start a new indent below.")
     ind = state.get()
     top = st.columns([4, 1.4], vertical_alignment="bottom")
     if ind["mode"] == "edit":

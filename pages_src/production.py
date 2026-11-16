@@ -220,34 +220,33 @@ def render_batching(user: User) -> None:
                 for i, ((city, cust, store), part) in enumerate(points, start=1)]
     from core.reports import xlsx
     c = st.columns([1, 1, 1, 3])
-    c[0].download_button("PDF", sections_pdf("Batching sheet", sub, sections, footer="MT Indent - Batching sheet"),
+    c[0].download_button("PDF", lambda: sections_pdf("Batching sheet", sub, sections,
+                                                     footer="MT Indent - Batching sheet"), on_click="ignore",
                          file_name=f"batching_{label}.pdf", mime="application/pdf",
                          icon=":material/picture_as_pdf:", width="stretch")
-    c[1].download_button("Excel", xlsx({"Batching": bat}), file_name=f"batching_{label}.xlsx",
+    c[1].download_button("Excel", lambda: xlsx({"Batching": bat}), on_click="ignore", file_name=f"batching_{label}.xlsx",
                          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                          icon=":material/download:", width="stretch")
-    c[2].download_button("CSV", bat.to_csv(index=False).encode("utf-8"), file_name=f"batching_{label}.csv",
+    c[2].download_button("CSV", lambda: bat.to_csv(index=False).encode("utf-8"), on_click="ignore",
+                         file_name=f"batching_{label}.csv",
                          mime="text/csv", icon=":material/download:", width="stretch")
     if user.is_owner:
         _publish("Batching sheet", BATCHING_TAB, bat, lines, user, "bs")
 
 
 def _downloads(title: str, table: pd.DataFrame, fname: str, prefix: str, lines: pd.DataFrame) -> None:
-    """CSV and PDF of the report on screen."""
+    """CSV and PDF of the report on screen, built only when clicked."""
     now = config.now_ist().strftime("%d %b %Y, %I:%M %p")
     sub = [st.session_state.get(f"{prefix}_desc", ""),
            f"{lines['indent_id'].nunique()} indents, {lines['store'].nunique()} stores, "
            f"{len(lines)} lines.   Generated {now} IST."]
     c = st.columns([1, 1, 4])
-    c[0].download_button("CSV", table.to_csv(index=False).encode("utf-8"), file_name=f"{fname}.csv",
-                         mime="text/csv", icon=":material/download:", width="stretch", key=f"{prefix}_csv")
-    try:
-        pdf = table_pdf(title, sub, table, footer=f"MT Indent - {title}")
-    except Exception as e:  # never block the CSV because of the PDF
-        c[2].caption(f"PDF could not be made: {e}")
-        return
-    c[1].download_button("PDF", pdf, file_name=f"{fname}.pdf", mime="application/pdf",
-                         icon=":material/picture_as_pdf:", width="stretch", key=f"{prefix}_pdf")
+    c[0].download_button("CSV", lambda: table.to_csv(index=False).encode("utf-8"), file_name=f"{fname}.csv",
+                         mime="text/csv", icon=":material/download:", width="stretch", key=f"{prefix}_csv",
+                         on_click="ignore")
+    c[1].download_button("PDF", lambda: table_pdf(title, sub, table, footer=f"MT Indent - {title}"),
+                         file_name=f"{fname}.pdf", mime="application/pdf", icon=":material/picture_as_pdf:",
+                         width="stretch", key=f"{prefix}_pdf", on_click="ignore")
 
 
 PRODUCTION_TAB = "Production_Sheet"
