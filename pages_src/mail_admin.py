@@ -1,7 +1,7 @@
 """Access page (owner): the E-mails tab.
 
 1. Mail server   - is sending set up, the last error in plain words, a test.
-2. Production e-mails - the production report (once a day at 8 AM): address (+ name) -> cities.
+2. Production e-mails - the production report (every hour 8 AM-2 PM): address (+ name) -> cities.
 3. PO e-mails     - every PO the moment it is uploaded: address (+ name), all cities / customers.
 """
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pages_src import common
 
 TEAMS = {
     "Ground": ("Production e-mails",
-               "Every day at 8 AM and 9 AM: the production report (make-ready list + by spec size, all customers "
+               "Every hour from 8 AM to 2 PM: the production report (make-ready list + by spec size, all customers "
                "together) for today's deliveries, only for the cities chosen for each address, as PDF + Excel."),
     "Central": ("PO e-mails",
                 "The moment any PO is uploaded (any time, all cities and customers): the customer's PO plus "
@@ -139,11 +139,11 @@ def _team(team: str, m: masters.Masters, me: User, people: list[Recipient]) -> N
             for name, data, mime in st.session_state.get("hm_files", []):
                 st.download_button(name, data, file_name=name, mime=mime, key=f"dl_{name}",
                                    icon=":material/download:")
-        with st.expander("Automatic sending at 8 AM"):
+        with st.expander("Automatic sending every hour"):
             st.markdown(
                 "A Streamlit Cloud app sleeps when nobody has it open, so a schedule in the GitHub repository "
                 "opens the app every hour from 8 AM to 2 PM (waking it if needed). The app sends the production "
-                "e-mail at **8 AM and 9 AM** sharp (cron-job.org starts it a few minutes early; GitHub runs are a late backup; each goes out once). Nothing to set up. "
+                "e-mail **every hour, 8 AM to 2 PM**, on the hour (cron-job.org starts it a few minutes early; GitHub runs are a late backup; each goes out once). Nothing to set up. "
                 "Test: GitHub → **Actions** → *Hourly indent e-mail* → **Run workflow**.")
 
 
@@ -171,7 +171,7 @@ def emails_tab(m: masters.Masters, me: User) -> None:
         common.sheet_error(e)
         return
     st.divider()
-    t1, t2 = st.tabs(["Production e-mails (8 & 9 AM)", "PO e-mails"])
+    t1, t2 = st.tabs(["Production e-mails (hourly)", "PO e-mails"])
     with t1:
         _team("Ground", m, me, people)
     with t2:
