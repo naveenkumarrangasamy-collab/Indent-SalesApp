@@ -144,6 +144,13 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Multi-PO customers** (secret `multi_po_customers`, default ["Swiggy"] = WH1/WH2): any number of POs, each
   e-mailed; the indent stays open until **End of POs** is pressed, which freezes it and shows the differences
   (all POs summed).
+- **PO reader (17 Nov)**: `core/po_reader.py` (pdfplumber) reads the item table of a text PDF exactly (qty, code,
+  unit cost, value), fills the PO number, checks qty × cost = value and lines = PO total, and matches lines to our
+  SKUs: 1) **PO_Item_Map** tab (Customer, PO Item Code, PO Item Name, Customer SKU Name; filled automatically when a
+  user picks/confirms a SKU), 2) same words + same pack ("2PC - X" = "X - 2 pcs (…)"), 3) close name ("? check").
+  The user reviews "Our SKU" per line, then uploads. Scans/photos give no lines → type quantities by hand.
+  Swiggy: PO number M… = WH1, B… = WH2 (secret `po_store_prefixes`); a mismatch with the indent's store is shown.
+  Tested on the 4 sample POs: Zepto 22/22 lines read, totals ✓, 20 matched by name.
 - **Lock** (manual freeze, "processing started"): status **Locked**: no edits, still waiting for its PO; a later
   PO upload still freezes it and sends the SO/PO mail.
 - **Zepto cutoff 1 AM on the delivery day** (secret `customer_cutoff_hours`, default {Zepto = 1}); others 2 PM.
@@ -255,7 +262,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **143 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **147 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
 
@@ -273,7 +280,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ## 8. Open items and next steps
 
 0. **Next step (user)**: a separate Zepto D+1 table on the Production page (process today, dispatch tomorrow).
-   Later: PO reader (auto-read PDFs; needs a PO_Item_Map tab for Flipkart/Firstclub/Swiggy, and a More PO).
+   PO reader built; needs a More PO sample to confirm its layout.
 1. Add the **Production e-mails** recipients (Access → E-mails). The user will do this later. Until then the 8 AM run reports "no active recipients".
 7. **Remind the user**: box packs ("1 Box", e.g. Namdhari green apple) show only "N Box" on the make-ready list;
    box kg / pieces per box are not known yet. Also box counts for kg and gram packs need box weights.

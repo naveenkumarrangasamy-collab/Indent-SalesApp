@@ -166,6 +166,16 @@ def multi_po_customers() -> set[str]:
     return {str(x).strip().casefold() for x in v if str(x).strip()}
 
 
+def po_store_prefixes() -> dict[str, str]:
+    """Store a PO belongs to by its PO number's first letter (Swiggy: M = WH1, B = WH2).
+    Secret `po_store_prefixes`."""
+    v = get("po_store_prefixes", {"Swiggy WH1": "M", "Swiggy WH2": "B"})
+    try:
+        return {str(k): str(p) for k, p in dict(v).items()}
+    except (TypeError, ValueError):
+        return {}
+
+
 def owner_email() -> str:
     return str(get("owner_email", "") or "").strip().lower()
 

@@ -6,10 +6,11 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from core import config, indents, mailer
+from core import config, indents, mailer, po_reader
+from core.masters import load_masters
 from core.auth import User
 from core.models import fmt_num
-from core.schema import WAITING_FOR_PO
+from core.schema import PO_ITEM_MAP, WAITING_FOR_PO
 from core.sheets import SheetError, get_backend
 from pages_src import common, state
 
@@ -48,6 +49,7 @@ def _prefill(indent_id: str) -> dict:
 def _clear_po_state(indent_id: str) -> None:
     st.session_state.get("po_prefill", {}).pop(indent_id, None)
     st.session_state.get("po_files", {}).pop(indent_id, None)
+    st.session_state.pop(f"po_no_{indent_id}", None)
     st.session_state.pop("po_mismatch", None)
 
 
@@ -87,10 +89,8 @@ def _po_dialog(indent_id: str, user: User) -> None:
                 "is then frozen and the differences are shown.", icon=":material/library_add:")
     pre = _prefill(indent_id)
 
-    # 1. the PO file
+    # 1. the PO file (read automatically when it is a text PDF)
     c = st.columns([1, 1.6])
-    po_number = c[0].text_input("PO number", value=pre.get("po_number", ""), key=f"po_no_{indent_id}",
-                                placeholder="as printed on the PO")
     up = c[1].file_uploader("PO file (PDF)", type=["pdf"], key=f"po_file_{indent_id}")
     files = st.session_state.setdefault("po_files", {})
     if up is not None:
@@ -98,38 +98,22 @@ def _po_dialog(indent_id: str, user: User) -> None:
     elif indent_id in files:
         c[1].caption(f"Using **{files[indent_id][0]}** chosen earlier (choose another file to replace it).")
     file_name, file_bytes = files.get(indent_id, (None, None))
-
-    # 2. PO quantities, item by item (blank = not on this PO)
-    st.markdown("**Quantities on this PO** · as on the customer's PO; leave blank if an item is not on it")
-    if "init" not in pre:
-        pre["init"] = dict(pre.get("po_qty", {}))
-        st.session_state["po_ed_rev"] = pre["rev"] = st.session_state.get("po_ed_rev", 0) + 1
-    saved = pre["init"]
+    read = _read(file_bytes) if file_bytes else None
+    no_key = f"po_no_{indent_id}"
+    if read and read.po_number and not st.session_state.get(no_key):
+        st.session_state[no_key] = read.po_number
+    po_number = c[0].text_input("PO number", key=no_key, placeholder="as printed on the PO")
+    pre["po_number"] = po_number
     so_far = (info or {}).get("qty") or {}
     so_far = {k.strip().casefold(): v for k, v in so_far.items()}
-    base = pd.DataFrame([{"Customer SKU Name": x.customer_sku_name, "Lot": x.lot,
-                          "Indent qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
-                          **({"Earlier POs": fmt_num(so_far.get(x.customer_sku_name.strip().casefold(), 0))}
-                             if multi else {}),
-                          "PO qty": saved.get(x.customer_sku_name)} for x in cur.lines])
-    base["PO qty"] = pd.to_numeric(base["PO qty"], errors="coerce")
-    ed = st.data_editor(base, key=f"po_ed_{indent_id}_{pre.get('rev', 0)}", hide_index=True, width="stretch",
-                        disabled=[c_ for c_ in base.columns if c_ != "PO qty"],
-                        column_config={"PO qty": st.column_config.NumberColumn(min_value=0, step=1,
-                                                                               format="%d")})
-    po_qty = {r["Customer SKU Name"]: (None if pd.isna(r["PO qty"]) else float(r["PO qty"]))
-              for r in ed.to_dict("records")}
-    pre["po_qty"], pre["po_number"] = po_qty, po_number
-    with st.expander("Items on the PO that are not in this indent"):
-        ex = st.data_editor(pd.DataFrame({"Item on PO": pd.Series(dtype=str), "PO qty": pd.Series(dtype=float)}),
-                            key=f"po_extra_{indent_id}_{pre.get('rev', 0)}", num_rows="dynamic",
-                            hide_index=True, width="stretch",
-                            column_config={"PO qty": st.column_config.NumberColumn(min_value=0, step=1,
-                                                                                   format="%d")})
-    extra = {str(r["Item on PO"]).strip(): float(r["PO qty"]) for r in ex.to_dict("records")
-             if str(r.get("Item on PO") or "").strip() and not pd.isna(r.get("PO qty"))}
-    this_po = {k: v for k, v in po_qty.items() if v is not None}
-    this_po.update(extra)
+
+    learned: list[dict] = []
+    if read and read.lines:
+        this_po, learned = _read_table(cur, read, po_number, indent_id)
+    else:
+        if read is not None:
+            st.warning(" ".join(read.checks) or "No item lines found in this PDF: type the quantities.")
+        this_po = _manual_table(cur, pre, indent_id, multi, so_far)
     tot_i = sum(float(x.qty) for x in cur.lines)
     st.caption(f"Indent total **{fmt_num(tot_i)}** · this PO **{fmt_num(sum(this_po.values()))}**"
                + (f" · earlier POs **{fmt_num(sum(so_far.values()))}**" if multi else ""))
@@ -164,9 +148,11 @@ def _po_dialog(indent_id: str, user: User) -> None:
                 note = f" The file itself was not stored: {e}"
         try:
             with st.spinner("Saving the PO…"):
+                _learn(learned)
                 v, frozen_now = indents.freeze(indent_id, cur.version, file_name, user.email, po_file_link=link,
                                                po_qty=this_po, po_number=po_number.strip(),
-                                               po_has_extra=bool(extra))
+                                               po_has_extra=any(k not in {x.customer_sku_name for x in cur.lines}
+                                                                for k in this_po))
         except SheetError as e:
             st.error(f"PO not saved. {e}")
             return
@@ -192,6 +178,122 @@ def _po_dialog(indent_id: str, user: User) -> None:
     if b[-1].button("Cancel", width="stretch"):
         _close()
         st.rerun()
+
+
+NOT_OURS = "— not in our list"
+
+
+@st.cache_data(show_spinner="Reading the PO…", max_entries=20)
+def _read(data: bytes):
+    return po_reader.read_pdf(data)
+
+
+def _candidates(cur) -> list[str]:
+    names = [x.customer_sku_name for x in cur.lines]
+    try:
+        m = load_masters()
+        h = cur.header
+        for p in m.parents(h.city, h.customer):
+            names += m.sku_names(h.city, h.customer, p)
+    except Exception:  # noqa: BLE001 - the indent's own items are enough to match
+        pass
+    return list(dict.fromkeys(names))
+
+
+def _item_map(customer: str) -> dict[str, str]:
+    try:
+        df = indents._cached_tab(PO_ITEM_MAP)
+    except SheetError:
+        return {}
+    if df.empty:
+        return {}
+    df = df[df["Customer"].astype(str).str.strip().str.casefold() == customer.strip().casefold()]
+    out = {}
+    for r in df.to_dict("records"):
+        for k in (r.get("PO Item Code"), r.get("PO Item Name")):
+            if str(k or "").strip() and str(r.get("Customer SKU Name") or "").strip():
+                out[str(k).strip()] = str(r["Customer SKU Name"]).strip()
+    return out
+
+
+def _learn(rows: list[dict]) -> None:
+    """Save the user's matches to PO_Item_Map, so the next PO matches by itself."""
+    if rows:
+        try:
+            get_backend().append_dicts(PO_ITEM_MAP, rows)
+            indents.clear_cache()
+        except SheetError:
+            pass
+
+
+HOW = {"map": "✓ saved match", "name": "✓ same name", "close": "? check", "": "✗ pick SKU"}
+
+
+def _read_table(cur, read, po_number: str, indent_id: str) -> tuple[dict, list[dict]]:
+    """The lines read from the PDF, matched to our SKUs; the user can change
+    'Our SKU'. Returns (PO qty per SKU, new matches to remember)."""
+    h = cur.header
+    cands = _candidates(cur)
+    lines = po_reader.match(read.lines, cands, _item_map(h.customer))
+    ok = not read.checks
+    msg = (f"**Read from the PDF:** {len(lines)} line(s) · qty **{fmt_num(read.total_qty)}**"
+           + (f" · PO value ₹{read.total:,.2f}" if read.total else "")
+           + (" · totals check ✓" if ok and read.total else ""))
+    (st.success if ok else st.warning)(msg + ("" if ok else "\n\n" + "\n".join(f"- {c}" for c in read.checks)))
+    store = po_reader.store_hint(po_number, config.po_store_prefixes())
+    if store and store.strip().casefold() != h.store.strip().casefold():
+        st.error(f"PO number {po_number} looks like **{store}**, but this indent is for **{h.store}**.")
+    base = pd.DataFrame([{"On the PO": x.name, "Code": x.code, "Qty": fmt_num(x.qty),
+                          "Our SKU": x.sku or None, "Match": HOW.get(x.how, "")} for x in lines])
+    ed = st.data_editor(base, key=f"po_read_{indent_id}_{hash(read.po_number)}_{len(lines)}",
+                        hide_index=True, width="stretch",
+                        disabled=["On the PO", "Code", "Qty", "Match"],
+                        column_config={"Our SKU": st.column_config.SelectboxColumn(
+                            options=cands + [NOT_OURS], width="large")})
+    picks = [p if isinstance(p, str) and p.strip() else None for p in ed["Our SKU"]]
+    if any(p is None for p in picks):
+        st.caption("✗ lines: pick **Our SKU** (or “not in our list”). Your choice is remembered for next time.")
+    this_po: dict[str, float] = {}
+    learned = []
+    stamp = config.now_iso()
+    for x, pick in zip(lines, picks):
+        key = pick if pick and pick != NOT_OURS else x.name
+        this_po[key] = this_po.get(key, 0.0) + x.qty
+        if pick and pick != NOT_OURS and (x.how in ("close", "") or pick != x.sku):
+            learned.append({"Customer": h.customer, "PO Item Code": x.code, "PO Item Name": x.name,
+                            "Customer SKU Name": pick, "Updated_At": stamp})
+    return this_po, learned
+
+
+def _manual_table(cur, pre: dict, indent_id: str, multi: bool, so_far: dict) -> dict:
+    st.markdown("**Quantities on this PO** · as on the customer's PO; leave blank if an item is not on it")
+    if "init" not in pre:
+        pre["init"] = dict(pre.get("po_qty", {}))
+        st.session_state["po_ed_rev"] = pre["rev"] = st.session_state.get("po_ed_rev", 0) + 1
+    saved = pre["init"]
+    base = pd.DataFrame([{"Customer SKU Name": x.customer_sku_name, "Lot": x.lot,
+                          "Indent qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
+                          **({"Earlier POs": fmt_num(so_far.get(x.customer_sku_name.strip().casefold(), 0))}
+                             if multi else {}),
+                          "PO qty": saved.get(x.customer_sku_name)} for x in cur.lines])
+    base["PO qty"] = pd.to_numeric(base["PO qty"], errors="coerce")
+    ed = st.data_editor(base, key=f"po_ed_{indent_id}_{pre.get('rev', 0)}", hide_index=True, width="stretch",
+                        disabled=[c_ for c_ in base.columns if c_ != "PO qty"],
+                        column_config={"PO qty": st.column_config.NumberColumn(min_value=0, step=1,
+                                                                               format="%d")})
+    po_qty = {r["Customer SKU Name"]: (None if pd.isna(r["PO qty"]) else float(r["PO qty"]))
+              for r in ed.to_dict("records")}
+    pre["po_qty"] = po_qty
+    with st.expander("Items on the PO that are not in this indent"):
+        ex = st.data_editor(pd.DataFrame({"Item on PO": pd.Series(dtype=str), "PO qty": pd.Series(dtype=float)}),
+                            key=f"po_extra_{indent_id}_{pre.get('rev', 0)}", num_rows="dynamic",
+                            hide_index=True, width="stretch",
+                            column_config={"PO qty": st.column_config.NumberColumn(min_value=0, step=1,
+                                                                                   format="%d")})
+    this_po = {k: v for k, v in po_qty.items() if v is not None}
+    this_po.update({str(r["Item on PO"]).strip(): float(r["PO qty"]) for r in ex.to_dict("records")
+                    if str(r.get("Item on PO") or "").strip() and not pd.isna(r.get("PO qty"))})
+    return this_po
 
 
 @st.dialog("End of POs?", dismissible=False, width="large")

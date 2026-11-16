@@ -17,6 +17,7 @@ CHANGE_LOG = "Change_Log"
 PO_FREEZE = "PO_Freeze"
 DRAFTS = "Drafts"
 MAIL_RECIPIENTS = "Mail_Recipients"
+PO_ITEM_MAP = "PO_Item_Map"
 MAIL_LOG = "Mail_Log"
 
 TABS: dict[str, list[str]] = {
@@ -45,6 +46,9 @@ TABS: dict[str, list[str]] = {
     MAIL_RECIPIENTS: ["Email", "Name", "Team", "Hourly_Indent", "SO_PO", "Cities", "Customers",
                       "Stores", "Active", "Updated_At", "Updated_By"],
     MAIL_LOG: ["sent_at", "kind", "slot", "to", "status", "detail"],
+    # Customer PO item (code or name) -> our Customer SKU Name, for reading PO PDFs.
+    # Filled by the app when someone picks a SKU for a PO line; can be edited by hand.
+    PO_ITEM_MAP: ["Customer", "PO Item Code", "PO Item Name", "Customer SKU Name", "Updated_At"],
 }
 
 MASTER_TABS = [SKU_MAP, STORE_MAP, VARIETIES, ACCESS]
