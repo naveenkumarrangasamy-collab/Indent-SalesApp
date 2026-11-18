@@ -85,14 +85,14 @@ def _ist(iso: str) -> datetime:
 
 def cutoff_hour(customer: str = "") -> int:
     """Edit cutoff hour on the delivery day: the customer's own (Zepto: 1 AM) or
-    the general `edit_cutoff_hour` (2 PM)."""
+    the general `edit_cutoff_hour` (11 PM)."""
     return config.customer_cutoff_hours().get(str(customer or "").strip().casefold(),
                                               config.edit_cutoff_hour())
 
 
 def edit_deadline(delivery_date: str, customer: str = "") -> datetime:
     """An indent can be edited / deleted until its cutoff hour IST on its
-    DELIVERY date (`edit_cutoff_days` = 0): 2:00 PM, Zepto 1:00 AM."""
+    DELIVERY date (`edit_cutoff_days` = 0): 11:00 PM, Zepto 1:00 AM."""
     d = date.fromisoformat(str(delivery_date)[:10]) + timedelta(days=config.edit_cutoff_days())
     return datetime(d.year, d.month, d.day, cutoff_hour(customer), tzinfo=config.IST)
 
@@ -125,7 +125,7 @@ def delivery_bounds(keep: str | None = None) -> tuple[date, date]:
 
 
 def date_allowed(delivery_date: str, keep: str | None = None, customer: str = "") -> bool:
-    """T or T+1, and not after that date's cutoff (2 PM; Zepto 1 AM). A correction
+    """T or T+1, and not after that date's cutoff (11 PM; Zepto 1 AM). A correction
     may keep its own date (its cutoff is checked separately)."""
     if keep and delivery_date == keep:
         return True

@@ -189,7 +189,7 @@ def _my_customers(m: Masters, city: str) -> list[str]:
 
 
 def _date_options() -> list[str]:
-    """Delivery days offered: today (until its 2 PM cutoff) and tomorrow; a
+    """Delivery days offered: today (until its 11 PM cutoff) and tomorrow; a
     correction keeps its own date in the list."""
     lo, hi = indents.delivery_bounds()
     days = []
@@ -344,7 +344,7 @@ def render(m: Masters) -> bool:
                      help="Between 10:00 AM and 8:00 PM. Pick a 30-minute slot, or type a time "
                           "(6:45 PM, 18:45) and press Enter")
         if ind["mode"] == "edit" and ind.get("po_fix"):
-            c6.caption("Correcting this indent to match the customer's PO (allowed after the 2 PM cutoff).")
+            c6.caption("Correcting this indent to match the customer's PO (allowed after the cutoff).")
         elif hdr.delivery_date:
             c6.caption(f"Edits allowed until **{indents.deadline_text(hdr.delivery_date, hdr.customer)}**.")
 

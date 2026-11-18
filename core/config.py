@@ -140,9 +140,9 @@ def edit_cutoff_days() -> int:
 
 def edit_cutoff_hour() -> int:
     try:
-        return min(23, max(0, int(get("edit_cutoff_hour", 14))))
+        return min(23, max(0, int(get("edit_cutoff_hour", 23))))
     except (TypeError, ValueError):
-        return 14
+        return 23
 
 
 def customer_cutoff_hours() -> dict[str, int]:

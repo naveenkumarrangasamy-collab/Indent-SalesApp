@@ -600,7 +600,7 @@ def render(m: Masters, user: User) -> None:
             else:
                 s["review_open"] = True
         if not open_:
-            st.error(f"Editing of {ind['indent_id']} closed at {deadline} (2 PM on the delivery day). "
+            st.error(f"Editing of {ind['indent_id']} closed at {deadline} (the delivery-day cutoff). "
                      "It can no longer be changed.")
         elif fix:
             c[2].caption("Correcting the indent to match the customer's PO. After **Update indent** "

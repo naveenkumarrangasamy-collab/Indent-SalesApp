@@ -159,15 +159,15 @@ def test_store_and_customer_lists():
 
 
 
-def test_edit_deadline_is_2pm_on_delivery_day():
-    """The user's example: at 6:53 PM on 15 Nov the 15th is locked, the 16th is open until 2 PM."""
+def test_edit_deadline_is_11pm_on_delivery_day():
+    """At 11:30 PM on 15 Nov the 15th is locked, the 16th is open until 11 PM (was 2 PM until 18 Nov)."""
     ist = config.IST
-    now = datetime(2026, 11, 15, 18, 53, tzinfo=ist)
-    assert indents.edit_deadline("2026-11-16").isoformat() == "2026-11-16T14:00:00+05:30"
+    now = datetime(2026, 11, 15, 23, 30, tzinfo=ist)
+    assert indents.edit_deadline("2026-11-16").isoformat() == "2026-11-16T23:00:00+05:30"
     assert not indents.can_edit("2026-11-15", now)
     assert indents.can_edit("2026-11-16", now)
-    assert indents.can_edit("2026-11-16", datetime(2026, 11, 16, 13, 59, tzinfo=ist))
-    assert not indents.can_edit("2026-11-16", datetime(2026, 11, 16, 14, 0, tzinfo=ist))
+    assert indents.can_edit("2026-11-16", datetime(2026, 11, 16, 22, 59, tzinfo=ist))
+    assert not indents.can_edit("2026-11-16", datetime(2026, 11, 16, 23, 0, tzinfo=ist))
 
 
 def test_update_blocked_after_cutoff(backend, monkeypatch):
@@ -190,8 +190,10 @@ def test_delivery_date_today_or_tomorrow(backend, monkeypatch):
     assert not indents.date_allowed(yesterday) and indents.date_allowed(today.isoformat())
     assert indents.date_allowed(yesterday, keep=yesterday)        # a correction keeps its own date
     assert indents.submit_new(IndentHeader(**{**H.to_dict(), "delivery_date": today.isoformat()}), [HASS], "s@x.com")
-    # after 2 PM, today is closed for new indents
-    afternoon = morning + timedelta(hours=6)
+    # still open at 3 PM; after 11 PM, today is closed for new indents
+    monkeypatch.setattr(indents.config, "now_ist", lambda: morning + timedelta(hours=6))
+    assert indents.date_allowed(today.isoformat())
+    afternoon = morning + timedelta(hours=14, minutes=30)
     monkeypatch.setattr(indents.config, "now_ist", lambda: afternoon)
     assert not indents.date_allowed(today.isoformat())
     assert indents.date_allowed((today + timedelta(days=1)).isoformat())
@@ -382,7 +384,7 @@ def test_lock_then_po(backend):
 def test_zepto_cutoff_1am(backend, monkeypatch):
     day = config.now_ist().date()
     at = lambda h, m=0: datetime.combine(day, datetime.min.time(), tzinfo=config.IST) + timedelta(hours=h, minutes=m)
-    assert indents.cutoff_hour("Zepto") == 1 and indents.cutoff_hour("More") == 14
+    assert indents.cutoff_hour("Zepto") == 1 and indents.cutoff_hour("More") == 23
     assert indents.can_edit(day.isoformat(), now=at(0, 30), customer="Zepto")
     assert not indents.can_edit(day.isoformat(), now=at(1), customer="zepto")
     assert indents.can_edit(day.isoformat(), now=at(9), customer="More")

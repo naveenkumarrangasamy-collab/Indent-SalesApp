@@ -48,7 +48,7 @@ Keys:
 
 Optional keys:
 
-- `edit_cutoff_days` (default 0), `edit_cutoff_hour` (14)
+- `edit_cutoff_days` (default 0), `edit_cutoff_hour` (23; was 14 until 18 Nov)
 - `session_hours` (24), `delivery_days_ahead` (1)
 - `delivery_from`/`delivery_to` (10:00/20:00)
 - `hourly_mail_days` ([0]), `hourly_mail_from` (8), `hourly_mail_to` (14)
@@ -119,7 +119,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 ### Indents
 
 - Indent numbers are unique and running: **IN-001, IN-002…**. Only `IN-` ids are counted, and they restart after Start fresh.
-- Delivery date is **today or tomorrow** (`delivery_days_ahead` = 1). New indents and edits are allowed until **2:00 PM IST on the delivery day** (the cutoff).
+- Delivery date is **today or tomorrow** (`delivery_days_ahead` = 1). New indents and edits are allowed until **11:00 PM IST on the delivery day** (the cutoff; was 2 PM until 18 Nov, user moved it to 11 PM).
 - There is one indent per city + customer + store + delivery date. A duplicate is refused and the user is pointed to the existing indent.
 - An expected delivery time is required: a 30-minute slot from 10 AM to 8 PM, or typed in.
 - **Lot** is detected from the SKU name: Kg; gm/g/pack → Pack; pc/pcs → Pcs; box → Box; tray → Tray. A Lot/UOM column in the master overrides it.
@@ -182,7 +182,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   Tested on the 4 sample POs: Zepto 22/22 lines read, totals ✓, 20 matched by name.
 - **Lock** (manual freeze, "processing started"): status **Locked**: no edits, still waiting for its PO; a later
   PO upload still freezes it and sends the SO/PO mail.
-- **Zepto cutoff 1 AM on the delivery day** (secret `customer_cutoff_hours`, default {Zepto = 1}); others 2 PM.
+- **Zepto cutoff 1 AM on the delivery day** (secret `customer_cutoff_hours`, default {Zepto = 1}); others 11 PM.
 
 ### Production, batching and tracker (owner + warehouse only)
 
