@@ -50,7 +50,7 @@ _drop_stale_modules()
 
 st.set_page_config(page_title="MT Indent", page_icon="🧾", layout="wide")
 
-from pages_src import access, common, home, indent, login, my_indents, po_upload, production, tracker, zepto_upload  # noqa: E402
+from pages_src import access, common, home, indent, login, my_indents, po_upload, production, tracker  # noqa: E402
 
 _remember_modules()
 
@@ -95,8 +95,6 @@ pages = {
     "my_indents": st.Page(lambda: my_indents.render(user), title="All indents" if user.is_owner else "My indents",
                           icon="📋", url_path="indents"),
     "po": st.Page(lambda: po_upload.render(user), title="Upload PO", icon="📤", url_path="upload-po"),
-    "zepto": st.Page(lambda: zepto_upload.render(user), title="Zepto Excel upload", icon="📥",
-                     url_path="zepto-upload"),
     "tracker": st.Page(lambda: tracker.render(user), title="Hourly tracker", icon="⏱️", url_path="tracker"),
     "production": st.Page(lambda: production.render(user), title="Production sheet", icon="🏭",
                           url_path="production", default=not makes_indents),
@@ -111,7 +109,7 @@ common.PAGES.update(pages)
 # Sales: indents + PO.  Warehouse: production, batching, hourly tracker.  Owner: everything.
 sections = {}
 if makes_indents:
-    sections["Indents"] = [pages["home"], pages["indent"], pages["zepto"], pages["my_indents"], pages["po"]]
+    sections["Indents"] = [pages["home"], pages["indent"], pages["my_indents"], pages["po"]]
 if sees_production:   # owner and warehouse; sales do not get production or the hourly tracker
     sections["Production"] = [pages["production"], pages["batching"], pages["tracker"]]
 if user.is_owner:

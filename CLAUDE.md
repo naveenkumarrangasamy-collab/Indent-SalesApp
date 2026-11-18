@@ -283,7 +283,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - Each customer + store + date becomes one indent.
   - If the store isn't found and the customer has **one** store in the master, that store is used.
   - Missing SKUs/stores can be added to All Cux City / Customer List first. Creating indents is blocked until they are added.
-- **Zepto Excel upload** (17 Nov; page "Zepto Excel upload" in the Indents menu, sales + owners; Zepto in the
+- **Zepto Excel upload** — **page removed 18 Nov** (Attach the order on Create indent handles Excel/PDF for every
+  customer); `core/zepto_import.py` is kept for the reader. Old notes: (17 Nov; Zepto in the
   Bangalore city only): Zepto's indent Excel (Product Name, UOM, EAN, Pack Date, one qty column per warehouse
   "… Final", Summation). Each warehouse column with qty → one indent; store picked per column (guess: HSK →
   Yalachanayakanapura, NLM → Nelamangala). **Delivery date is picked on the page** (default = the file's Pack Date;
