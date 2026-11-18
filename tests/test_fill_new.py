@@ -17,3 +17,12 @@ def test_plan_takes_closest_and_active_first():
     assert (av["Spec-Origin"], av["Spec-Size"], av["Spec-Repacking"]) == ("Tanzania", "20C, 22C", "Punnet")
     assert av["Other origins"] == "Kenya 18C"
     assert p["3PC - BH - Green Kiwi"]["Spec-Origin"] == "Iran"
+
+
+def test_default_active_origin_when_no_active_column():
+    new = [NEW[0], ["PTP Hyderabad", "Swiggy", "Mandarin", "3PC - Mandarin Orange", "", "", "", ""]]
+    mw = [["City", "Customer", "Parent SKU", "Customer SKU Name", "Spec-Origin", "Spec-Size"],
+          ["X", "Swiggy", "Mandarin", "3PC - Baby Orange (Mandarin)", "China", ""],
+          ["X", "Swiggy", "Mandarin", "3PC - Baby Orange (Mandarin)", "RSA", ""]]
+    p = fill_new.plan(new, mw)[0]
+    assert p["Spec-Origin"] == "RSA" and p["Other origins"] == "China"

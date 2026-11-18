@@ -75,6 +75,9 @@ def plan(new_values: list[list], mw_values: list[list]) -> list[dict]:
         ref = _best(r["customerskuname"], r.get("parentsku", ""), cands)
         rows = cands.get(ref, [])
         active = [x for x in rows if x.get("active", "").casefold() in {"y", "yes", "true", "1"}]
+        if not active:                      # no Active column: the agreed default origin (Mandarin RSA, ...)
+            want = importer.DEFAULT_ACTIVE_ORIGINS.get(r.get("parentsku", "").casefold(), "")
+            active = [x for x in rows if want and x.get("specorigin", "").casefold() == want]
         order = active + [x for x in rows if x not in active]
         seen, origins = set(), []
         for x in order:
