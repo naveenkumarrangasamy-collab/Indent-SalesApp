@@ -269,7 +269,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 
 - **Bulk download** (owners only) on All indents and Upload PO: tick "Select all" or pick indents. It downloads one Excel with two sheets: **Indents** (one row each, including the PO number) and **Lines** (every item).
 - **Add SKUs** (Access tab, owners; 18 Nov): paste SKU names (order style or ours) for a city + customer →
-  preview (✓ already in master by exact name / 🆕 will be added / 🔴 new Parent SKU) → "Add to the sheet" writes
+  preview table (editable Parent SKU / our name; ✓ already in master by exact name / 🆕 will be added / 🔴 pick an
+  existing Parent SKU) → "Add to the sheet" writes
   them to All Cux City + New tab (yellow spec cells only, no status text) via `master_add.add_items`. `pages_src/add_skus.py`.
 - **Import indents** (Access tab; **Owner only**, not Owner L):
   - Input is an Excel upload or rows pasted as text (tab, `|` or comma separated, header first).
@@ -288,6 +289,9 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   pack, close); **creating is blocked until every product is mapped or skipped** (if a SKU is missing, add it to
   All Cux City and press Refresh master). Picks are saved to PO_Item_Map. Duplicates point to the existing indent.
   `core/zepto_import.py`, `pages_src/zepto_upload.py`. Tested on the 17 Nov file: 22 products, 3,397 qty.
+- **Swiggy Bangalore** POs/GRNs come from Moksh (procurement_blr@mokshepl.com, files MOKS-1N60000590-*): PO numbers
+  MBFPO (BLR FNV1 / WH1), BLRPO (Bangalore FNV2 / WH2), BLNPO (Bangalore, "Bulk PP" items). Swiggy names look like
+  "Longan 100.0 g" → our style "100gm - Longan" (`master_add.new_sku_name`).
 - **Change date** (owner, All indents → an indent): move an indent to another delivery day (2 days back to
   tomorrow), ignoring the cutoff; same status, new version + Change_Log (`indents.move_date`).
 - **Start fresh** (Owner only): type CLEAR. It backs up the indent tabs to Backup_ tabs and then empties them.

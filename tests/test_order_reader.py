@@ -44,3 +44,11 @@ def test_zepto_po_column_format_with_packsize_and_unlabelled_total():
     r = order_reader.read("z.xlsx", data)
     assert [(x.name, x.qty) for x in r.lines] == [("Kiwi Sungold - 2 PIECE", 44), ("Blueberry Imported - 125 GRAM", 47)]
     assert r.total == 91
+
+
+def test_new_sku_name_swiggy_style():
+    from core.master_add import new_sku_name
+    assert new_sku_name("Longan 100.0 g") == "100gm - Longan"
+    assert new_sku_name("Bulk Semiripe Imported Avocado 1.0 Piece") == "1PC - Bulk Semiripe Imported Avocado"
+    assert new_sku_name("Bulk PP Royal Gala Apple 1.0 kg") == "1Kg - Bulk PP Royal Gala Apple"
+    assert new_sku_name("BULK GREEN KIWI 1.0 Pack") == "1Pack - BULK GREEN KIWI"

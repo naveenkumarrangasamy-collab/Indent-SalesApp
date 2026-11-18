@@ -30,6 +30,7 @@ def guess_parent(name: str, parents: list[str]) -> str:
     """The existing Parent SKU whose name is a word of the item ('Apple Fuji
     Imported' -> 'Apple'); '' when none (a new parent: not added)."""
     words = set(re.findall(r"[a-z]+", name.casefold()))
+    words |= {w[:-3] + "y" for w in words if w.endswith("ies")} | {w[:-1] for w in words if w.endswith("s")}
     hits = [p for p in parents if p and set(re.findall(r"[a-z]+", p.casefold())) <= words]
     return max(hits, key=len) if hits else ""
 
@@ -39,6 +40,14 @@ def new_sku_name(read_name: str) -> str:
     '2PC - Pear Packham Imported', '... - 250 GRAM' -> '250gm - ...'."""
     parts = re.split(r"\s+-\s+(?=\d)", read_name.strip(), maxsplit=1)
     core = " ".join(parts[0].split())
+    tail = re.fullmatch(r"(.+?)\s+([\d.]+)\s*(g|gm|gram|grams|kg|kgs|piece|pieces|pc|pcs|pack|packs)\.?",
+                        core, flags=re.I)
+    if len(parts) == 1 and tail:               # Swiggy style: 'Longan 100.0 g' -> '100gm - Longan'
+        n = fmt_num(float(tail.group(2)))
+        u = tail.group(3).casefold()
+        unit = ("gm" if u.startswith("g") else "Kg" if u.startswith("k")
+                else "Pack" if u.startswith("pack") else "PC")
+        return f"{n}{unit} - {' '.join(tail.group(1).split())}"
     _, pack = po_key(read_name)
     m = re.fullmatch(r"([\d.]+)(pc|g|kg)", pack or "")
     if not m:

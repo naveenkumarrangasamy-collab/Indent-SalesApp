@@ -43,7 +43,7 @@ def plan(m: Masters, city: str, customer: str, text: str) -> list[dict]:
         seen.add(_exact(ours))
         parent = master_add.guess_parent(raw, parents)
         rows.append({"Pasted": raw, "Parent SKU": parent, "Our SKU name": ours,
-                     "Result": "🆕 will be added" if parent else "🔴 new Parent SKU: add by hand"})
+                     "Result": "🆕 will be added" if parent else "🔴 pick Parent SKU"})
     return rows
 
 
@@ -64,17 +64,24 @@ def render(m: Masters | None, user) -> None:
     rows = plan(m, city, customer, text)
     if not rows:
         return
-
-    def color(r):
-        bg = "#e0ecff" if r["Result"].startswith("🆕") else "#fde2e1" if r["Result"].startswith("🔴") else ""
-        return [f"background-color:{bg}" if bg else ""] * len(r)
-    st.dataframe(pd.DataFrame(rows).style.apply(color, axis=1), hide_index=True, width="stretch")
-    new = [r for r in rows if r["Result"].startswith("🆕")]
+    parents = []
+    for c in m.customers(city):
+        parents += m.parents(city, c)
+    parents = sorted(set(p for p in parents if p))
+    df = pd.DataFrame(rows)
+    st.caption("🆕 = will be added · 🔴 = pick an existing Parent SKU to add it (a new fruit is never added here)")
+    ed = st.data_editor(
+        df, hide_index=True, width="stretch", key=f"as_ed_{hash(text)}",
+        disabled=["Pasted", "Result"],
+        column_config={"Parent SKU": st.column_config.SelectboxColumn("Parent SKU", options=parents),
+                       "Our SKU name": st.column_config.TextColumn("Our SKU name")})
+    new = [r for r in ed.to_dict("records")
+           if not r["Result"].startswith("✓") and r.get("Parent SKU") and str(r.get("Our SKU name", "")).strip()]
     if st.button(f"Add {len(new)} to the sheet", type="primary", disabled=not new, key="as_go",
                  icon=":material/add:"):
         items = []
         for r in new:
-            parent, sku = r["Parent SKU"], r["Our SKU name"]
+            parent, sku = r["Parent SKU"], " ".join(str(r["Our SKU name"]).split())
             need = m.needs_variety(parent)
             items.append({"Parent SKU": parent, "Customer SKU Name": sku,
                           "Variety": m.variety_from_name(parent, sku) if need else "",
@@ -87,5 +94,5 @@ def render(m: Masters | None, user) -> None:
             return
         masters.clear_cache()
         st.session_state.pop("as_text", None)
-        common.flash("success", "Added: " + ", ".join(r["Our SKU name"] for r in new) + ". " + "; ".join(notes))
+        common.flash("success", "Added: " + ", ".join(i["Customer SKU Name"] for i in items) + ". " + "; ".join(notes))
         st.rerun()
