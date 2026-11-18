@@ -27,7 +27,8 @@ PICTURE_TYPES = ("png", "jpg", "jpeg", "webp")
 UNIT_WORDS = {"piece", "pieces", "pc", "pcs", "gram", "grams", "gm", "g", "kg", "pack", "packs", "box", "tray"}
 _NAME_HEADS = ("productname", "itemname", "item", "product", "description", "itemdescription", "sku",
                "skuname", "customerskuname", "name", "particulars")
-_QTY_HEADS = ("qty", "quantity", "orderqty", "total", "summation", "units", "noofunits")
+_QTY_HEADS = ("qty", "quantity", "orderqty", "po", "poqty", "indentqty", "total", "summation", "units",
+              "noofunits")
 
 
 @dataclass
@@ -72,17 +73,23 @@ def _excel(data: bytes, store: str) -> OrderRead:
             qi = next((head.index(n) for n in _QTY_HEADS if n in head), None)
             if ni is None or qi is None:
                 continue
-            ui = next((head.index(n) for n in ("uom", "unit", "packsize", "pack") if n in head), None)
+            ui = next((head.index(n) for n in ("uom", "unit") if n in head), None)
+            pi = next((head.index(n) for n in ("packsize", "pack", "packqty") if n in head), None)
             out = OrderRead(kind="excel")
             for row in values[h + 1:]:
                 get = lambda i: row[i] if i is not None and i < len(row) else None  # noqa: E731
                 name, q = _s(get(ni)), _num(get(qi))
+                if not name and q is not None and q > 0:
+                    out.total = q                      # an unlabelled total row under the qty column
+                    continue
                 if not name or q is None or q <= 0:
                     continue
                 if name.casefold().startswith("total"):
                     out.total = q
                     continue
-                uom = _s(get(ui))
+                uom, size = _s(get(ui)), _num(get(pi))
+                if size and uom and not re.match(r"\d", uom):
+                    uom = f"{size:g} {uom}"           # packsize 2 + PIECE -> '2 PIECE', 250 + GRAM -> '250 GRAM'
                 out.lines.append(POLine(name=f"{name} - {uom}" if uom else name, qty=q))
             return out
     raise ImportFileError("No sheet has an item column and a qty column.")

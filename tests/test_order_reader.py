@@ -35,3 +35,12 @@ def test_new_items_parent_and_name():
     assert master_add.guess_parent("Mango Imported - 1 PIECE", parents) == ""      # new parent: not added
     assert master_add.new_sku_name("Apple Fuji Imported - 2 PIECE") == "2PC - Apple Fuji Imported"
     assert master_add.new_sku_name("Garlic Peeled - 200 GRAM") == "200gm - Garlic Peeled"
+
+
+def test_zepto_po_column_format_with_packsize_and_unlabelled_total():
+    data = _xlsx([[None, None, "ZEPTO INDENT"], [None, "PRODUCT NAME", "PO", "UOM", "GRAMS", "packsize"],
+                  [None, "Kiwi Sungold", 44, "PIECE", 225, 2], [None, "Blueberry Imported", 47, "GRAM", 125, 125],
+                  [None, "Bloom Grapefruit", 0, "PIECE", 400, 1], [None, None, 91]])
+    r = order_reader.read("z.xlsx", data)
+    assert [(x.name, x.qty) for x in r.lines] == [("Kiwi Sungold - 2 PIECE", 44), ("Blueberry Imported - 125 GRAM", 47)]
+    assert r.total == 91
