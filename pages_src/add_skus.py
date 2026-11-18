@@ -68,10 +68,16 @@ def render(m: Masters | None, user) -> None:
     for c in m.customers(city):
         parents += m.parents(city, c)
     parents = sorted(set(p for p in parents if p))
+    extra = " ".join(st.text_input("New Parent SKU (only when approved, e.g. Garlic)", key="as_newp").split())
+    if extra and extra.casefold() not in {p.casefold() for p in parents}:
+        parents.append(extra)
+        for r in rows:                          # fill it where the name has that word
+            if r["Result"].startswith("🔴") and master_add.guess_parent(r["Pasted"], [extra]):
+                r["Parent SKU"], r["Result"] = extra, "🆕 will be added (new parent)"
     df = pd.DataFrame(rows)
     st.caption("🆕 = will be added · 🔴 = pick an existing Parent SKU to add it (a new fruit is never added here)")
     ed = st.data_editor(
-        df, hide_index=True, width="stretch", key=f"as_ed_{hash(text)}",
+        df, hide_index=True, width="stretch", key=f"as_ed_{hash(text)}_{extra}",
         disabled=["Pasted", "Result"],
         column_config={"Parent SKU": st.column_config.SelectboxColumn("Parent SKU", options=parents),
                        "Our SKU name": st.column_config.TextColumn("Our SKU name")})
