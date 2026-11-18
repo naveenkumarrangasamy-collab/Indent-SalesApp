@@ -210,7 +210,7 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
     base = pd.DataFrame([{
         "!": attach.FLAG_LABEL.get(fl.get(x.customer_sku_name, {}).get("flag", ""), ""),
         "Parent SKU": x.parent_sku, "Customer SKU name": x.customer_sku_name,
-        "Variety": x.variety or "", "Lot": x.lot, "Lot size": lot_size(x.customer_sku_name) or "",
+        "Variety": x.variety or ("Choose" if m.needs_variety(x.parent_sku) else "—"), "Lot": x.lot, "Lot size": lot_size(x.customer_sku_name) or "",
         "Qty": float(x.qty), "Price": float(x.price), "Line total": round(float(x.amount), 2),
         "Remove": False} for x in lines])
     varieties = sorted({v for x in lines for v in m.varieties_for(x.parent_sku)})
@@ -222,7 +222,8 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
         disabled=[c for c in cols if c not in ("Variety", "Qty", "Price", "Remove")],
         column_config={
             "!": st.column_config.TextColumn("", width="small"),
-            "Variety": st.column_config.SelectboxColumn(options=[""] + varieties, width="small"),
+            "Variety": st.column_config.SelectboxColumn(options=["Choose", "—"] + varieties, width="small",
+                                                        help="Apple only: double-click to choose"),
             "Qty": st.column_config.NumberColumn(min_value=0, step=1, format="%d"),
             "Price": st.column_config.NumberColumn(min_value=0.01, step=1.0, format="%.2f"),
             "Line total": st.column_config.NumberColumn(format="₹%.2f"),
@@ -244,7 +245,8 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
         variety = x.variety
         if "Variety" in r and m.needs_variety(x.parent_sku):
             fixed = m.variety_from_name(x.parent_sku, x.customer_sku_name)
-            variety = fixed or (r.get("Variety") or "")
+            picked = r.get("Variety") or ""
+            variety = fixed or ("" if picked in ("Choose", "—") else picked)
         if qty != float(x.qty) or price != float(x.price) or variety != x.variety:
             changed = True
         new_lines.append(IndentLine(parent_sku=x.parent_sku, customer_sku_name=x.customer_sku_name,
@@ -254,7 +256,18 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
     missing = [x.customer_sku_name for x in lines if m.needs_variety(x.parent_sku) and not x.variety
                and not m.variety_from_name(x.parent_sku, x.customer_sku_name)]
     if missing:
-        st.caption("🟡 Choose the Variety for: " + ", ".join(missing))
+        st.warning("🟡 Choose the variety for these Apple items:")
+        for name in missing:
+            x = next((x for x in new_lines if x.customer_sku_name == name), None)
+            if x is None:
+                continue
+            c = st.columns([2.5, 1.5, 2])
+            c[0].markdown(f"**{name}**")
+            v = c[1].selectbox("Variety", m.varieties_for(x.parent_sku), index=None, placeholder="Choose",
+                               key=f"it_var_{rev}_{name}", label_visibility="collapsed")
+            if v:
+                x.variety = v
+                changed = True
     if changed or errors:
         state.set_lines(new_lines, structural=True)
         s["it_rev"] = rev + 1
