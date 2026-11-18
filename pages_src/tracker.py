@@ -1,5 +1,5 @@
-"""Hourly indent tracker: how each customer's and store's indent changed hour
-by hour from 8 AM to 2 PM on the delivery day (the same hours as the hourly
+"""Hourly indent tracker: how each customer's and store's indent changed every
+30 minutes (19 Nov; was hourly) from 8 AM to 2 PM on the delivery day (the same hours as the hourly
 e-mail). Rebuilt from the saved versions in Indent_Lines, so nothing extra
 has to be recorded. Click a customer or a store to see what changed."""
 from __future__ import annotations
@@ -10,8 +10,7 @@ from html import escape
 import pandas as pd
 import streamlit as st
 
-from core import config, hourly, indents, reports
-from core.models import fmt_num, fmt_q
+from core import config, hourly, indents, reports, tracking
 from core.auth import User
 from core.sheets import SheetError
 from pages_src import common
@@ -32,19 +31,8 @@ def _hour_label(h: int) -> str:
 
 
 def _points(day: str) -> list[tuple[str, datetime | None]]:
-    """(label, moment) for every hour 8 AM-2 PM of the delivery day; None = still to come.
-    Plus 'Now' while the day is still open."""
-    first, last = hourly.hours()
-    d = date.fromisoformat(day)
-    now = config.now_ist()
-    out = []
-    for h in range(first, last + 1):
-        t = datetime.combine(d, time(h, 0), tzinfo=config.IST)
-        out.append((_hour_label(h), t if t <= now else None))
-    last_t = datetime.combine(d, time(last, 0), tzinfo=config.IST)
-    if now < last_t:
-        out.append(("Now", now))
-    return out
+    """Every 30 min from 8 AM to 2 PM of the delivery day (+ Now)."""
+    return tracking.points(day)
 
 
 def _states(lines: pd.DataFrame, day: str, points) -> dict[str, pd.DataFrame | None]:
@@ -167,8 +155,8 @@ def render(user: User) -> None:
 
     st.markdown("### Hourly indent tracker")
     first, last = hourly.hours()
-    st.caption(f"Each store's indent qty at every hour from {_hour_label(first)} to {_hour_label(last)} "
-               "on the delivery day. 🟨 previous → new qty where it changed that hour · 🟩 no change. "
+    st.caption(f"Each store's indent qty every 30 minutes from {_hour_label(first)} to {_hour_label(last)} "
+               "on the delivery day. 🟨 previous → new qty where it changed · 🟩 no change. "
                "**Indent vs PO** compares each item with its PO(s).")
 
     # ---- the three filters
@@ -213,6 +201,15 @@ def render(user: User) -> None:
 
 
 def _changes(scoped, day, points, hours, states, city, cust) -> None:
+    # ---- only the items that changed (19 Nov: easiest to read)
+    st.markdown("**Item changes** (only SKUs whose qty changed)")
+    pi = _with_change(_pivot(states, ["customer", "store", "customer_sku_name"]), hours).rename(
+        columns={"customer": "Customer", "store": "Store", "customer_sku_name": "Customer SKU Name"})
+    pi = pi[pi["Status"] != "No change"].reset_index(drop=True) if not pi.empty else pi
+    if pi.empty:
+        st.caption("No item changed in these half hours.")
+    else:
+        st.dataframe(_style(pi, hours), hide_index=True, width="stretch")
     # ---- by customer
     st.markdown("**By customer**")
     pc = _with_change(_pivot(states, ["customer"]), hours).rename(columns={"customer": "Customer"})
@@ -248,39 +245,10 @@ def _po_tracker(lines: pd.DataFrame, ids: set) -> None:
     except SheetError as e:
         common.sheet_error(e)
         return
-    out = []
-    for iid in sorted(ids):
-        cur = indents.snapshot(lines, iid)
-        if cur is None or cur.status == "Cancelled":
-            continue
-        info = indents.po_info(po, iid)
-        h = cur.header
-        multi = indents.is_multi_po(h.customer)
-        if info["pos"] == 0:
-            state_ = "No PO yet"
-        elif info["qty"] is None:
-            state_ = "PO without item qty"
-        elif multi and not info["ended"]:
-            state_ = f"{info['pos']} PO(s), more coming"
-        else:
-            state_ = ""
-        rows = indents.po_vs_indent(cur.lines, info) if info["qty"] is not None else [
-            {"customer_sku_name": x.customer_sku_name, "indent_qty": float(x.qty), "po_qty": None,
-             "diff": None, "ok": None} for x in cur.lines]
-        for r in rows:
-            out.append({"Customer": h.customer, "Store": h.store, "Indent": iid,
-                        "Customer SKU Name": r["customer_sku_name"],
-                        "Indent qty": fmt_q(r["indent_qty"]),
-                        "PO qty": fmt_q(r["po_qty"]),
-                        "Difference": "" if r["diff"] is None or r["ok"] else
-                        ("+" if r["diff"] > 0 else "") + fmt_num(r["diff"]),
-                        "Status": state_ or ("Match" if r["ok"] else
-                                             "Not on PO" if r["po_qty"] is None else
-                                             "Not on indent" if r["indent_qty"] is None else "Differs")})
-    if not out:
+    df = tracking.po_rows(lines, po, ids)
+    if df.empty:
         st.info("No indents with these filters.")
         return
-    df = pd.DataFrame(out)
     bad = df["Status"].isin(["Differs", "Not on PO", "Not on indent"])
     n_st = df[bad][["Customer", "Store"]].drop_duplicates().shape[0]
     show_all = st.toggle("Show matching items too", key="tk_po_all")

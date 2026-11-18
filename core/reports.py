@@ -133,23 +133,32 @@ def make_ready_view(rows: pd.DataFrame, m: Masters | None) -> pd.DataFrame:
 
 
 def production_mail_files(rows: pd.DataFrame, m: Masters | None, day: str,
-                          slot_label: str, scope: str = "everything") -> list[tuple[str, bytes, str]]:
+                          slot_label: str, scope: str = "everything", changes: pd.DataFrame | None = None,
+                          po_diff: pd.DataFrame | None = None) -> list[tuple[str, bytes, str]]:
     """The production e-mail attachments: both tables (make-ready list + by spec size) as PDF and Excel."""
     p, mr = production_view(rows, m), make_ready_view(rows, m)
     n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
     sub = [f"Delivery {fmt_day(day)} - as of {slot_label} - {scope}", f"{n} indents - all customers together"]
     stamp = str(day).replace("-", "")
     hh = slot_label.split(",")[0].replace(":", "").replace(" ", "")
-    pdf = sections_pdf("Production sheet", sub,
-                       [("1) Make-ready list", "All customers and sizes together", mr),
-                        ("2) By spec size", "All customers clubbed per spec size", p)],
-                       footer=f"MT Indent - {slot_label}")
+    secs = [("1) Make-ready list", "All customers and sizes together", mr),
+            ("2) By spec size", "All customers clubbed per spec size", p)]
+    sheets = {"Make-ready list": mr, "By spec size": p}
+    if changes is not None and not changes.empty:
+        secs.append(("3) SKU changes since the last mail", "Only items whose qty changed", changes))
+        sheets["SKU changes"] = changes
+    if po_diff is not None and not po_diff.empty:
+        secs.append(("4) Indent vs PO differences", "Only items that differ", po_diff))
+        sheets["Indent vs PO"] = po_diff
+    pdf = sections_pdf("Production sheet", sub, secs, footer=f"MT Indent - {slot_label}")
     return [(f"Production_{stamp}_{hh}.pdf", pdf, "application/pdf"),
-            (f"Production_{stamp}_{hh}.xlsx", xlsx({"Make-ready list": mr, "By spec size": p}), XLSX)]
+            (f"Production_{stamp}_{hh}.xlsx", xlsx(sheets), XLSX)]
 
 
 def production_mail_html(rows: pd.DataFrame, m: Masters | None, day: str,
-                         slot_label: str, name: str = "", scope: str = "everything") -> str:
+                         slot_label: str, name: str = "", scope: str = "everything",
+                         changes: pd.DataFrame | None = None, po_diff: pd.DataFrame | None = None,
+                         since: str = "") -> str:
     p, mr = production_view(rows, m), make_ready_view(rows, m)
     n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
     waiting = rows[rows["status"] != STATUS_FROZEN]["indent_id"].nunique() if n else 0
@@ -162,6 +171,12 @@ def production_mail_html(rows: pd.DataFrame, m: Masters | None, day: str,
         _html_table(mr, {"Make ready"}),
         "<h3 style='color:#1c6b49'>2. Production sheet by spec size</h3>",
         _html_table(p, {"Total"}),
+        "<h3 style='color:#1c6b49'>3. SKU changes" + (f" since {html.escape(since)}" if since else "") + "</h3>",
+        _html_table(changes, set()) if changes is not None and not changes.empty
+        else "<p style='color:#666'>No item changed.</p>",
+        "<h3 style='color:#1c6b49'>4. Indent vs PO differences</h3>",
+        _html_table(po_diff, set()) if po_diff is not None and not po_diff.empty
+        else "<p style='color:#666'>Every PO uploaded so far matches its indent.</p>",
         "<p style='color:#888;font-size:12px'>Sent by the MT Indent app.</p>"])
 
 
