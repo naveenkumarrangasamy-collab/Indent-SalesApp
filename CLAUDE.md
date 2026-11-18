@@ -125,7 +125,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Lot** is detected from the SKU name: Kg; gm/g/pack → Pack; pc/pcs → Pcs; box → Box; tray → Tray. A Lot/UOM column in the master overrides it.
 - Qty must be a whole number. The price must be above 0.
 - **Apple needs a variety.** It is taken from the name (Royal Gala → Gala, Granny → Granny Smith, Red Delicious → RD) or picked by the user.
-- **Attach the order (18 Nov)** on Create / edit indent (above the unchanged Add item form; `pages_src/attach.py`,
+- **Attach the order (18 Nov)** — pictures switched OFF for now (secret `read_pictures`, default false; Excel
+  and PDF only) — on Create / edit indent (above the unchanged Add item form; `pages_src/attach.py`,
   `core/order_reader.py`): a **picture** (free OCR: Tesseract, `packages.txt` tesseract-ocr; weak on angled phone
   photos — 18 Nov test: ~7 of 22 lines; better on screenshots), an **Excel** (Zepto format → the column of the
   chosen store, or any sheet with item + qty columns) or a **PDF** (po_reader). Lines are matched (po_reader.match,

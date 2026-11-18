@@ -14,7 +14,7 @@ import hashlib
 
 import streamlit as st
 
-from core import master_add, order_reader, po_reader
+from core import config, master_add, order_reader, po_reader
 from core.bulk_import import ImportFileError
 from core.masters import Masters
 from core.models import IndentLine, fmt_num
@@ -132,8 +132,9 @@ def render(m: Masters) -> None:
     s = st.session_state
     with st.container(border=True, key="mt_attach"):
         c = st.columns([3, 1])
-        up = c[0].file_uploader("Attach the order: picture, Excel or PDF",
-                                type=list(order_reader.PICTURE_TYPES) + ["xlsx", "xls", "pdf"],
+        up = c[0].file_uploader("Attach the order: Excel or PDF",
+                                type=["xlsx", "xls", "pdf"] + (list(order_reader.PICTURE_TYPES)
+                                                               if config.read_pictures() else []),
                                 key=f"rd_file_{s.get('rd_rev', 0)}",
                                 help="The items are read and added to the list below for you to check. "
                                      "Nothing is saved until you submit.")

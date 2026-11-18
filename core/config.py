@@ -176,6 +176,12 @@ def po_store_prefixes() -> dict[str, str]:
         return {}
 
 
+def read_pictures() -> bool:
+    """Attach on Create indent also takes pictures (OCR). Off for now (18 Nov: user
+    skips pictures; free OCR is weak on phone photos). Secret `read_pictures`."""
+    return str(get("read_pictures", "false")).strip().lower() in ("1", "true", "yes", "y")
+
+
 def tray_parents() -> list[str]:
     """Parent SKUs packed in trays (shown as 'Tray', not 'Box') on the make-ready
     list. Secret `tray_parents`, default ["Avocado", "Blueberry"]."""
