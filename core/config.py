@@ -147,14 +147,14 @@ def edit_cutoff_hour() -> int:
 
 def customer_cutoff_hours() -> dict[str, int]:
     """Per-customer edit cutoff hour on the delivery day (IST), overriding
-    `edit_cutoff_hour`. Default: Zepto closes at 1 AM on the delivery day,
-    because its stock is processed the day before. Secret `customer_cutoff_hours`,
+    `edit_cutoff_hour`. Default: none (every customer, Zepto too, closes at
+    `edit_cutoff_hour`; Zepto was 1 AM until 18 Nov). Secret `customer_cutoff_hours`,
     e.g. {Zepto = 1}."""
-    v = get("customer_cutoff_hours", {"Zepto": 1})
+    v = get("customer_cutoff_hours", {})
     try:
         return {str(k).strip().casefold(): min(23, max(0, int(h))) for k, h in dict(v).items()}
     except (TypeError, ValueError):
-        return {"zepto": 1}
+        return {}
 
 
 def multi_po_customers() -> set[str]:

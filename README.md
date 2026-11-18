@@ -60,7 +60,7 @@ Production clubs demand across customers by **City + Parent SKU + Variety + Lot 
 - **All indents**: each item has **Edit** (qty and price; qty may be 0); each change saves a new version and a Change_Log entry (within the edit window).
 - **Submit / Update** opens a review box with everything entered (and, for corrections, the list of changes); nothing is saved until **Confirm**.
 - **Removing an unsaved item, clearing the form or discarding changes** asks for confirmation first.
-- **Edit window**: an indent can be corrected until **11:00 PM IST on its delivery date** (delivery 16 Nov → editable until 16 Nov 11:00 PM; Zepto 1 AM), whenever it was created. After that, Edit/Update are disabled and the save is refused, except a correction to match the customer's PO (from the PO upload). Change with `edit_cutoff_hour` (and `edit_cutoff_days`, days after the delivery date, default 0) in the secrets.
+- **Edit window**: an indent can be corrected until **11:00 PM IST on its delivery date** (delivery 16 Nov → editable until 16 Nov 11:00 PM; Zepto too), whenever it was created. After that, Edit/Update are disabled and the save is refused, except a correction to match the customer's PO (from the PO upload). Change with `edit_cutoff_hour` (and `edit_cutoff_days`, days after the delivery date, default 0) in the secrets.
 - **Spec-Size** (from *Mapping Whole*, the active origin's size) is a column on both production reports. Origin itself stays hidden. Set `show_spec = true` in the secrets to bring it back.
 - If the app is **not connected to the Google Sheet** (secrets missing or wrong), every page shows a red banner with the exact reason.
 

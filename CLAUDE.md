@@ -182,7 +182,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   Tested on the 4 sample POs: Zepto 22/22 lines read, totals ✓, 20 matched by name.
 - **Lock** (manual freeze, "processing started"): status **Locked**: no edits, still waiting for its PO; a later
   PO upload still freezes it and sends the SO/PO mail.
-- **Zepto cutoff 1 AM on the delivery day** (secret `customer_cutoff_hours`, default {Zepto = 1}); others 11 PM.
+- **Zepto cutoff = 11 PM like everyone** (18 Nov; was 1 AM). Per-customer override still possible via secret `customer_cutoff_hours` (default {} now).
 
 ### Production, batching and tracker (owner + warehouse only)
 

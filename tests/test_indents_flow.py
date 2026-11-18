@@ -381,14 +381,15 @@ def test_lock_then_po(backend):
     assert frozen and indents.snapshot(indents.read_lines(fresh=True), iid).status == "Frozen"
 
 
-def test_zepto_cutoff_1am(backend, monkeypatch):
+def test_zepto_cutoff_same_as_others(backend, monkeypatch):
     day = config.now_ist().date()
     at = lambda h, m=0: datetime.combine(day, datetime.min.time(), tzinfo=config.IST) + timedelta(hours=h, minutes=m)
-    assert indents.cutoff_hour("Zepto") == 1 and indents.cutoff_hour("More") == 23
-    assert indents.can_edit(day.isoformat(), now=at(0, 30), customer="Zepto")
-    assert not indents.can_edit(day.isoformat(), now=at(1), customer="zepto")
-    assert indents.can_edit(day.isoformat(), now=at(9), customer="More")
-
+    assert indents.cutoff_hour("Zepto") == 23 and indents.cutoff_hour("More") == 23
+    assert indents.can_edit(day.isoformat(), now=at(22, 59), customer="Zepto")
+    assert not indents.can_edit(day.isoformat(), now=at(23), customer="zepto")
+    # a per-customer override from the secrets still works
+    monkeypatch.setattr(indents.config, "customer_cutoff_hours", lambda: {"zepto": 1})
+    assert indents.cutoff_hour("Zepto") == 1 and not indents.can_edit(day.isoformat(), now=at(1), customer="Zepto")
 
 def test_po_correction_allowed_after_cutoff(backend, monkeypatch):
     iid = indents.submit_new(H, [HASS], "s@x.com")
