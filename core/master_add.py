@@ -4,8 +4,7 @@ Rules (agreed 18 Nov):
 - an item whose Parent SKU already exists (Apple, Avocado, Kiwi, Garlic once it is
   in the master, ...) is added automatically to All Cux City and the New tab when
   the indent is submitted; the New-tab cells still to fill (Spec-Repacking,
-  Spec-Size, Spec-Origin, variety for Apple) are coloured yellow and Status says
-  "To fill - added by <user>, <date>";
+  Spec-Size, Spec-Origin, variety for Apple) are coloured yellow (no status text);
 - an item whose parent is not in the master (e.g. Mango) is never added: it needs
   real attention, so the line stays red until it is handled by hand.
 Until the specs are filled, production shows the item as "mapping not done".
@@ -14,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-from core import config, importer
+from core import importer
 from core.bulk_import import _aligned
 from core.lots import detect_lot
 from core.models import fmt_num
@@ -22,9 +21,8 @@ from core.po_reader import po_key
 from core.schema import norm_header
 
 YELLOW = (1.0, 0.92, 0.55)
-STATUS = "Status"
 NEW_TAB_COLS = ["City", "Customer", "Parent SKU", "Customer SKU Name", "variety", "Spec-Repacking",
-                "Spec-Size", "Spec-Origin", STATUS]
+                "Spec-Size", "Spec-Origin"]
 TO_FILL = ["Spec-Repacking", "Spec-Size", "Spec-Origin"]
 
 
@@ -61,8 +59,6 @@ def add_items(backend, city: str, customer: str, items: list[dict], user: str) -
         return []
     notes = []
     tabs = set(backend.list_tabs())
-    stamp = config.now_ist().strftime("%d %b %Y %H:%M")
-    who = user.split("@")[0]
     if importer.ALL_CUX_CITY in tabs:
         head = (backend.read_values(importer.ALL_CUX_CITY) or [[]])[0]
         heads = {norm_header(h) for h in head}
@@ -84,18 +80,14 @@ def add_items(backend, city: str, customer: str, items: list[dict], user: str) -
         if not head:
             head = list(NEW_TAB_COLS)
             backend._append_raw(tab, [head])
-        if norm_header(STATUS) not in {norm_header(h) for h in head}:
-            backend._update_raw(tab, 1, {len(head): STATUS})
-            head = head + [STATUS]
         rows = []
         for r in items:
             vals = {"city": city, "customer": customer, "parentsku": r["Parent SKU"],
-                    "customerskuname": r["Customer SKU Name"], "variety": r.get("Variety", ""),
-                    norm_header(STATUS): f"To fill - added by {who}, {stamp}"}
+                    "customerskuname": r["Customer SKU Name"], "variety": r.get("Variety", "")}
             rows.append(_aligned(head, vals))
         first, last = backend._append_raw(tab, rows)
         normed = [norm_header(h) for h in head]
-        cols = [normed.index(norm_header(c)) for c in TO_FILL + [STATUS] if norm_header(c) in normed]
+        cols = [normed.index(norm_header(c)) for c in TO_FILL if norm_header(c) in normed]
         if any(not r.get("Variety") and r.get("needs_variety") for r in items) and "variety" in normed:
             cols.append(normed.index("variety"))
         try:

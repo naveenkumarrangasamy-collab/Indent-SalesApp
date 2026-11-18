@@ -141,7 +141,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   saved items not in the file are listed (set them to 0 if the file replaces them).
 - **New items → master (anyone, on Submit/Update)**: `core/master_add.py` appends them to All Cux City and the New
   tab; in the New tab Spec-Repacking / Spec-Size / Spec-Origin (+ variety when Apple has none) are coloured
-  **yellow** and a **Status** column says "To fill - added by <user>, <date>". Production shows such SKUs as
+  **yellow** (highlight only; no Status text, user 18 Nov). Production shows such SKUs as
   **"mapping not done (name)"** (qty kept, own line, listed in the warning) until Spec-Size or Spec-Repacking is
   filled. Variety for an indent line also comes from the New tab's variety column now.
 - **Item list (18 Nov)**: one table (data_editor): Parent SKU, Customer SKU name, Variety (choose for Apple when not
@@ -270,7 +270,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Bulk download** (owners only) on All indents and Upload PO: tick "Select all" or pick indents. It downloads one Excel with two sheets: **Indents** (one row each, including the PO number) and **Lines** (every item).
 - **Add SKUs** (Access tab, owners; 18 Nov): paste SKU names (order style or ours) for a city + customer →
   preview (✓ already in master by exact name / 🆕 will be added / 🔴 new Parent SKU) → "Add to the sheet" writes
-  them to All Cux City + New tab (yellow spec cells, Status "To fill") via `master_add.add_items`. `pages_src/add_skus.py`.
+  them to All Cux City + New tab (yellow spec cells only, no status text) via `master_add.add_items`. `pages_src/add_skus.py`.
 - **Import indents** (Access tab; **Owner only**, not Owner L):
   - Input is an Excel upload or rows pasted as text (tab, `|` or comma separated, header first).
   - Columns: Delivery date, City, Customer, Store, Parent SKU, Item / Customer SKU Name, Qty, and optional Price/Rate.
