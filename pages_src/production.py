@@ -173,8 +173,9 @@ def render(user: User) -> None:
     _next_day(m)
     gaps = not_in_base(all_lines, m)
     if not gaps.empty:
-        with st.expander(f"⚠️ {len(gaps)} SKU name(s) are not in the New tab: they show as "
-                         "\"not in New tab\" and are kept on separate lines", expanded=False):
+        with st.expander(f"⚠️ {len(gaps)} SKU name(s) have an indent but no mapping yet (not in the New "
+                         "tab, or their spec is still empty): they show as \"not in New tab\" / \"mapping not "
+                         "done\" and are kept on separate lines", expanded=True):
             st.caption("Add them to the New tab (City, Customer, Parent SKU, Customer SKU Name, variety, "
                        "Spec-Repacking, Spec-Size, Spec-Origin). The app re-reads it every few minutes.")
             st.dataframe(gaps, hide_index=True, width="stretch")

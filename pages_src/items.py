@@ -162,8 +162,12 @@ SAVED_HELP = "Items already saved on the indent cannot be removed. To drop it, s
 def _lines_table(m: Masters) -> None:
     lines = state.lines()
     if not lines:
-        st.info("No items yet. Add the first item above.")
+        st.info("No items yet. Add them above, or attach the order.")
         return
+    total = sum(x.amount for x in lines)
+    st.markdown(f"**Items in this indent** · order value <span style='color:#1c6b49'><b>₹{total:,.2f}</b>"
+                f"</span> <span class='mt-muted'>· {len(lines)} items · qty "
+                f"{fmt_num(sum(to_number(x.qty) for x in lines))}</span>", unsafe_allow_html=True)
     has_variety = any(m.needs_variety(x.parent_sku) or x.variety for x in lines)
     with st.container(key="mtdesk_items"):
         _lines_desktop(m, lines, has_variety)
@@ -196,32 +200,65 @@ def _lines_phone(m: Masters, lines) -> None:
 
 
 def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
-    head = st.columns(_ROW_W)
-    for col, label in zip(head, ["Parent SKU", "Customer SKU Name", "Variety" if has_variety else "",
-                                 "Lot", "Lot Size", "Qty", "Price", "Amount", "", ""]):
-        col.markdown(f"<span class='mt-muted'>{label}</span>", unsafe_allow_html=True)
-    for i, x in enumerate(lines):
-        c = st.columns(_ROW_W, vertical_alignment="center")
-        c[0].write(x.parent_sku)
-        c[1].write(x.customer_sku_name)
-        if has_variety:
-            needs = m.needs_variety(x.parent_sku)
-            c[2].markdown(x.variety or ("<span style='color:#b42318'>choose</span>" if needs else "—"),
-                          unsafe_allow_html=True)
-        c[3].write(x.lot)
-        c[4].write(lot_size(x.customer_sku_name) or "—")
-        c[5].markdown(f"<span class='num'>{fmt_num(x.qty)}</span>", unsafe_allow_html=True)
-        c[6].markdown(f"<span class='num'>{x.price:,.2f}</span>", unsafe_allow_html=True)
-        c[7].markdown(f"<span class='num'>{x.amount:,.2f}</span>", unsafe_allow_html=True)
-        if c[8].button("Edit", icon=":material/edit:", key=f"it_e_{i}_{x.customer_sku_name}",
-                       width="stretch", help="Change qty, price or variety"):
-            st.session_state["pending_edit"] = x.customer_sku_name
-        if state.is_saved_line(x.customer_sku_name):
-            c[9].markdown("<span class='mt-muted' title='Saved items cannot be removed; set qty to 0'>"
-                          "🔒 saved</span>", unsafe_allow_html=True)
-        elif c[9].button("Delete", icon=":material/delete:", key=f"it_d_{i}_{x.customer_sku_name}",
-                         width="stretch", help="Remove this item"):
-            st.session_state["pending_remove"] = [x.customer_sku_name]
+    """The item list as one table: qty, price and (Apple) variety are typed in the
+    row; the bin removes a line (saved items cannot be removed: set qty 0).
+    Lines read from an attached file are flagged: 🟡 check, 🆕 new item."""
+    from pages_src import attach
+    fl = attach.flags()
+    s = st.session_state
+    rev = s.get("it_rev", 0)
+    base = pd.DataFrame([{
+        "!": attach.FLAG_LABEL.get(fl.get(x.customer_sku_name, {}).get("flag", ""), ""),
+        "Parent SKU": x.parent_sku, "Customer SKU name": x.customer_sku_name,
+        "Variety": x.variety or "", "Lot": x.lot, "Lot size": lot_size(x.customer_sku_name) or "",
+        "Qty": float(x.qty), "Price": float(x.price), "Line total": round(float(x.amount), 2),
+        "Remove": False} for x in lines])
+    varieties = sorted({v for x in lines for v in m.varieties_for(x.parent_sku)})
+    cols = list(base.columns) if (has_variety or fl) else [c for c in base.columns if c != "Variety"]
+    if not fl:
+        cols = [c for c in cols if c != "!"]
+    ed = st.data_editor(
+        base[cols], key=f"it_ed_{rev}", hide_index=True, width="stretch",
+        disabled=[c for c in cols if c not in ("Variety", "Qty", "Price", "Remove")],
+        column_config={
+            "!": st.column_config.TextColumn("", width="small"),
+            "Variety": st.column_config.SelectboxColumn(options=[""] + varieties, width="small"),
+            "Qty": st.column_config.NumberColumn(min_value=0, step=1, format="%d"),
+            "Price": st.column_config.NumberColumn(min_value=0.01, step=1.0, format="%.2f"),
+            "Line total": st.column_config.NumberColumn(format="₹%.2f"),
+            "Remove": st.column_config.CheckboxColumn("🗑", help="Remove this line (not for saved items)",
+                                                      width="small")})
+    new_lines, errors, changed = [], [], False
+    for x, r in zip(lines, ed.to_dict("records")):
+        if r.get("Remove"):
+            if state.is_saved_line(x.customer_sku_name):
+                errors.append(f"{x.customer_sku_name} is saved on the indent: set its qty to 0 instead.")
+                new_lines.append(x)
+            else:
+                changed = True
+            continue
+        qty = r.get("Qty")
+        qty = float(x.qty) if qty is None or qty != qty else float(qty)
+        price = r.get("Price")
+        price = float(x.price) if price is None or price != price or price <= 0 else float(price)
+        variety = x.variety
+        if "Variety" in r and m.needs_variety(x.parent_sku):
+            fixed = m.variety_from_name(x.parent_sku, x.customer_sku_name)
+            variety = fixed or (r.get("Variety") or "")
+        if qty != float(x.qty) or price != float(x.price) or variety != x.variety:
+            changed = True
+        new_lines.append(IndentLine(parent_sku=x.parent_sku, customer_sku_name=x.customer_sku_name,
+                                    variety=variety, lot=x.lot, qty=qty, price=price))
+    for e in errors:
+        st.warning(e)
+    missing = [x.customer_sku_name for x in lines if m.needs_variety(x.parent_sku) and not x.variety
+               and not m.variety_from_name(x.parent_sku, x.customer_sku_name)]
+    if missing:
+        st.caption("🟡 Choose the Variety for: " + ", ".join(missing))
+    if changed or errors:
+        state.set_lines(new_lines, structural=True)
+        s["it_rev"] = rev + 1
+        st.rerun()
 
 
 @st.dialog("Edit item", dismissible=False)
@@ -295,20 +332,6 @@ def _po_fix_banner() -> None:
             st.rerun()
         st.caption("Or use **Edit** on each item. If the PO has an item that is not on the indent, "
                    "add it with **Add item**.")
-
-
-def _totals() -> None:
-    lines = state.lines()
-    if not lines:
-        return
-    by_lot: dict[str, float] = {}
-    for x in lines:
-        by_lot[x.lot or "?"] = by_lot.get(x.lot or "?", 0) + to_number(x.qty)
-    total = sum(x.amount for x in lines)
-    c = st.columns([1, 1, 3])
-    c[0].metric("Items", len(lines))
-    c[1].metric("Total amount", f"₹ {total:,.2f}")
-    c[2].metric("Qty by lot", "  ·  ".join(f"{fmt_num(q)} {lot}" for lot, q in by_lot.items()))
 
 
 # ------------------------------------------------------------ dialogs
@@ -427,6 +450,33 @@ def _fill_fixed_varieties(m: Masters) -> None:
         state.set_lines(lines, structural=False)
 
 
+def _before_check(m: Masters) -> Masters:
+    """Lines read from a file: red ones must be handled first; new items (existing
+    Parent SKU) are added to All Cux City + the New tab so the indent can be saved."""
+    from core import master_add, masters
+    from core.sheets import get_backend
+    from pages_src import attach
+    if attach.pending():
+        st.error(f"{len(attach.pending())} red line(s) from the attached order still need a SKU, "
+                 "or remove them.")
+        st.stop()
+    new = attach.new_items_to_add()
+    if new:
+        hdr = state.header()
+        try:
+            with st.spinner("Adding the new items to the master…"):
+                notes = master_add.add_items(get_backend(), hdr.city, hdr.customer, new,
+                                             (st.session_state.get("user") or {}).get("email", ""))
+        except SheetError as e:
+            st.error(f"The new items could not be added to the master: {e}")
+            st.stop()
+        st.session_state[attach.NEW] = {}
+        masters.clear_cache()
+        m = masters.load_masters()
+        common.flash("info", "New items: " + "; ".join(notes) + ". Fill their spec in the New tab (yellow).")
+    return m
+
+
 def _check(m: Masters) -> list[str]:
     _fill_fixed_varieties(m)
     errors = indents.validate(state.header(), state.lines(), m, check_date=not state.po_fix(),
@@ -505,13 +555,13 @@ def render(m: Masters, user: User) -> None:
     if not m.has_sku_mapping(hdr.city, hdr.customer):
         st.info(f"Mapping pending: no SKU names in 'All Cux City' for {hdr.customer} in {hdr.city}.")
     else:
+        from pages_src import attach
+        attach.render(m)
         _add_form(m)
 
     if state.po_fix():
         _po_fix_banner()
-    st.markdown("**Items in this indent**")
     _lines_table(m)
-    _totals()
 
     st.divider()
     if ind["mode"] == "edit":
@@ -526,6 +576,7 @@ def render(m: Masters, user: User) -> None:
             s["pending_action"] = "discard"
         if c[1].button("Update indent", type="primary", disabled=not (changed and open_),
                        width="stretch"):
+            m = _before_check(m)
             errors = _check(m)
             if errors:
                 for e in errors:
@@ -549,6 +600,7 @@ def render(m: Masters, user: User) -> None:
             s["pending_action"] = "clear"
         if c[1].button("Submit indent", type="primary", width="stretch",
                        disabled=not state.lines()):
+            m = _before_check(m)
             errors = _check(m)
             if errors:
                 for e in errors:

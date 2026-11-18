@@ -40,6 +40,7 @@ def _prep(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
 PRODUCTION_COLUMNS = ["City", "Parent SKU", "Variety", "Repacking", "Spec-Size", "Lot Size", "Qty", "Total"]
 BOX_COL = "Boxes @ count {}"   # one column per count in Spec-Size (22C, 24C -> 2 columns)
 NOT_IN_BASE = "not in New tab"
+PENDING = "mapping not done"       # in the New tab, but Spec-Repacking / Spec-Size still empty
 BATCH_COLUMNS = ["City", "Customer", "Delivery point", "Parent SKU", "Customer SKU Name", "Variety", "Lot", "Lot Size",
                  "Spec", "Qty", "Indent"]
 NOT_MAPPED = "spec not mapped"
@@ -125,10 +126,12 @@ def _base_rows(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
                      if p.casefold() in with_variety else ""
                      for i, v, p in zip(info, df["variety"].fillna(""), df["Parent SKU"])]
     df["Repacking"] = [clean(i.get("Repacking")) if i else "" for i in info]
-    df["Spec-Size"] = [(clean(i.get("Spec-Size")) or "-") if i else f"{NOT_IN_BASE} ({clean(n)})"
-                       for i, n in zip(info, df["customer_sku_name"])]
+    pending = [bool(i) and not clean(i.get("Spec-Size")) and not clean(i.get("Repacking")) for i in info]
+    df["Spec-Size"] = [f"{PENDING} ({clean(n)})" if p else
+                       (clean(i.get("Spec-Size")) or "-") if i else f"{NOT_IN_BASE} ({clean(n)})"
+                       for i, n, p in zip(info, df["customer_sku_name"], pending)]
     df["Lot Size"] = [lot_size(n) or clean(lot) for n, lot in zip(df["customer_sku_name"], df["lot"])]
-    df["_in_base"] = [i is not None for i in info]
+    df["_in_base"] = [i is not None and not p for i, p in zip(info, pending)]
     return df
 
 
@@ -250,7 +253,7 @@ def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[list[st
     parts: dict[tuple, dict[str, float]] = {}
     for r in df.to_dict("records"):
         spec = str(r.get("Spec-Size") or "").strip()
-        if not spec or spec == "-" or spec.startswith(NOT_IN_BASE):
+        if not spec or spec == "-" or spec.startswith(NOT_IN_BASE) or spec.startswith(PENDING):
             continue
         d = parts.setdefault(fold(r), {})
         d[spec] = d.get(spec, 0.0) + to_number(r["qty"])

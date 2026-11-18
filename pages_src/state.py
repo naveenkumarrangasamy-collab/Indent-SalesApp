@@ -22,7 +22,7 @@ from core.sheets import SheetError
 
 KEY = "indent"
 THROTTLE_SECONDS = 60   # draft autosave to the sheet at most once a minute (each save is a Google round trip)
-WIDGET_PREFIXES = ("w_", "a_", "ed_")
+WIDGET_PREFIXES = ("w_", "a_", "ed_", "rd_", "it_")
 
 
 def blank() -> dict:

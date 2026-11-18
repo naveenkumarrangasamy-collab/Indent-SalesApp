@@ -157,7 +157,11 @@ class Masters:
         df = self._sku_for(city, customer)
         df = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
         vals = [v for v in df.get("Variety", pd.Series(dtype=str)) if v]
-        return vals[0] if vals else ""
+        if vals:
+            return vals[0]
+        info = self.prod_info(city, customer, sku_name)            # the New tab's variety column
+        v = str((info or {}).get("Variety", "") or "").strip()
+        return v if v in self.varieties_for(parent) else ""
 
     def default_variety(self, city: str, customer: str, sku_name: str) -> str:
         parent = self.parent_of(city, customer, sku_name)
@@ -169,7 +173,11 @@ class Masters:
         df = self._sku_for(city, customer)
         df = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
         vals = [v for v in df.get("Variety", pd.Series(dtype=str)) if v]
-        return vals[0] if vals else ""
+        if vals:
+            return vals[0]
+        info = self.prod_info(city, customer, sku_name)            # the New tab's variety column
+        v = str((info or {}).get("Variety", "") or "").strip()
+        return v if v in self.varieties_for(parent) else ""
 
     def lot_for(self, city: str, customer: str, sku_name: str) -> str:
         """The fixed lot for a SKU name: the Lot/UOM column of the mapping if

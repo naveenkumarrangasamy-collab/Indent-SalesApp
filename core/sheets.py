@@ -200,6 +200,11 @@ class _Base:
 
     def _replace_raw(self, tab: str, values: list[list]) -> None: raise NotImplementedError
 
+    def highlight(self, tab: str, first_row: int, last_row: int, cols: list[int],
+                  rgb: tuple[float, float, float] = (1.0, 0.95, 0.6)) -> None:
+        """Colour these cells (1-based rows, 0-based columns); Google Sheets only."""
+        return None
+
     def ensure_tabs(self, tabs: list[str] | None = None) -> list[str]:
         """Create any missing app tabs (header row only). Returns created names."""
         created = []
@@ -325,6 +330,15 @@ class GoogleBackend(_Base):
         ws = self._worksheet(tab)
         data = [{"range": rowcol_to_a1(row, c + 1), "values": [[v]]} for c, v in cells.items()]
         self._call(ws.batch_update, data, value_input_option="RAW")
+
+    def highlight(self, tab, first_row, last_row, cols, rgb=(1.0, 0.95, 0.6)):
+        from gspread.utils import rowcol_to_a1
+
+        ws = self._worksheet(tab)
+        fmt = {"backgroundColor": {"red": rgb[0], "green": rgb[1], "blue": rgb[2]}}
+        for c in cols:
+            rng = f"{rowcol_to_a1(first_row, c + 1)}:{rowcol_to_a1(last_row, c + 1)}"
+            self._call(ws.format, rng, fmt)
 
     def _delete_raw(self, tab, first, last):
         ws = self._worksheet(tab)

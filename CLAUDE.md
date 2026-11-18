@@ -125,6 +125,21 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Lot** is detected from the SKU name: Kg; gm/g/pack → Pack; pc/pcs → Pcs; box → Box; tray → Tray. A Lot/UOM column in the master overrides it.
 - Qty must be a whole number. The price must be above 0.
 - **Apple needs a variety.** It is taken from the name (Royal Gala → Gala, Granny → Granny Smith, Red Delicious → RD) or picked by the user.
+- **Attach the order (18 Nov)** on Create / edit indent (above the unchanged Add item form; `pages_src/attach.py`,
+  `core/order_reader.py`): a **picture** (free OCR: Tesseract, `packages.txt` tesseract-ocr; weak on angled phone
+  photos — 18 Nov test: ~7 of 22 lines; better on screenshots), an **Excel** (Zepto format → the column of the
+  chosen store, or any sheet with item + qty columns) or a **PDF** (po_reader). Lines are matched (po_reader.match,
+  incl. a fuzzy letters-only fallback for OCR text) and put in the item list: 🟡 check (best guess / low OCR
+  confidence), 🆕 new item (Parent SKU exists, e.g. Apple Fuji, Garlic once in the master), **red** = not readable
+  or a **new Parent SKU (e.g. Mango) → never added automatically, needs real attention**: pick the SKU + qty or
+  remove; Submit waits for red lines. File total vs read total is checked. Nothing is saved before Submit.
+- **New items → master (anyone, on Submit/Update)**: `core/master_add.py` appends them to All Cux City and the New
+  tab; in the New tab Spec-Repacking / Spec-Size / Spec-Origin (+ variety when Apple has none) are coloured
+  **yellow** and a **Status** column says "To fill - added by <user>, <date>". Production shows such SKUs as
+  **"mapping not done (name)"** (qty kept, own line, listed in the warning) until Spec-Size or Spec-Repacking is
+  filled. Variety for an indent line also comes from the New tab's variety column now.
+- **Item list (18 Nov)**: one table (data_editor): Parent SKU, Customer SKU name, Variety (choose for Apple when not
+  fixed), Lot, Lot size, Qty, Price, Line total, 🗑; order value on top; saved items cannot be removed (qty 0).
 - **Editing a saved indent:**
   - City, customer, store and delivery date are locked.
   - Saved items cannot be removed, only set to **qty 0**; only qty and price are editable.
@@ -294,9 +309,9 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **153 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **157 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
-- Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl.
+- Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl, pdfplumber; packages.txt: tesseract-ocr.
 
 **Commit message trailer used in this project:**
 

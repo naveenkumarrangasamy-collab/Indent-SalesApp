@@ -31,6 +31,7 @@ class POLine:
     value: float | None = None
     sku: str = ""          # our Customer SKU Name ("" = not matched)
     how: str = ""          # map / name / close / ""
+    unsure: bool = False   # read from a picture with low confidence: check it
 
 
 @dataclass
@@ -193,6 +194,28 @@ def _order(a: str, b: str) -> float:
     return SequenceMatcher(None, core(a), core(b)).ratio()
 
 
+def _compact(s: str) -> str:
+    s = re.sub(r"\([^)]*\d[^)]*\)", " ", s.casefold())
+    s = re.sub(r"^\s*[0-9.]+\s*[a-z]+\s*-\s*", "", s)                 # our pack prefix
+    s = re.split(r"\s+-\s+(?=\d)", s, maxsplit=1)[0]                    # their pack suffix
+    return re.sub(r"[^a-z]", "", s)
+
+
+def _fuzzy(name: str, keys: list[tuple]) -> tuple[str, str]:
+    """Last try for badly read text (OCR glued words, typos): letters only,
+    'AvocadoHassimpored' ~ 'avocadohassimported'."""
+    from difflib import SequenceMatcher
+    a = _compact(name)
+    if len(a) < 5:
+        return "", ""
+    best, score = "", 0.0
+    for c, _, _ in keys:
+        r = SequenceMatcher(None, a, _compact(c)).ratio()
+        if r > score:
+            best, score = c, r
+    return (best, "guess") if score >= 0.72 else ("", "")
+
+
 def _sane(name: str, sku: str) -> bool:
     """A saved match must still share a word with the name (guards against a wrong pick)."""
     w1, _ = po_key(name)
@@ -229,7 +252,7 @@ def _find(name: str, keys: list[tuple], close_at: float, loose: bool = False,
         if rank is None or r > rank:
             best, rank, jac_b, pack_b = c, r, jac, pack_ok
     if rank is None:
-        return "", ""
+        return _fuzzy(name, keys) if auto else ("", "")
     if jac_b >= close_at and (pack_b or loose):
         return best, "close"
     return (best, "guess") if auto else ("", "")

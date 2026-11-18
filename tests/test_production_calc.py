@@ -236,3 +236,16 @@ def test_make_ready_by_customer_blocks_and_pdf_pages():
     assert zepto.iloc[-1][zepto.columns[0]] == "Total" and zepto.iloc[-1]["Make ready"] == "13"
     pdf = sections_pdf("x", [], blocks, page_each=True)
     assert pdf.count(b"/Type /Page\n") + pdf.count(b"/Type /Page ") >= 2 or pdf.count(b"/Page") >= 2
+
+
+def test_new_tab_row_without_spec_is_mapping_not_done():
+    from core.importer import build_prod_base
+    from core.production_calc import not_in_base
+    m = _masters()
+    m.prod_base = pd.DataFrame(build_prod_base(NEW_TAB + [
+        ["Bangalore", "Zepto", "Apple", "2PC - Apple Fuji Imported", "Fuji", "", "", ""]]))
+    df = _lines([dict(BASE, indent_id="A", version="1", customer="Zepto", store="S", parent_sku="Apple",
+                      customer_sku_name="2PC - Apple Fuji Imported", lot="Pcs", qty="8")])
+    p = production(df, m)
+    assert p.iloc[0]["Spec-Size"].startswith("mapping not done") and p.iloc[0]["Qty"] == 8   # indent still shown
+    assert list(not_in_base(df, m)["Customer SKU Name"]) == ["2PC - Apple Fuji Imported"]
