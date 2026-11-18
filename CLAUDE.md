@@ -268,6 +268,9 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 ### Owner tools
 
 - **Bulk download** (owners only) on All indents and Upload PO: tick "Select all" or pick indents. It downloads one Excel with two sheets: **Indents** (one row each, including the PO number) and **Lines** (every item).
+- **Add SKUs** (Access tab, owners; 18 Nov): paste SKU names (order style or ours) for a city + customer →
+  preview (✓ already in master by exact name / 🆕 will be added / 🔴 new Parent SKU) → "Add to the sheet" writes
+  them to All Cux City + New tab (yellow spec cells, Status "To fill") via `master_add.add_items`. `pages_src/add_skus.py`.
 - **Import indents** (Access tab; **Owner only**, not Owner L):
   - Input is an Excel upload or rows pasted as text (tab, `|` or comma separated, header first).
   - Columns: Delivery date, City, Customer, Store, Parent SKU, Item / Customer SKU Name, Qty, and optional Price/Rate.

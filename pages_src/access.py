@@ -25,7 +25,7 @@ def render(user: User) -> None:
         m = None
 
     from pages_src import mail_admin
-    names = ["Users & PINs", "E-mails"] + (["Import indents"] if user.is_full_owner else []) \
+    names = ["Users & PINs", "E-mails", "Add SKUs"] + (["Import indents"] if user.is_full_owner else []) \
         + ["Sheet setup & checks"]
     tabs = dict(zip(names, st.tabs(names)))
     t_users, t_mail, t_setup = tabs["Users & PINs"], tabs["E-mails"], tabs["Sheet setup & checks"]
@@ -35,6 +35,9 @@ def render(user: User) -> None:
     with t_mail:
         if m is not None:
             mail_admin.emails_tab(m, user)
+    with tabs["Add SKUs"]:
+        from pages_src import add_skus
+        add_skus.render(m, user)
     if "Import indents" in tabs:
         with tabs["Import indents"]:
             from pages_src import import_indents
