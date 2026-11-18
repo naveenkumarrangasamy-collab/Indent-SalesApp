@@ -76,24 +76,7 @@ def _page(user: User) -> None:
         st.info("No submitted indents yet.")
         return
 
-    f = st.columns([2, 1, 1, 1])
-    q = f[0].text_input("Search", placeholder="Indent id, store, customer…", label_visibility="collapsed")
-    status = f[1].selectbox("Status", ["All", "Submitted", "Locked", "Frozen", "Cancelled"], label_visibility="collapsed")
-    cities = ["All cities"] + sorted(summ["city"].unique())
-    city = f[2].selectbox("City", cities, label_visibility="collapsed")
-    dates = ["All dates"] + sorted(summ["delivery_date"].unique(), reverse=True)
-    ddate = f[3].selectbox("Delivery date", dates, label_visibility="collapsed")
-
-    view = summ
-    if q:
-        ql = q.lower()
-        view = view[view.apply(lambda r: ql in " ".join(map(str, r.values)).lower(), axis=1)]
-    if status != "All":
-        view = view[view["status"] == status]
-    if city != "All cities":
-        view = view[view["city"] == city]
-    if ddate != "All dates":
-        view = view[view["delivery_date"] == ddate]
+    view = _filters(summ)
 
     show = pd.DataFrame({
         "Indent": view["indent_id"], "Status": view["status"], "Ver": view["version"],
@@ -117,6 +100,40 @@ def _page(user: User) -> None:
     if open_id and open_id in set(summ["indent_id"]):
         st.divider()
         _detail(df, open_id, user)
+
+
+def _filters(summ: pd.DataFrame) -> pd.DataFrame:
+    """Date, city and customer as buttons (like Create indent), then search + status."""
+    from datetime import timedelta
+    from core import config
+    today = config.now_ist().date()
+    days = {"Yesterday": today - timedelta(days=1), "Today": today, "Tomorrow": today + timedelta(days=1)}
+    labels = [f"{k} · {v.strftime('%d %b')}" for k, v in days.items()] + ["All dates"]
+    pick = st.pills("Delivery date", labels, default=labels[1], key="mi_day")
+    view = summ
+    if pick and pick != "All dates":
+        d = list(days.values())[labels.index(pick)].isoformat()
+        view = view[view["delivery_date"].astype(str) == d]
+    cities = sorted(summ["city"].unique())
+    if len(cities) > 1:
+        c = st.pills("City", cities + ["All"], default="All", key="mi_city")
+        if c and c != "All":
+            view = view[view["city"] == c]
+    counts = view["customer"].value_counts()
+    opts = [f"All · {len(view)}"] + [f"{k} · {n}" for k, n in sorted(counts.items())]
+    cu = st.pills("Customer", opts, default=opts[0], key=f"mi_cust_{pick}")
+    if cu and not cu.startswith("All · "):
+        view = view[view["customer"] == cu.rsplit(" · ", 1)[0]]
+    f = st.columns([2, 1])
+    q = f[0].text_input("Search", placeholder="Indent id, store, item…", label_visibility="collapsed")
+    status = f[1].selectbox("Status", ["All status", "Submitted", "Locked", "Frozen", "Cancelled"],
+                            label_visibility="collapsed")
+    if q:
+        ql = q.lower()
+        view = view[view.apply(lambda r: ql in " ".join(map(str, r.values)).lower(), axis=1)]
+    if status != "All status":
+        view = view[view["status"] == status]
+    return view
 
 
 def _detail(df: pd.DataFrame, indent_id: str, user: User) -> None:

@@ -47,9 +47,36 @@ def plan(m: Masters, city: str, customer: str, text: str) -> list[dict]:
     return rows
 
 
+def _stores(m: Masters, user) -> None:
+    """Add a city / customer / store to the Customer List (a new city starts here)."""
+    with st.expander("Add a store (new city or customer)"):
+        c = st.columns(3)
+        city = c[0].text_input("City", key="as_s_city", placeholder="PTP Hyderabad")
+        cust = c[1].text_input("Customer", key="as_s_cust", placeholder="Swiggy")
+        store = c[2].text_input("Store", key="as_s_store", placeholder="Swiggy - Hyderabad")
+        if st.button("Add store", key="as_s_go", disabled=not (city.strip() and cust.strip() and store.strip())):
+            city, cust, store = (" ".join(x.split()) for x in (city, cust, store))
+            if store.casefold() in {x.casefold() for x in m.stores_for(city, cust)}:
+                st.info("That store is already in the Customer List.")
+                return
+            from core import bulk_import
+            try:
+                notes = bulk_import.add_to_master(get_backend(), [],
+                                                  [{"City": city, "Customer": cust, "Store Name": store}])
+            except SheetError as e:
+                st.error(f"Could not add: {e}")
+                return
+            masters.clear_cache()
+            for k in ("as_s_store",):
+                st.session_state.pop(k, None)
+            common.flash("success", f"Added {city} · {cust} · {store}. " + "; ".join(notes))
+            st.rerun()
+
+
 def render(m: Masters | None, user) -> None:
     if m is None:
         return
+    _stores(m, user)
     st.caption("Add new SKU names to All Cux City and the New tab (spec cells in yellow, to fill). "
                "Only exact names count as existing.")
     c = st.columns(2)

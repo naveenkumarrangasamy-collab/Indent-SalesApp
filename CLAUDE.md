@@ -154,6 +154,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - Every save is a new version, recorded with a Change_Log entry.
 - **Deleting:** nobody deletes items or indents, **except an owner**, who can delete (cancel) an indent until **T-2**, even after the cutoff. Deleted indents are kept as Cancelled.
 - The "Edit qty / price" action is on All indents.
+- **All indents filters (18 Nov)**: buttons on top like Create indent: Delivery date (Yesterday / Today (default) /
+  Tomorrow / All dates), City (only when >1 city), Customer (with counts); then Search + Status.
 
 ### PO upload
 
@@ -272,6 +274,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   preview table (editable Parent SKU / our name; ✓ already in master by exact name / 🆕 will be added / 🔴 pick an
   existing Parent SKU) → "Add to the sheet" writes
   them to All Cux City + New tab (yellow spec cells only, no status text) via `master_add.add_items`. `pages_src/add_skus.py`.
+- **Add a store** (Access → Add SKUs, expander): City + Customer + Store → Customer List (how a new city starts).
+  18 Nov: PTP Hyderabad and PTP Mumbai added with Swiggy, Zepto, Zomato (placeholder stores "<Customer> - <City>").
 - **Import indents** (Access tab; **Owner only**, not Owner L):
   - Input is an Excel upload or rows pasted as text (tab, `|` or comma separated, header first).
   - Columns: Delivery date, City, Customer, Store, Parent SKU, Item / Customer SKU Name, Qty, and optional Price/Rate.
