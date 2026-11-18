@@ -18,15 +18,21 @@ def _exact(s: str) -> str:
     return " ".join(str(s).casefold().split())
 
 
+def _known_parents(m: Masters) -> list[str]:
+    """Parent SKUs of every city (a new city has none of its own yet)."""
+    out = []
+    for city in m.cities():
+        for c in m.customers(city):
+            out += m.parents(city, c)
+    return list(dict.fromkeys(p for p in out if p))
+
+
 def plan(m: Masters, city: str, customer: str, text: str) -> list[dict]:
     names = {}
     for p in m.parents(city, customer):
         for n in m.sku_names(city, customer, p):
             names[_exact(n)] = n
-    parents = []
-    for c in m.customers(city):
-        parents += m.parents(city, c)
-    parents = list(dict.fromkeys(parents))
+    parents = _known_parents(m)
     rows, seen = [], set()
     for raw in text.splitlines():
         raw = raw.strip().strip("\t|,;")
@@ -91,10 +97,7 @@ def render(m: Masters | None, user) -> None:
     rows = plan(m, city, customer, text)
     if not rows:
         return
-    parents = []
-    for c in m.customers(city):
-        parents += m.parents(city, c)
-    parents = sorted(set(p for p in parents if p))
+    parents = sorted(_known_parents(m))
     extra = " ".join(st.text_input("New Parent SKU (only when approved, e.g. Garlic)", key="as_newp").split())
     if extra and extra.casefold() not in {p.casefold() for p in parents}:
         parents.append(extra)
