@@ -27,12 +27,26 @@ def _known_parents(m: Masters) -> list[str]:
     return list(dict.fromkeys(p for p in out if p))
 
 
+def _origins(m: Masters) -> tuple[list[str], dict[str, str]]:
+    """(every Spec-Origin in the New tab, most used origin per Parent SKU)."""
+    df = m.prod_base
+    if df is None or df.empty:
+        return [], {}
+    df = df[df["Spec-Origin"].astype(str).str.strip() != ""]
+    known = sorted(set(df["Spec-Origin"].astype(str).str.strip()))
+    top = {}
+    for parent, g in df.groupby(df["Parent SKU"].astype(str).str.strip().str.casefold()):
+        top[parent] = g["Spec-Origin"].astype(str).str.strip().value_counts().index[0]
+    return known, top
+
+
 def plan(m: Masters, city: str, customer: str, text: str) -> list[dict]:
     names = {}
     for p in m.parents(city, customer):
         for n in m.sku_names(city, customer, p):
             names[_exact(n)] = n
     parents = _known_parents(m)
+    known, top = _origins(m)
     rows, seen = [], set()
     for raw in text.splitlines():
         raw = raw.strip().strip("\t|,;")
@@ -42,15 +56,26 @@ def plan(m: Masters, city: str, customer: str, text: str) -> list[dict]:
         hit = names.get(_exact(ours)) or names.get(_exact(raw))
         if hit:
             rows.append({"Pasted": raw, "Parent SKU": m.parent_of(city, customer, hit), "Our SKU name": hit,
-                         "Result": "✓ already in master"})
+                         "Origin": "", "Result": "✓ already in master"})
             continue
         if _exact(ours) in seen:
             continue
         seen.add(_exact(ours))
         parent = master_add.guess_parent(raw, parents)
-        rows.append({"Pasted": raw, "Parent SKU": parent, "Our SKU name": ours,
+        origin = master_add.origin_in(raw, known) or top.get(parent.casefold(), "")
+        rows.append({"Pasted": raw, "Parent SKU": parent, "Our SKU name": ours, "Origin": origin,
                      "Result": "🆕 will be added" if parent else "🔴 pick Parent SKU"})
     return rows
+
+
+def _remember(customer: str, rows: list[dict]) -> None:
+    """File name -> our SKU name, so the next file with this exact name maps by itself."""
+    from core.config import now_ist
+    from pages_src.indent_actions import _learn
+    stamp = now_ist().strftime("%Y-%m-%d %H:%M")
+    _learn([{"Customer": customer, "PO Item Code": "", "PO Item Name": r["Pasted"],
+             "Customer SKU Name": " ".join(str(r["Our SKU name"]).split()), "Updated_At": stamp}
+            for r in rows if _exact(r["Pasted"]) != _exact(r["Our SKU name"])])
 
 
 def _stores(m: Masters, user) -> None:
@@ -110,7 +135,10 @@ def render(m: Masters | None, user) -> None:
         df, hide_index=True, width="stretch", key=f"as_ed_{hash(text)}_{extra}",
         disabled=["Pasted", "Result"],
         column_config={"Parent SKU": st.column_config.SelectboxColumn("Parent SKU", options=parents),
-                       "Our SKU name": st.column_config.TextColumn("Our SKU name")})
+                       "Our SKU name": st.column_config.TextColumn("Our SKU name"),
+                       "Origin": st.column_config.TextColumn(
+                           "Origin", help="Country. Several = one New-tab row each, e.g. 'Tanzania, Kenya' "
+                                          "(the first is the one in use).")})
     new = [r for r in ed.to_dict("records")
            if not r["Result"].startswith("✓") and r.get("Parent SKU") and str(r.get("Our SKU name", "")).strip()]
     if st.button(f"Add {len(new)} to the sheet", type="primary", disabled=not new, key="as_go",
@@ -121,13 +149,15 @@ def render(m: Masters | None, user) -> None:
             need = m.needs_variety(parent)
             items.append({"Parent SKU": parent, "Customer SKU Name": sku,
                           "Variety": m.variety_from_name(parent, sku) if need else "",
-                          "Lot": master_add.lot_of(sku), "needs_variety": need})
+                          "Lot": master_add.lot_of(sku), "needs_variety": need,
+                          "Origin": str(r.get("Origin") or "")})
         try:
             with st.spinner("Adding to the sheet…"):
                 notes = master_add.add_items(get_backend(), city, customer, items, user.email)
         except SheetError as e:
             st.error(f"Could not add: {e}")
             return
+        _remember(customer, new)
         masters.clear_cache()
         st.session_state.pop("as_text", None)
         common.flash("success", "Added: " + ", ".join(i["Customer SKU Name"] for i in items) + ". " + "; ".join(notes))

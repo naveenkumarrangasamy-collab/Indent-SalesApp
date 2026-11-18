@@ -52,3 +52,13 @@ def test_new_sku_name_swiggy_style():
     assert new_sku_name("Bulk Semiripe Imported Avocado 1.0 Piece") == "1PC - Bulk Semiripe Imported Avocado"
     assert new_sku_name("Bulk PP Royal Gala Apple 1.0 kg") == "1Kg - Bulk PP Royal Gala Apple"
     assert new_sku_name("BULK GREEN KIWI 1.0 Pack") == "1Pack - BULK GREEN KIWI"
+
+
+def test_new_sku_name_zomato_style():
+    from core.master_add import new_sku_name, origin_in
+    assert new_sku_name("BH - Green Kiwi, 3 pieces") == "3PC - BH - Green Kiwi"
+    assert new_sku_name("BH-Avocado Hass - Tanzania, 1 Piece (150 - 200 gm)") == \
+        "1PC - BH-Avocado Hass - Tanzania (150 - 200 gm)"
+    assert new_sku_name("BH-Blueberry Imported, 125 gm") == "125gm - BH-Blueberry Imported"
+    assert origin_in("BH-Avocado Hass - Tanzania, 1 Piece") == "Tanzania"
+    assert origin_in("BH - Green Kiwi, 3 pieces") == ""

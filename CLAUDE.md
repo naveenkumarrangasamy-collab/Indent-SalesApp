@@ -274,6 +274,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   preview table (editable Parent SKU / our name; ✓ already in master by exact name / 🆕 will be added / 🔴 pick an
   existing Parent SKU) → "Add to the sheet" writes
   them to All Cux City + New tab (yellow spec cells only, no status text) via `master_add.add_items`. `pages_src/add_skus.py`.
+  19 Nov: an **Origin** column (country from the name, else the parent's most used origin in New; editable;
+  "Tanzania, Kenya" = one New-tab row per origin, first = in use — production reads the first row). When "Our SKU
+  name" differs from the pasted name, the pair is saved to PO_Item_Map, and **Attach the order** uses that exact
+  saved name first (e.g. Zomato "BH-Valencia Navel Orange Imported, (350) g" → "3PC - BH-Valencia Navel Orange
+  Imported"). Zomato style names: "BH - Green Kiwi, 3 pieces" → "3PC - BH - Green Kiwi".
 - **Add a store** (Access → Add SKUs, expander): City + Customer + Store → Customer List (how a new city starts).
   18 Nov: PTP Hyderabad and PTP Mumbai added with Swiggy, Zepto, Zomato (placeholder stores "<Customer> - <City>").
 - **Import indents** (Access tab; **Owner only**, not Owner L):

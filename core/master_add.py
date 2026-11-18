@@ -38,6 +38,14 @@ def guess_parent(name: str, parents: list[str]) -> str:
 def new_sku_name(read_name: str) -> str:
     """Our style for a new SKU name: 'Pear Packham Imported - 2 PIECE' ->
     '2PC - Pear Packham Imported', '... - 250 GRAM' -> '250gm - ...'."""
+    z = re.fullmatch(r"(.+?),\s*\(?([\d.]+)\)?\s*(g|gm|gram|grams|kg|kgs|piece|pieces|pc|pcs|pack|packs)\.?\s*(\(.*\))?",
+                     read_name.strip(), flags=re.I)
+    if z:                                      # Zomato style: 'BH - Green Kiwi, 3 pieces' -> '3PC - BH - Green Kiwi'
+        n, u = fmt_num(float(z.group(2))), z.group(3).casefold()
+        unit = ("gm" if u.startswith("g") else "Kg" if u.startswith("k")
+                else "Pack" if u.startswith("pack") else "PC")
+        extra = f" {z.group(4)}" if z.group(4) else ""
+        return f"{n}{unit} - {' '.join(z.group(1).split())}{extra}"
     parts = re.split(r"\s+-\s+(?=\d)", read_name.strip(), maxsplit=1)
     core = " ".join(parts[0].split())
     tail = re.fullmatch(r"(.+?)\s+([\d.]+)\s*(g|gm|gram|grams|kg|kgs|piece|pieces|pc|pcs|pack|packs)\.?",
@@ -59,6 +67,20 @@ def new_sku_name(read_name: str) -> str:
 
 def lot_of(sku_name: str) -> str:
     return detect_lot(sku_name) or "Pcs"
+
+
+COUNTRIES = ["New Zealand", "South Africa", "Tanzania", "Kenya", "Peru", "Chile", "USA", "Egypt", "Spain",
+             "Australia", "Iran", "Italy", "Turkey", "China", "Morocco", "Colombia", "Mexico", "India", "RSA",
+             "Washington", "Zimbabwe", "Brazil", "Poland", "Serbia", "Greece", "Thailand", "Vietnam"]
+
+
+def origin_in(name: str, known: list[str] = ()) -> str:
+    """A country written in the name ('BH-Avocado Hass - Tanzania' -> 'Tanzania'), else ''."""
+    low = name.casefold()
+    for c in list(known) + COUNTRIES:
+        if c and re.search(r"\b" + re.escape(c.casefold()) + r"\b", low):
+            return c
+    return ""
 
 
 def add_items(backend, city: str, customer: str, items: list[dict], user: str) -> list[str]:
@@ -91,9 +113,12 @@ def add_items(backend, city: str, customer: str, items: list[dict], user: str) -
             backend._append_raw(tab, [head])
         rows = []
         for r in items:
-            vals = {"city": city, "customer": customer, "parentsku": r["Parent SKU"],
-                    "customerskuname": r["Customer SKU Name"], "variety": r.get("Variety", "")}
-            rows.append(_aligned(head, vals))
+            origins = [o.strip() for o in str(r.get("Origin") or "").split(",") if o.strip()] or [""]
+            for o in origins:                  # one row per origin; the first one is the one in use
+                vals = {"city": city, "customer": customer, "parentsku": r["Parent SKU"],
+                        "customerskuname": r["Customer SKU Name"], "variety": r.get("Variety", ""),
+                        "specorigin": o}
+                rows.append(_aligned(head, vals))
         first, last = backend._append_raw(tab, rows)
         normed = [norm_header(h) for h in head]
         cols = [normed.index(norm_header(c)) for c in TO_FILL if norm_header(c) in normed]

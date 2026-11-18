@@ -76,6 +76,8 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
     s = st.session_state
     hdr = state.header()
     names = {_exact(n): n for n in _all_names(m, hdr.city, hdr.customer)}
+    from pages_src.indent_actions import _item_map
+    saved = {_exact(k): v for k, v in _item_map(hdr.customer).items()}
     lines = read.lines
     current = {x.customer_sku_name.casefold(): x for x in state.lines()}
     order = [x.customer_sku_name for x in state.lines()]
@@ -88,7 +90,8 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
         if x.qty <= 0:
             continue
         ours = master_add.new_sku_name(x.name)
-        hit = names.get(_exact(ours)) or names.get(_exact(x.name))
+        mapped = saved.get(_exact(x.name))         # this exact file name was mapped before (Add SKUs / PO)
+        hit = (names.get(_exact(mapped)) if mapped else None) or names.get(_exact(ours)) or names.get(_exact(x.name))
         if hit:
             parent = m.parent_of(hdr.city, hdr.customer, hit)
             sku, lot = hit, m.lot_for(hdr.city, hdr.customer, hit)
