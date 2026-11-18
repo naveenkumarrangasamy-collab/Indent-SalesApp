@@ -75,6 +75,7 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
     fl, new, red = dict(flags()), dict(s.get(NEW, {})), list(pending())
     parents = _all_parents(m, hdr.city)
     n_ok = n_check = n_new = 0
+    taken: dict[str, str] = {}
     for x in lines:
         if x.qty <= 0:
             continue
@@ -97,6 +98,11 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
             flag = "new"
             new[sku] = {"Parent SKU": parent, "Customer SKU Name": sku, "Variety": variety, "Lot": lot,
                         "needs_variety": m.needs_variety(parent)}
+        if sku.casefold() in taken:              # two lines of the file on one SKU: never overwrite
+            red.append({"text": x.name, "qty": x.qty,
+                        "why": f"same SKU as '{taken[sku.casefold()]}' ({sku}): pick the right one"})
+            continue
+        taken[sku.casefold()] = x.name
         old = current.get(sku.casefold())
         if old is not None:                      # already on the indent: take the qty from the file
             current[sku.casefold()] = IndentLine(**{**old.to_dict(), "qty": float(x.qty)})

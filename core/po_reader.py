@@ -187,6 +187,11 @@ def _keys(names: list[str]) -> list[tuple]:
     return out
 
 
+# Words that make a different product: a name with 'Bloom' never matches one without it
+# (Bloom Grapes Red Globe vs Grapes Red Globe), same for Snacky, Mini, Jumbo, ...
+MARKERS = frozenset({"bloom", "snacky", "mini", "large", "jumbo", "bulk", "baby", "semiripe", "organic"})
+
+
 def _order(a: str, b: str) -> float:
     """How alike two names read, word order included (tie-break only)."""
     from difflib import SequenceMatcher
@@ -244,7 +249,7 @@ def _find(name: str, keys: list[tuple], close_at: float, loose: bool = False,
     best, rank, jac_b, pack_b = "", None, 0.0, 0
     for c, w, p in keys:
         shared = len(w & words)
-        if not shared:
+        if not shared or (w ^ words) & MARKERS:     # Bloom / Snacky / Mini ... must agree
             continue
         jac = shared / len(w | words)
         pack_ok = 2 if pack and p == pack else (1 if not pack or not p else 0)

@@ -52,3 +52,10 @@ def test_auto_match_never_leaves_a_line_blank_and_keeps_word_order():
     assert [(x.sku, x.how) for x in lines] == [("1PC - Avocado Hass Imported", "name"),
                                               ("1PC - Snacky Avocado Imported", "guess"),
                                               ("3PC - Green Kiwi", "name")]
+
+
+def test_bloom_never_matches_a_non_bloom_sku():
+    cands = ["250gm - Grapes Red Globe Imported", "250gm - Bloom Grapes Red globe"]
+    lines = r.match([r.POLine("Bloom Grapes Red Globe Imported - 250 GRAM", 52),
+                     r.POLine("Grapes Red Globe Imported - 250 GRAM", 22)], cands)
+    assert [x.sku for x in lines] == ["250gm - Bloom Grapes Red globe", "250gm - Grapes Red Globe Imported"]
