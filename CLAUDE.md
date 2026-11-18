@@ -140,7 +140,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   **"mapping not done (name)"** (qty kept, own line, listed in the warning) until Spec-Size or Spec-Repacking is
   filled. Variety for an indent line also comes from the New tab's variety column now.
 - **Item list (18 Nov)**: one table (data_editor): Parent SKU, Customer SKU name, Variety (choose for Apple when not
-  fixed), Lot, Lot size, Qty, Price, Line total, 🗑; order value on top; saved items cannot be removed (qty 0).
+  fixed; also a picker under the table), Lot, Lot size, Qty, Price, 🗑 (Line total + order value hidden while every
+  price is 1; secret `show_amounts` to show them later); saved items cannot be removed (qty 0).
 - **Editing a saved indent:**
   - City, customer, store and delivery date are locked.
   - Saved items cannot be removed, only set to **qty 0**; only qty and price are editable.

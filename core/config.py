@@ -176,6 +176,12 @@ def po_store_prefixes() -> dict[str, str]:
         return {}
 
 
+def show_amounts() -> bool:
+    """Line total / order value on the Create indent item list. Off while every price
+    is 1 (18 Nov); turn on (secret `show_amounts = true`) once real prices are used."""
+    return str(get("show_amounts", "false")).strip().lower() in ("1", "true", "yes", "y")
+
+
 def read_pictures() -> bool:
     """Attach on Create indent also takes pictures (OCR). Off for now (18 Nov: user
     skips pictures; free OCR is weak on phone photos). Secret `read_pictures`."""

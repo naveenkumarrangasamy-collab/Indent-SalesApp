@@ -165,8 +165,9 @@ def _lines_table(m: Masters) -> None:
         st.info("No items yet. Add them above, or attach the order.")
         return
     total = sum(x.amount for x in lines)
-    st.markdown(f"**Items in this indent** · order value <span style='color:#1c6b49'><b>₹{total:,.2f}</b>"
-                f"</span> <span class='mt-muted'>· {len(lines)} items · qty "
+    value = (f" · order value <span style='color:#1c6b49'><b>₹{total:,.2f}</b></span>"
+             if config.show_amounts() else "")
+    st.markdown(f"**Items in this indent**{value} <span class='mt-muted'>· {len(lines)} items · qty "
                 f"{fmt_num(sum(to_number(x.qty) for x in lines))}</span>", unsafe_allow_html=True)
     has_variety = any(m.needs_variety(x.parent_sku) or x.variety for x in lines)
     with st.container(key="mtdesk_items"):
@@ -215,6 +216,8 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
         "Remove": False} for x in lines])
     varieties = sorted({v for x in lines for v in m.varieties_for(x.parent_sku)})
     cols = list(base.columns) if (has_variety or fl) else [c for c in base.columns if c != "Variety"]
+    if not config.show_amounts():
+        cols = [c for c in cols if c != "Line total"]    # prices are 1 for now (18 Nov); add back later
     if not fl:
         cols = [c for c in cols if c != "!"]
     ed = st.data_editor(
