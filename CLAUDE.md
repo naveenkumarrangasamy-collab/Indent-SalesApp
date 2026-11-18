@@ -279,6 +279,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   name" differs from the pasted name, the pair is saved to PO_Item_Map, and **Attach the order** uses that exact
   saved name first (e.g. Zomato "BH-Valencia Navel Orange Imported, (350) g" → "3PC - BH-Valencia Navel Orange
   Imported"). Zomato style names: "BH - Green Kiwi, 3 pieces" → "3PC - BH - Green Kiwi".
+- **Fill empty New-tab rows from Mapping Whole** (Access → Add SKUs, expander; 19 Nov; `core/fill_new.py`): every
+  New-tab row with no Spec-Size and no Spec-Origin gets the closest Mapping Whole SKU (same name, else same parent
+  + most alike name, same pack preferred): its Active (else first) origin + size fill the row, repacking from the
+  reference's New row; other origins → extra New rows. Editable preview, then "Write".
 - **Add a store** (Access → Add SKUs, expander): City + Customer + Store → Customer List (how a new city starts).
   18 Nov: PTP Hyderabad and PTP Mumbai added with Swiggy, Zepto, Zomato (placeholder stores "<Customer> - <City>").
 - **Import indents** (Access tab; **Owner only**, not Owner L):

@@ -104,10 +104,45 @@ def _stores(m: Masters, user) -> None:
             st.rerun()
 
 
+def _fill(user) -> None:
+    """New-tab rows with an empty spec: proposals from Mapping Whole, editable, then written."""
+    from core import fill_new, importer
+    with st.expander("Fill empty New-tab rows from Mapping Whole"):
+        if st.button("Find empty rows", key="fn_find"):
+            try:
+                b = get_backend()
+                st.session_state["fn_plan"] = fill_new.plan(b.read_values(importer.PROD_BASE),
+                                                            b.read_values(importer.MAPPING_WHOLE))
+            except SheetError as e:
+                st.error(f"Could not read the sheet: {e}")
+        rows = st.session_state.get("fn_plan")
+        if rows is None:
+            return
+        if not rows:
+            st.success("Every New-tab row has a spec.")
+            return
+        st.caption("Taken from the closest SKU in Mapping Whole (same name, else same parent). Change any cell; "
+                   "'Other origins' become extra rows, e.g. 'Kenya 20C, 22C; Peru 18C'.")
+        ed = st.data_editor(pd.DataFrame(rows), hide_index=True, width="stretch", key="fn_ed",
+                            disabled=["Row", "City", "Customer", "Parent SKU", "Customer SKU Name",
+                                      "Reference (Mapping Whole)"])
+        if st.button(f"Write {len(ed)} rows to the New tab", type="primary", key="fn_go"):
+            try:
+                notes = fill_new.apply(get_backend(), ed.to_dict("records"))
+            except SheetError as e:
+                st.error(f"Could not write: {e}")
+                return
+            st.session_state.pop("fn_plan", None)
+            masters.clear_cache()
+            common.flash("success", "; ".join(notes))
+            st.rerun()
+
+
 def render(m: Masters | None, user) -> None:
     if m is None:
         return
     _stores(m, user)
+    _fill(user)
     st.caption("Add new SKU names to All Cux City and the New tab (spec cells in yellow, to fill). "
                "Only exact names count as existing.")
     c = st.columns(2)
