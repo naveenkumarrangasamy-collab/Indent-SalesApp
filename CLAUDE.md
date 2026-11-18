@@ -134,6 +134,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   confidence), 🆕 new item (Parent SKU exists, e.g. Apple Fuji, Garlic once in the master), **red** = not readable
   or a **new Parent SKU (e.g. Mango) → never added automatically, needs real attention**: pick the SKU + qty or
   remove; Submit waits for red lines. File total vs read total is checked. Nothing is saved before Submit.
+  **Exact names only (18 Nov, user):** a file line maps to our SKU only when its name in our style
+  ("Kiwi Sungold - 2 PIECE" → "2PC - Kiwi Sungold") is exactly in the master (case/spaces ignored); no fuzzy
+  matching on attach. Anything else → 🆕 new SKU (added on Submit) or red (new parent). A **"File vs item list"**
+  table shows every file line, our SKU name and the change (✓ exact / 🆕 new, blue / 🔴 needs you). On edit,
+  saved items not in the file are listed (set them to 0 if the file replaces them).
 - **New items → master (anyone, on Submit/Update)**: `core/master_add.py` appends them to All Cux City and the New
   tab; in the New tab Spec-Repacking / Spec-Size / Spec-Origin (+ variety when Apple has none) are coloured
   **yellow** and a **Status** column says "To fill - added by <user>, <date>". Production shows such SKUs as
