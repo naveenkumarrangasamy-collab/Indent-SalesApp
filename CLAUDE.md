@@ -297,6 +297,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Swiggy Bangalore** POs/GRNs come from Moksh (procurement_blr@mokshepl.com, files MOKS-1N60000590-*): PO numbers
   MBFPO (BLR FNV1 / WH1), BLRPO (Bangalore FNV2 / WH2), BLNPO (Bangalore, "Bulk PP" items). Swiggy names look like
   "Longan 100.0 g" → our style "100gm - Longan" (`master_add.new_sku_name`).
+- **Swiggy Hyderabad**: Cloudkart (procurement@cloudkart.co, files CVPL-1N60000590-*), PO numbers HDFPO. Others seen:
+  Cloudstore (Panvel/Mumbai, CMPPO), Jupiterkart (Chennai, CHNPO), PJTJ (NCR: NCRPO/GGMPO).
 - **Change date** (owner, All indents → an indent): move an indent to another delivery day (2 days back to
   tomorrow), ignoring the cutoff; same status, new version + Change_Log (`indents.move_date`).
 - **Start fresh** (Owner only): type CLEAR. It backs up the indent tabs to Backup_ tabs and then empties them.
