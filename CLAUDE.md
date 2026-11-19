@@ -363,7 +363,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   (`mailer.file_mime`). To be refined as we go.
 - **Picture reading with Gemini** (`core/ai_reader.py`; user chose Gemini over Mistral / Cloud Vision): secret
   `gemini_api_key` (user adds it; pictures switch on when it is set; `read_pictures` overrides), `gemini_model`
-  (default gemini-3.8-flash, falls back to gemini-2.5-flash on 404). JSON answer: customer, store, total, lines
+  (default gemini-3.8-flash; when busy (429/5xx, retried once) or not offered it tries gemini-2.5-flash, gemini-3.5-flash-lite, gemini-2.5-flash-lite; a failed read shows "Read again" instead of calling on every rerun). JSON answer: customer, store, total, lines
   (name, pack, qty, sure). Used by Attach the order (photo shown next to the list for comparison; unsure lines =
   🟡 check) and by Upload PO screenshots of no-PO customers (lines → the same "Our SKU" table; "⚠ hard to read";
   total vs lines checked). Without a key: Tesseract fallback (pictures off by default). Free-tier data may be used
@@ -408,7 +408,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **185 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **186 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl, pdfplumber; packages.txt: tesseract-ocr.
 

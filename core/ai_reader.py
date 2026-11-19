@@ -20,7 +20,11 @@ from core import config
 from core.po_reader import POLine
 
 DEFAULT_MODEL = "gemini-3.8-flash"
-FALLBACK_MODEL = "gemini-2.5-flash"
+FALLBACK_MODELS = ("gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash-lite")
+
+
+class Busy(Exception):
+    """The model is overloaded or out of free quota right now (429 / 5xx): try the next one."""
 URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 PROMPT = """You read purchase orders / indents for a fruit supplier (Ninjacart) from a photo or a
@@ -128,15 +132,18 @@ def _call(model: str, img: bytes, mime: str, key: str) -> dict:
                                                      "data": base64.b64encode(img).decode()}}]}],
             "generationConfig": {"temperature": 0, "responseMimeType": "application/json",
                                  "responseSchema": SCHEMA}}
+    import time
     last = ""
-    for _ in range(2):
+    for attempt in range(2):
+        if attempt:
+            time.sleep(2)
         try:
             r = requests.post(URL.format(model=model), params={"key": key}, json=body, timeout=90)
         except requests.RequestException as e:
             last = f"could not reach Gemini ({type(e).__name__})"
             continue
         if r.status_code in (429, 500, 502, 503, 504):
-            last = f"Gemini is busy ({r.status_code}); try again in a minute"
+            last = f"busy ({r.status_code})"
             continue
         if r.status_code == 404:
             raise LookupError(model)
@@ -154,8 +161,8 @@ def _call(model: str, img: bytes, mime: str, key: str) -> dict:
             text = "".join(p.get("text", "") for p in j["candidates"][0]["content"]["parts"])
             return json.loads(text)
         except (ValueError, KeyError, IndexError, TypeError):
-            last = "Gemini gave no readable answer"
-    raise AIReadError(last or "Gemini did not answer.")
+            last = "no readable answer"
+    raise Busy(last or "no answer")
 
 
 def read(data: bytes, mime: str = "image/jpeg") -> AIRead:
@@ -163,14 +170,18 @@ def read(data: bytes, mime: str = "image/jpeg") -> AIRead:
     if not key:
         raise AIReadError("Picture reading needs gemini_api_key in Secrets.")
     img, mime = _shrink(data, mime)
-    model = str(config.get("gemini_model", DEFAULT_MODEL) or DEFAULT_MODEL)
-    try:
-        payload, used = _call(model, img, mime, key), model
-    except LookupError:
-        payload, used = _call(FALLBACK_MODEL, img, mime, key), FALLBACK_MODEL
-    res = parse(payload)
-    res.model = used
-    return res
+    first = str(config.get("gemini_model", DEFAULT_MODEL) or DEFAULT_MODEL)
+    tried = []
+    for model in dict.fromkeys((first,) + FALLBACK_MODELS):
+        try:
+            payload = _call(model, img, mime, key)
+        except (LookupError, Busy) as e:        # not offered / overloaded: the next model
+            tried.append(f"{model}: {'not available' if isinstance(e, LookupError) else e}")
+            continue
+        res = parse(payload)
+        res.model = model
+        return res
+    raise AIReadError("Gemini is busy right now (" + "; ".join(tried) + "). Press Read again in a minute.")
 
 
 def mime_of(name: str) -> str:

@@ -93,3 +93,23 @@ def test_links_for_new_items(monkeypatch):
         {"Customer SKU Name": "1Pc - Hass", "From file": "1pc - hass"}])
     assert [(r["PO Item Name"], r["Customer SKU Name"]) for r in rows] == [("Fresho Blueberry 125 g",
                                                                           "125gm - Fresho Blueberry")]
+
+
+def test_gemini_busy_falls_back(monkeypatch):
+    from core import ai_reader
+    monkeypatch.setattr(ai_reader, "api_key", lambda: "k")
+    calls = []
+
+    def fake(model, img, mime, key):
+        calls.append(model)
+        if model == ai_reader.DEFAULT_MODEL:
+            raise ai_reader.Busy("busy (503)")
+        return {"lines": [{"name": "Kiwi", "qty": 5, "sure": True}]}
+    monkeypatch.setattr(ai_reader, "_call", fake)
+    r = ai_reader.read(b"x")
+    assert calls == [ai_reader.DEFAULT_MODEL, "gemini-2.5-flash"] and r.model == "gemini-2.5-flash"
+
+    monkeypatch.setattr(ai_reader, "_call", lambda *a: (_ for _ in ()).throw(ai_reader.Busy("busy (503)")))
+    import pytest
+    with pytest.raises(ai_reader.AIReadError, match="Read again"):
+        ai_reader.read(b"x")

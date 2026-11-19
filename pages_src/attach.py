@@ -211,13 +211,19 @@ def render(m: Masters, user=None) -> None:
         if up is not None:
             data = up.getvalue()
             h = hashlib.md5(data).hexdigest()
+            err = s.get("rd_err") or (None, "")
+            if s.get(DONE) != h and err[0] == h:     # failed before: wait for "Read again", no re-call each rerun
+                st.error(err[1])
+                if not st.button("Read again", icon=":material/refresh:", key="rd_retry"):
+                    return
             if s.get(DONE) != h:
                 try:
                     with st.spinner("Reading the order…"):
                         read = order_reader.read(up.name, data, state.header().store)
                 except ImportFileError as e:
-                    st.error(str(e))
-                    return
+                    s["rd_err"] = (h, str(e))
+                    st.rerun()
+                s.pop("rd_err", None)
                 s[DONE] = h
                 other = order_reader.wrong_customer(
                     state.header().customer,
