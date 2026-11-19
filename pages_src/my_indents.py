@@ -216,12 +216,20 @@ def _filters(summ: pd.DataFrame) -> pd.DataFrame:
         view = view[view["delivery_date"].astype(str) == d]
     cities = sorted(summ["city"].unique())
     if len(cities) > 1:
-        c = st.pills("City", cities + ["All"], default="All", key="mi_city")
+        keep_c = st.session_state.get("mi_city_keep", "All")
+        c = st.pills("City", cities + ["All"], default=keep_c if keep_c in cities else "All", key="mi_city")
+        st.session_state["mi_city_keep"] = c or "All"
         if c and c != "All":
             view = view[view["city"] == c]
     counts = view["customer"].value_counts()
     opts = [f"All · {len(view)}"] + [f"{k} · {n}" for k, n in sorted(counts.items())]
-    cu = st.pills("Customer", opts, default=opts[0], key=f"mi_cust_{pick}")
+    keep = st.session_state.get("mi_cust_keep", "")      # survives saves (full reruns)
+    start = next((o for o in opts if o.rsplit(" · ", 1)[0] == keep), opts[0])
+    k = f"mi_cust_{pick}"
+    if k in st.session_state and st.session_state[k] not in opts:
+        st.session_state.pop(k)
+    cu = st.pills("Customer", opts, default=start, key=k)
+    st.session_state["mi_cust_keep"] = cu.rsplit(" · ", 1)[0] if cu and not cu.startswith("All · ") else ""
     if cu and not cu.startswith("All · "):
         view = view[view["customer"] == cu.rsplit(" · ", 1)[0]]
     f = st.columns([2, 1])
