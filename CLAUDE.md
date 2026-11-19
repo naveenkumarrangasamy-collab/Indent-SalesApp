@@ -154,6 +154,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - Every save is a new version, recorded with a Change_Log entry.
 - **Deleting:** nobody deletes items or indents, **except an owner**, who can delete (cancel) an indent until **T-2**, even after the cutoff. Deleted indents are kept as Cancelled.
 - The "Edit qty / price" action is on All indents.
+- **All indents cards (19 Nov)**: the table is replaced by one card per indent (max 40) listing every line item
+  (qty > 0) with **Edit** and **Delete** per line (Delete = qty 0, history kept; anyone who can edit the indent,
+  before the cutoff and before a PO/lock), **Add item** (dialog: Parent SKU → this customer's SKUs not on the
+  indent, variety for Apple, qty, price), Upload PO and **Open** (full detail: versions, change log, PO, lock,
+  change date, delete indent). The customer pill shows only that customer's cards.
 - **All indents filters (18 Nov)**: buttons on top like Create indent: Delivery date (Yesterday / Today (default) /
   Tomorrow / All dates), City (only when >1 city), Customer (with counts); then Search + Status.
 

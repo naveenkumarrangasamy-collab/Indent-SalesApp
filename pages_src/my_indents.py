@@ -89,17 +89,117 @@ def _page(user: User) -> None:
         show["Created by"] = view["created_by"].values
     from pages_src import bulk_download
     bulk_download.render(user, df, list(view["indent_id"]), "mi_bulk")
-    st.caption(f"{len(view)} indent(s). Click a row to open it.")
-    sel = st.dataframe(show, hide_index=True, width="stretch", on_select="rerun",
-                       selection_mode="single-row", key="mi_table",
-                       column_config={"Amount": st.column_config.NumberColumn(format="%.2f")})
-    rows = sel.selection.rows if sel and sel.selection else []
-    if rows:
-        st.session_state["mi_open"] = show.iloc[rows[0]]["Indent"]
     open_id = st.session_state.get("mi_open")
     if open_id and open_id in set(summ["indent_id"]):
-        st.divider()
+        c = st.columns([5, 1], vertical_alignment="center")
+        if c[1].button("Close", icon=":material/close:", key="mi_close", width="stretch"):
+            st.session_state.pop("mi_open", None)
+            st.rerun()
         _detail(df, open_id, user)
+        st.divider()
+    else:
+        open_id = None
+    st.caption(f"{len(view)} indent(s) · every line item shown"
+               + (f" (first {MAX_CARDS})" if len(view) > MAX_CARDS else ""))
+    for iid in list(view["indent_id"])[:MAX_CARDS]:
+        _card(df, iid, user)
+    _card_actions(df, user, open_id)
+    if open_id is None:
+        indent_actions.show_dialog(user)
+
+
+MAX_CARDS = 40
+_CW = [1.0, 3.0, 0.8, 0.7, 0.7, 0.75, 0.85]
+
+
+def _state(cur) -> tuple[bool, bool, str]:
+    """(editable, has_po, why-not) for an indent."""
+    h = cur.header
+    has_po = cur.status == STATUS_FROZEN
+    frozen = has_po or cur.status in ("Cancelled", STATUS_LOCKED)
+    open_ = indents.can_edit(h.delivery_date, customer=h.customer)
+    why = ("Deleted" if cur.status == "Cancelled" else "Locked: processing started"
+           if cur.status == STATUS_LOCKED else "Frozen with a PO") if frozen else \
+        ("" if open_ else f"Editing closed at {indents.deadline_text(h.delivery_date, h.customer)}")
+    return open_ and not frozen, has_po, why
+
+
+def _card(df: pd.DataFrame, indent_id: str, user: User) -> None:
+    """One indent with all its line items; Edit / Delete per line, Add item, Upload PO, Open."""
+    cur = indents.snapshot(df, indent_id)
+    if cur is None:
+        return
+    h = cur.header
+    editable, has_po, why = _state(cur)
+    live = [x for x in cur.lines if to_number(x.qty) > 0]
+    gone = len(cur.lines) - len(live)
+    qty = sum(to_number(x.qty) for x in live)
+    with st.container(border=True, key=f"mi_card_{indent_id}"):
+        top = st.columns([3, 2], vertical_alignment="center")
+        top[0].markdown(f"**{escape(indent_id)} · {escape(h.customer)} · {escape(h.store)}** &nbsp; "
+                        f"{common.badge(cur.status)}", unsafe_allow_html=True)
+        top[1].markdown(f"<div class='mt-muted' style='text-align:right'>{escape(h.city)} · {h.delivery_date} · "
+                        f"{escape(h.expected_time)} · v{cur.version} · {len(live)} item(s) · "
+                        f"{fmt_num(qty)} qty</div>", unsafe_allow_html=True)
+        head = st.columns(_CW)
+        for col, label in zip(head, ["Parent SKU", "Customer SKU Name", "Lot size", "Qty", "Price", "", ""]):
+            col.markdown(f"<span class='mt-muted'>{label}</span>", unsafe_allow_html=True)
+        for i, x in enumerate(cur.lines):
+            if to_number(x.qty) <= 0:
+                continue
+            c = st.columns(_CW, vertical_alignment="center")
+            c[0].write(x.parent_sku)
+            c[1].write(x.customer_sku_name + (f" · {x.variety}" if x.variety else ""))
+            c[2].write(lot_size(x.customer_sku_name) or x.lot)
+            c[3].markdown(f"<span class='num'>{fmt_q(x.qty)}</span>", unsafe_allow_html=True)
+            c[4].markdown(f"<span class='num'>{x.price:,.2f}</span>", unsafe_allow_html=True)
+            if editable:
+                if c[5].button("Edit", icon=":material/edit:", key=f"cd_e_{indent_id}_{i}", width="stretch"):
+                    _ask_line("edit", cur, x.customer_sku_name)
+                if c[6].button("Delete", icon=":material/delete:", key=f"cd_d_{indent_id}_{i}", width="stretch"):
+                    _ask_line("del", cur, x.customer_sku_name)
+        if not live:
+            st.caption("No items with qty.")
+        b = st.columns([1, 1, 1, 3], vertical_alignment="center")
+        if editable and b[0].button("Add item", icon=":material/add:", key=f"cd_a_{indent_id}", width="stretch"):
+            _ask_line("add", cur, "")
+        if not has_po and cur.status != "Cancelled" and b[1].button(
+                "Upload PO", icon=":material/upload_file:", key=f"cd_p_{indent_id}", width="stretch"):
+            st.session_state.pop("mi_line", None)
+            indent_actions.ask("po", indent_id)
+        if b[2].button("Open", icon=":material/open_in_full:", key=f"cd_o_{indent_id}", width="stretch",
+                       help="Versions, change log, PO, lock, change date"):
+            st.session_state["mi_open"] = indent_id
+            st.rerun()
+        note = [f"{gone} item(s) removed (qty 0)"] if gone else []
+        if why:
+            note.append(why)
+        if note:
+            b[3].caption(" · ".join(note))
+
+
+def _ask_line(kind: str, cur, name: str) -> None:
+    st.session_state.pop(indent_actions.KEY, None)
+    st.session_state["mi_line"] = (kind, cur.indent_id, cur.version, name)
+    st.rerun()
+
+
+def _card_actions(df: pd.DataFrame, user: User, open_id: str | None) -> None:
+    """Dialogs opened from the cards (the open indent's own Edit is handled by its detail)."""
+    act = st.session_state.get("mi_line")
+    if not act or (act[0] == "edit" and act[1] == open_id):
+        return
+    cur = indents.snapshot(df, act[1])
+    if cur is None or cur.version != act[2]:
+        st.session_state.pop("mi_line", None)
+        st.warning("This indent changed since you clicked; please try again.")
+        return
+    if act[0] == "edit":
+        _edit_line_dialog(cur, act[3], user)
+    elif act[0] == "del":
+        _remove_line_dialog(cur, act[3], user)
+    elif act[0] == "add":
+        _add_line_dialog(cur, user)
 
 
 def _filters(summ: pd.DataFrame) -> pd.DataFrame:
@@ -441,6 +541,61 @@ def _edit_line_dialog(cur, name: str, user: User) -> None:
                    disabled=not changes or (bool(varieties) and not variety)):
         lines = [new if x.customer_sku_name == name else x for x in cur.lines]
         _save_lines(cur, lines, user, "Item updated:")
+    if b[1].button("Cancel", width="stretch"):
+        st.session_state.pop("mi_line", None)
+        st.rerun()
+
+
+@st.dialog("Delete item", dismissible=False)
+def _remove_line_dialog(cur, name: str, user: User) -> None:
+    line = next((x for x in cur.lines if x.customer_sku_name == name), None)
+    if line is None:
+        st.session_state.pop("mi_line", None)
+        st.rerun()
+    st.markdown(f"Remove **{escape(name)}** (qty {fmt_q(line.qty)}) from {cur.indent_id}?", unsafe_allow_html=True)
+    st.caption("Its qty becomes 0; the history stays in the change log.")
+    b = st.columns(2)
+    if b[0].button("Delete item", type="primary", icon=":material/delete:", width="stretch"):
+        gone = IndentLine(parent_sku=line.parent_sku, customer_sku_name=name, variety=line.variety,
+                          lot=line.lot, qty=0.0, price=float(line.price))
+        _save_lines(cur, [gone if x.customer_sku_name == name else x for x in cur.lines], user, "Item deleted:")
+    if b[1].button("Cancel", width="stretch"):
+        st.session_state.pop("mi_line", None)
+        st.rerun()
+
+
+@st.dialog("Add item", dismissible=False)
+def _add_line_dialog(cur, user: User) -> None:
+    h = cur.header
+    key = lambda n: " ".join(str(n).split()).casefold()  # noqa: E731
+    have = {key(x.customer_sku_name) for x in cur.lines if to_number(x.qty) > 0}
+    try:
+        mm = masters.load_masters()
+    except indents.SheetError as e:
+        st.error(str(e))
+        return
+    st.markdown(f"**{cur.indent_id}** · {escape(h.customer)} · {escape(h.store)}", unsafe_allow_html=True)
+    parent = st.selectbox("Parent SKU", mm.parents(h.city, h.customer), index=None, placeholder="Choose")
+    names = [n for n in mm.sku_names(h.city, h.customer, parent) if key(n) not in have] if parent else []
+    name = st.selectbox("Customer SKU Name", names, index=None, placeholder="Choose",
+                        help="Only SKUs of this customer that are not on the indent yet")
+    variety = ""
+    if parent and name and mm.needs_variety(parent):
+        fixed = mm.default_variety(h.city, h.customer, name)
+        if fixed:
+            variety = st.selectbox("Variety", [fixed], disabled=True)
+        else:
+            variety = st.selectbox("Variety", mm.varieties_for(parent), index=None, placeholder="Choose") or ""
+    c = st.columns(2)
+    qty = c[0].number_input("Qty", min_value=1, step=1, format="%d", value=1)
+    price = c[1].number_input("Price / lot", min_value=0.01, step=1.0, value=1.0)
+    b = st.columns(2)
+    ok = bool(name) and (not (parent and mm.needs_variety(parent)) or bool(variety))
+    if b[0].button("Add item", type="primary", icon=":material/add:", width="stretch", disabled=not ok):
+        new = IndentLine(parent_sku=parent, customer_sku_name=name, variety=variety,
+                         lot=mm.lot_for(h.city, h.customer, name), qty=float(qty), price=float(price))
+        lines = [x for x in cur.lines if key(x.customer_sku_name) != key(name)] + [new]
+        _save_lines(cur, lines, user, f"{name} added:")
     if b[1].button("Cancel", width="stretch"):
         st.session_state.pop("mi_line", None)
         st.rerun()
