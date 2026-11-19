@@ -41,3 +41,35 @@ def test_change_cell():
 def test_screenshot_po():
     assert "more" in config.no_po_customers()
     assert file_mime("IN-021 - wa.jpg") == "image/jpeg" and file_mime("po.pdf") == "application/pdf"
+
+
+def test_gemini_answer_is_parsed():
+    from core import ai_reader
+    r = ai_reader.parse({"customer": "More Retail", "store": "Ekrajpura", "total": 117, "notes": "",
+                         "lines": [{"name": "Avocado Hass", "pack": "1 pc", "qty": 100, "sure": True},
+                                   {"name": "Blueberry", "pack": "125 g", "qty": 17, "sure": False},
+                                   {"name": "Kiwi", "pack": "", "qty": 0, "sure": False}]})
+    assert [(x.name, x.qty, x.unsure) for x in r.lines] == [("Avocado Hass - 1 pc", 100, False),
+                                                           ("Blueberry - 125 g", 17, True)]
+    assert r.total == 117 and "More Retail" in r.text
+    assert order_reader.whose(r.text, AL) == {"More"}
+
+
+def test_pictures_follow_the_key(monkeypatch):
+    vals = {}
+    monkeypatch.setattr(config, "get", lambda k, d=None: vals.get(k, d))
+    assert not config.read_pictures()
+    vals["gemini_api_key"] = "x"
+    assert config.read_pictures()
+    vals["read_pictures"] = "false"
+    assert not config.read_pictures()
+
+
+def test_gemini_picture_in_order_reader(monkeypatch):
+    from core import ai_reader
+    monkeypatch.setattr(ai_reader, "available", lambda: True)
+    monkeypatch.setattr(ai_reader, "read", lambda data, mime: ai_reader.parse(
+        {"customer": "Zepto", "lines": [{"name": "Apple Snacky", "pack": "2 pcs", "qty": 600, "sure": True}],
+         "total": 600}))
+    r = order_reader.read("wa.jpg", b"img")
+    assert r.kind == "picture" and r.lines[0].qty == 600 and r.total == 600 and "Zepto" in r.text

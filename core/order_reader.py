@@ -193,5 +193,13 @@ def read(file_name: str, data: bytes, store: str = "") -> OrderRead:
         r = po_reader.read_pdf(data)
         return OrderRead(lines=r.lines, total=None, kind="pdf", note=" ".join(r.checks), text=r.text)
     if ext in PICTURE_TYPES:
+        from core import ai_reader
+        if ai_reader.available():
+            try:
+                r = ai_reader.read(data, ai_reader.mime_of(file_name))
+            except ai_reader.AIReadError as e:
+                raise ImportFileError(str(e)) from e
+            return OrderRead(lines=r.lines, total=r.total, kind="picture", text=r.text,
+                             note=(f"read by {r.model}" + (f" · {r.notes}" if r.notes else "")))
         return _picture(data)
     raise ImportFileError("Attach a picture (PNG/JPG), an Excel or a PDF file.")

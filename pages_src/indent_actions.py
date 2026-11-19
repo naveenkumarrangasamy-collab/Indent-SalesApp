@@ -112,6 +112,15 @@ def _po_dialog(indent_id: str, user: User) -> None:
     file_name, file_bytes = files.get(indent_id, (None, None))
     is_pdf = bool(file_name) and file_name.casefold().endswith(".pdf")
     read = _read(file_bytes) if file_bytes and is_pdf else None
+    if file_bytes and not is_pdf:
+        from core import ai_reader
+        if ai_reader.available():
+            try:
+                read = _read_image(file_bytes, file_name)
+            except ai_reader.AIReadError as e:
+                st.warning(f"The screenshot could not be read ({e}). Type the quantities.")
+        with st.expander("The screenshot", expanded=False):
+            st.image(file_bytes, width=360)
     no_key = f"po_no_{indent_id}"
     if read and read.po_number and not st.session_state.get(no_key):
         st.session_state[no_key] = read.po_number
@@ -205,6 +214,21 @@ def _read(data: bytes):
     return po_reader.read_pdf(data)
 
 
+@st.cache_data(show_spinner="Reading the screenshot…", max_entries=20)
+def _read_image(data: bytes, name: str):
+    """A screenshot PO (no-PO customers, e.g. More on WhatsApp) read by Gemini into
+    PO lines, then shown in the same 'Our SKU' table as a PDF PO."""
+    from core import ai_reader
+    r = ai_reader.read(data, ai_reader.mime_of(name))
+    res = po_reader.POReadResult(lines=r.lines, total=None, has_text=bool(r.lines))
+    if r.total is not None and abs(r.total - res.total_qty) >= 0.5:
+        res.checks.append(f"The screenshot says total {fmt_num(r.total)} but the lines add up to "
+                          f"{fmt_num(res.total_qty)}: a line may be missing or misread.")
+    if any(x.unsure for x in r.lines):
+        res.checks.append("Some lines were hard to read (? best guess): compare with the screenshot.")
+    return res
+
+
 def _candidates(cur) -> list[str]:
     names = [x.customer_sku_name for x in cur.lines]
     try:
@@ -269,7 +293,7 @@ def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[
         st.error(f"PO number {po_number} looks like **{store}**, but this indent is for **{h.store}**.")
     owner = bool(getattr(user, "is_owner", False))
     base = pd.DataFrame([{"On the PO": x.name, "Code": x.code, "Qty": fmt_num(x.qty),
-                          "Our SKU": x.sku or None, "Match": HOW.get(x.how, ""),
+                          "Our SKU": x.sku or None, "Match": HOW.get(x.how, "") + (" · ⚠ hard to read" if x.unsure else ""),
                           **({"Approve": False} if owner else {})} for x in lines])
     ed = st.data_editor(base, key=f"po_read_{indent_id}_{hash(read.po_number)}_{len(lines)}",
                         hide_index=True, width="stretch",

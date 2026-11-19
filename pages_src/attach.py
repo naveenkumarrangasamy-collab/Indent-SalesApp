@@ -197,7 +197,8 @@ def render(m: Masters, user=None) -> None:
     s = st.session_state
     with st.container(border=True, key="mt_attach"):
         c = st.columns([3, 1])
-        up = c[0].file_uploader("Attach the order: Excel or PDF",
+        up = c[0].file_uploader("Attach the order: Excel, PDF or photo" if config.read_pictures()
+                                else "Attach the order: Excel or PDF",
                                 type=["xlsx", "xls", "pdf"] + (list(order_reader.PICTURE_TYPES)
                                                                if config.read_pictures() else []),
                                 key=f"rd_file_{s.get('rd_rev', 0)}",
@@ -232,6 +233,9 @@ def render(m: Masters, user=None) -> None:
         if s.get(SUMMARY):
             msg, warn = s[SUMMARY]
             (st.warning if warn else st.success)(msg)
+        if up is not None and up.name.rsplit(".", 1)[-1].casefold() in order_reader.PICTURE_TYPES:
+            with st.expander("The picture (compare with the list below)"):
+                st.image(up.getvalue(), width=420)
         _diff_box()
     _same_box(m, user)
     _pending_box(m)
