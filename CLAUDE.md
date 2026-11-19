@@ -369,6 +369,18 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   total vs lines checked). Without a key: Tesseract fallback (pictures off by default). Free-tier data may be used
   by Google; a paid key avoids that. Not tested against the live API from the Claude cloud (network blocked).
 
+- **New customers without SKU names (19 Nov, user: "collect data and start things")**: Create indent no longer
+  stops at "Mapping pending": Attach the order still shows; every line becomes a 🆕 new item (Parent SKU guessed
+  from all cities' parents, `PARENT_HINTS` e.g. Baby Orange → Mandarin; a new parent stays red) and is added to
+  All Cux City + New on Submit; the file name (and its code) → our name is saved to PO_Item_Map
+  (`attach.links_to_save`), so each order teaches the next one.
+- **Name style for pack inside the name** (`master_add._mid_pack`, Bigbasket): 'Fresho Kiwi - Green 3 pcs ( 240 Gms *)'
+  → '3PC - Fresho Kiwi - Green (240 Gms)', 'Fresho Baby Orange 1 kg ( Imported)' → '1Kg - Fresho Baby Orange (Imported)'.
+- **Excel reader**: name heads include "Sku Description"; code column (Sku Code / EAN) kept; when no qty header,
+  the first mostly-numeric column right of the names is the qty (Bigbasket puts the store name there); a '-'
+  name row is the total.
+- 19 Nov: PTP Hyderabad · Bigbasket added with placeholder store "Bigbasket - PTP Hyderabad" (rename later).
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.
@@ -396,7 +408,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **183 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **185 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl, pdfplumber; packages.txt: tesseract-ocr.
 

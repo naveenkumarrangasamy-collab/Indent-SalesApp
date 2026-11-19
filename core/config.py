@@ -181,7 +181,9 @@ def customer_aliases() -> dict[str, list[str]]:
     base = {"Zepto": ["zepto", "kiranakart", "kwpl"],
             "Swiggy": ["swiggy", "instamart", "scootsy", "moksh", "cloudkart", "cloudstore", "jupiterkart"],
             "Zomato": ["zomato"], "Flipkart": ["flipkart"], "Firstclub": ["firstclub", "first club"],
-            "Namdhari": ["namdhari"], "More": ["more retail", "more_blr", "more supermarket", "more hyper"]}
+            "Namdhari": ["namdhari"], "More": ["more retail", "more_blr", "more supermarket", "more hyper"],
+            "Bigbasket": ["bigbasket", "big basket", "bbnow", "innovative retail"],
+            "Reliance": ["reliance retail", "jiomart"], "Amazon": ["amazon"], "Metro": ["metro cash"]}
     try:
         extra = dict(get("customer_aliases", {}) or {})
     except (TypeError, ValueError):

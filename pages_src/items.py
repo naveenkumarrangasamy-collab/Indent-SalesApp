@@ -486,6 +486,8 @@ def _before_check(m: Masters) -> Masters:
         except SheetError as e:
             st.error(f"The new items could not be added to the master: {e}")
             st.stop()
+        from pages_src.indent_actions import _learn
+        _learn(attach.links_to_save(hdr.customer, new))
         st.session_state[attach.NEW] = {}
         masters.clear_cache()
         m = masters.load_masters()
@@ -568,10 +570,12 @@ def render(m: Masters, user: User) -> None:
     st.caption(f"{_fmt_date(hdr.delivery_date)} · {hdr.customer} · {hdr.city}"
                + (f" · {fmt_slot(hdr.expected_time)}" if hdr.expected_time else " · choose the delivery time above"))
 
+    from pages_src import attach
     if not m.has_sku_mapping(hdr.city, hdr.customer):
-        st.info(f"Mapping pending: no SKU names in 'All Cux City' for {hdr.customer} in {hdr.city}.")
+        st.info(f"No SKU names yet for {hdr.customer} in {hdr.city}. Attach their order (Excel, PDF or photo): "
+                "its items are added to All Cux City and the New tab when you submit.")
+        attach.render(m, user)
     else:
-        from pages_src import attach
         attach.render(m, user)
         _add_form(m)
 

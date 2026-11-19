@@ -73,3 +73,23 @@ def test_gemini_picture_in_order_reader(monkeypatch):
          "total": 600}))
     r = order_reader.read("wa.jpg", b"img")
     assert r.kind == "picture" and r.lines[0].qty == 600 and r.total == 600 and "Zepto" in r.text
+
+
+def test_bigbasket_names_in_our_style():
+    from core import master_add as ma
+    assert ma.new_sku_name("Fresho Kiwi - Green 3 pcs  ( 240 Gms *)") == "3PC - Fresho Kiwi - Green (240 Gms)"
+    assert ma.new_sku_name("Fresho Baby Orange 1 kg  ( Imported)") == "1Kg - Fresho Baby Orange (Imported)"
+    assert ma.new_sku_name("Fresho Blueberry 125 g") == "125gm - Fresho Blueberry"
+    assert ma.new_sku_name("Avocado Hass Imported") == "Avocado Hass Imported"
+    assert ma.new_sku_name("Pear Packham Imported - 2 PIECE") == "2PC - Pear Packham Imported"
+    assert ma.guess_parent("Fresho Baby Orange 1 kg", ["Orange", "Mandarin"]) == "Mandarin"
+    assert ma.guess_parent("Orange Imported", ["Orange", "Mandarin"]) == "Orange"
+
+
+def test_links_for_new_items(monkeypatch):
+    from pages_src import attach
+    rows = attach.links_to_save("Bigbasket", [
+        {"Customer SKU Name": "125gm - Fresho Blueberry", "From file": "Fresho Blueberry 125 g"},
+        {"Customer SKU Name": "1Pc - Hass", "From file": "1pc - hass"}])
+    assert [(r["PO Item Name"], r["Customer SKU Name"]) for r in rows] == [("Fresho Blueberry 125 g",
+                                                                          "125gm - Fresho Blueberry")]

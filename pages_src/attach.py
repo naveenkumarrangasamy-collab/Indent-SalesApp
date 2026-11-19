@@ -39,10 +39,13 @@ def pending() -> list:
 
 
 def _all_parents(m: Masters, city: str) -> list[str]:
+    """Parent SKUs of this city first, then of every city (a new customer or city
+    has none of its own yet, 19 Nov)."""
     out = []
-    for c in m.customers(city):
-        out += m.parents(city, c)
-    return list(dict.fromkeys(out))
+    for cty in [city] + [c for c in m.cities() if c != city]:
+        for c in m.customers(cty):
+            out += m.parents(cty, c)
+    return list(dict.fromkeys(p for p in out if p))
 
 
 def _all_names(m: Masters, city: str, customer: str) -> list[str]:
@@ -138,7 +141,7 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
                                                  lot=lot, qty=float(x.qty), price=float(price))
             order.append(sku)
         if flag:
-            fl[sku] = {"flag": flag, "text": x.name}
+            fl[sku] = {"flag": flag, "text": x.name, "code": x.code}
         n_ok += not flag
         n_check += flag == "check"
         n_new += flag == "new"
@@ -385,8 +388,20 @@ def new_items_to_add() -> list[dict]:
     """New-item rows still on the indent (to write to the master on submit)."""
     on = {x.customer_sku_name.casefold(): x for x in state.lines()}
     out = []
+    fl = flags()
     for sku, r in st.session_state.get(NEW, {}).items():
         x = on.get(sku.casefold())
         if x is not None:
-            out.append({**r, "Variety": x.variety or r.get("Variety", "")})
+            out.append({**r, "Variety": x.variety or r.get("Variety", ""),
+                        "From file": (fl.get(sku) or {}).get("text", ""),
+                        "Code": (fl.get(sku) or {}).get("code", "")})
     return out
+
+
+def links_to_save(customer: str, items: list[dict]) -> list[dict]:
+    """New items whose name in the file differs from ours: remember the pair in
+    PO_Item_Map, so the next order / PO from this customer matches by itself."""
+    stamp = config.now_iso()
+    return [{"Customer": customer, "PO Item Code": r.get("Code", ""), "PO Item Name": r["From file"],
+             "Customer SKU Name": r["Customer SKU Name"], "Updated_At": stamp}
+            for r in items if r.get("From file") and _exact(r["From file"]) != _exact(r["Customer SKU Name"])]

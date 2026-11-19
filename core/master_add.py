@@ -32,7 +32,14 @@ def guess_parent(name: str, parents: list[str]) -> str:
     words = set(re.findall(r"[a-z]+", name.casefold()))
     words |= {w[:-3] + "y" for w in words if w.endswith("ies")} | {w[:-1] for w in words if w.endswith("s")}
     hits = [p for p in parents if p and set(re.findall(r"[a-z]+", p.casefold())) <= words]
+    for w, parent in PARENT_HINTS.items():     # the master files these under another parent
+        if set(w.split()) <= words and parent in parents:
+            return parent
     return max(hits, key=len) if hits else ""
+
+
+# Words that mean a Parent SKU other than the one named ('Baby Orange' is Mandarin in the master).
+PARENT_HINTS = {"baby orange": "Mandarin"}
 
 
 def new_sku_name(read_name: str) -> str:
@@ -59,10 +66,30 @@ def new_sku_name(read_name: str) -> str:
     _, pack = po_key(read_name)
     m = re.fullmatch(r"([\d.]+)(pc|g|kg)", pack or "")
     if not m:
-        return core
+        return _mid_pack(read_name) or core
     n, unit = fmt_num(float(m.group(1))), m.group(2)
     prefix = {"pc": f"{n}PC", "g": f"{n}gm", "kg": f"{n}Kg"}[unit]
     return f"{prefix} - {core}"
+
+
+_UNIT = r"(pcs|pc|pieces|piece|kgs|kg|grams|gram|gms|gm|g)"
+
+
+def _mid_pack(name: str) -> str:
+    """Bigbasket style, the pack inside the name (19 Nov):
+    'Fresho Kiwi - Green 3 pcs  ( 240 Gms *)' -> '3PC - Fresho Kiwi - Green (240 Gms)',
+    'Fresho Baby Orange 1 kg  ( Imported)' -> '1Kg - Fresho Baby Orange (Imported)'.
+    Only a pack outside brackets counts; '' when there is none."""
+    outside = re.sub(r"\([^)]*\)", lambda mm: " " * len(mm.group(0)), name)
+    m = re.search(r"(?<![\w.])([\d.]+)\s*" + _UNIT + r"\b\.?", outside, flags=re.I)
+    if not m:
+        return ""
+    n, u = fmt_num(float(m.group(1))), m.group(2).casefold()
+    unit = "Kg" if u.startswith("k") else "gm" if u.startswith("g") else "PC"
+    rest = name[:m.start()] + " " + name[m.end():]
+    rest = re.sub(r"\(\s*([^)]*?)[\s*]*\)", lambda mm: f"({mm.group(1).strip()})", rest)
+    rest = " ".join(rest.split()).strip(" -,")
+    return f"{n}{unit} - {rest}" if rest else ""
 
 
 def lot_of(sku_name: str) -> str:
