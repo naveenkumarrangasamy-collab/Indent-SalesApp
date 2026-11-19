@@ -180,6 +180,8 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
             msg += " Vs the saved indent: " + ", ".join(bits) + "."
     if read.kind == "picture":
         msg += " Pictures can miss lines: compare with the picture."
+        if read.note:
+            msg += f" ({read.note}.)"
     s[SUMMARY] = (msg, bool(n_check or bad or (read.total and abs(read.total - read.read_total) >= 0.5)))
 
 

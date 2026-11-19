@@ -65,14 +65,18 @@ def test_pictures_follow_the_key(monkeypatch):
     assert not config.read_pictures()
 
 
-def test_gemini_picture_in_order_reader(monkeypatch):
-    from core import ai_reader
-    monkeypatch.setattr(ai_reader, "available", lambda: True)
-    monkeypatch.setattr(ai_reader, "read", lambda data, mime: ai_reader.parse(
-        {"customer": "Zepto", "lines": [{"name": "Apple Snacky", "pack": "2 pcs", "qty": 600, "sure": True}],
-         "total": 600}))
-    r = order_reader.read("wa.jpg", b"img")
-    assert r.kind == "picture" and r.lines[0].qty == 600 and r.total == 600 and "Zepto" in r.text
+def test_picture_in_order_reader(monkeypatch):
+    from core import picture_table as pt
+    monkeypatch.setattr(pt, "readers", lambda: ["gemini"])
+    monkeypatch.setattr(pt, "read", lambda data, name: pt.parse_gemini(
+        {"customer": "Swiggy", "stores": ["WH1", "WH2"], "totals": [600, 40],
+         "lines": [{"name": "Apple Snacky 2 pcs", "qtys": [600, 0], "sure": True},
+                   {"name": "Kiwi 3 pcs", "qtys": [0, 40], "sure": False}]}))
+    r = order_reader.read("wa.jpg", b"img", "Swiggy WH2")
+    assert r.kind == "picture" and [(x.name, x.qty, x.unsure) for x in r.lines] == [("Kiwi 3 pcs", 40, True)]
+    assert r.total == 40 and "Swiggy" in r.text
+    r = order_reader.read("wa.jpg", b"img", "Swiggy WH1")
+    assert [x.qty for x in r.lines] == [600]
 
 
 def test_bigbasket_names_in_our_style():

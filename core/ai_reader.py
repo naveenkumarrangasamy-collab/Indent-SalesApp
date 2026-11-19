@@ -125,13 +125,14 @@ def parse(payload: dict) -> AIRead:
     return out
 
 
-def _call(model: str, img: bytes, mime: str, key: str) -> dict:
+def _call(model: str, img: bytes, mime: str, key: str, prompt: str | None = None,
+          schema: dict | None = None) -> dict:
     import requests
-    body = {"contents": [{"parts": [{"text": PROMPT},
+    body = {"contents": [{"parts": [{"text": prompt or PROMPT},
                                     {"inline_data": {"mime_type": mime,
                                                      "data": base64.b64encode(img).decode()}}]}],
             "generationConfig": {"temperature": 0, "responseMimeType": "application/json",
-                                 "responseSchema": SCHEMA}}
+                                 "responseSchema": schema or SCHEMA}}
     import time
     last = ""
     for attempt in range(2):

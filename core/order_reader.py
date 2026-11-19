@@ -204,6 +204,25 @@ def wrong_customer(chosen: str, found: set[str]) -> str:
     return ", ".join(sorted(f.values()))
 
 
+def from_table(t, store: str = "") -> OrderRead:
+    """A picture table -> the lines for one store: its own column (header like the
+    store, WH1/FNV1...), the only column, else the first column with a note."""
+    from core import picture_table
+    col = picture_table.pick_column(t, store) if len(t.stores) > 1 else 0
+    note = f"read by {t.source}"
+    if col is None:
+        col = 0
+        note += (f" · the picture has {len(t.stores)} store columns ({', '.join(h or '?' for h in t.stores)});"
+                 " the first was used. Use Read order picture to fill every store at once")
+    out = OrderRead(kind="picture", text=t.text, note=note,
+                    total=t.totals[col] if col < len(t.totals) else None)
+    for r in t.rows:
+        q = r.qtys[col] if col < len(r.qtys) else 0
+        if q > 0:
+            out.lines.append(POLine(name=r.name, qty=q, code=r.code, unsure=r.unsure))
+    return out
+
+
 def read(file_name: str, data: bytes, store: str = "") -> OrderRead:
     ext = file_name.rsplit(".", 1)[-1].casefold() if "." in file_name else ""
     if ext in ("xlsx", "xls"):
@@ -212,13 +231,12 @@ def read(file_name: str, data: bytes, store: str = "") -> OrderRead:
         r = po_reader.read_pdf(data)
         return OrderRead(lines=r.lines, total=None, kind="pdf", note=" ".join(r.checks), text=r.text)
     if ext in PICTURE_TYPES:
-        from core import ai_reader
-        if ai_reader.available():
-            try:
-                r = ai_reader.read(data, ai_reader.mime_of(file_name))
-            except ai_reader.AIReadError as e:
-                raise ImportFileError(str(e)) from e
-            return OrderRead(lines=r.lines, total=r.total, kind="picture", text=r.text,
-                             note=(f"read by {r.model}" + (f" · {r.notes}" if r.notes else "")))
-        return _picture(data)
+        from core import picture_table
+        if not picture_table.readers():
+            return _picture(data)
+        try:
+            t = picture_table.read(data, file_name)
+        except picture_table.TableReadError as e:
+            raise ImportFileError(str(e)) from e
+        return from_table(t, store)
     raise ImportFileError("Attach a picture (PNG/JPG), an Excel or a PDF file.")

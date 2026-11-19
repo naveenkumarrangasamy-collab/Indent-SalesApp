@@ -381,6 +381,21 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   name row is the total.
 - 19 Nov: PTP Hyderabad · Bigbasket added with placeholder store "Bigbasket - PTP Hyderabad" (rename later).
 
+- **Read order picture page** (19 Nov night; `pages_src/read_picture.py`, menu Indents → "Read order picture",
+  url `read-picture`; sales + owners): delivery day (today/tomorrow), city (own cities), customer, time → one
+  picture/screenshot → **table: items × one qty column per store** (`core/picture_table.py`) → each column mapped
+  to a store (`guess_store`: WH1 ← WH1/FNV1/MBF, WH2 ← WH2/FNV2/BLR, else words; pick once) → editable table
+  (Our SKU: PO_Item_Map link → exact our-style name → 🆕 new SKU; 🔴 new fruit = pick) → per store "new indent" or
+  "update IN-0xx" with changes vs saved → **Create / update indents** (new SKUs → master + links; update =
+  picture qty replaces saved qty; saved items not in the picture kept unless "set to 0" ticked). Customer check
+  as on attach. Swiggy WH1 + WH2 in one picture → both indents.
+- **Free reader chain** (`picture_table.read`): Gemini free key (table prompt, `ai_reader._call(prompt, schema)`)
+  → **OCR.space** (secret `ocrspace_api_key`, free 25k/month, 1 MB → `_small_jpeg`, isTable, Engine 2) →
+  Tesseract; text parsed by `parse_lines` (code = leading 6+ digits, trailing numbers = qty columns, header line
+  = store names, date/PO lines skipped, no-name row = totals). Also used by Attach the order pictures
+  (`order_reader.from_table` picks the indent's store column) and More screenshot POs. User registered OCR.space
+  with the office e-mail (captcha + key paste by the user).
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.
@@ -408,7 +423,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **186 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **191 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl, pdfplumber; packages.txt: tesseract-ocr.
 

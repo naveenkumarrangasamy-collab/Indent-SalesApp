@@ -51,6 +51,7 @@ _drop_stale_modules()
 st.set_page_config(page_title="MT Indent", page_icon="🧾", layout="wide")
 
 from pages_src import access, common, home, indent, login, my_indents, po_upload, production, tracker  # noqa: E402
+from pages_src import read_picture  # noqa: E402
 
 _remember_modules()
 
@@ -88,7 +89,7 @@ if user is None:
     # every page address shows the sign-in form (no "Page not found" after a refresh),
     # and once signed in the user lands on the page they were on
     gate = [st.Page(login.render, title="Sign in", icon="🔐", url_path="signin", default=True)]
-    for path in ("home", "indent", "upload-po", "tracker", "indents", "production", "batching",
+    for path in ("home", "indent", "read-picture", "upload-po", "tracker", "indents", "production", "batching",
                  "city-sku-report", "access"):
         gate.append(st.Page(lambda: login.render(), title="Sign in", icon="🔐", url_path=path))
     st.navigation(gate, position="hidden").run()
@@ -106,6 +107,8 @@ pages = {
     "my_indents": st.Page(lambda: my_indents.render(user), title="All indents" if user.is_owner else "My indents",
                           icon="📋", url_path="indents"),
     "po": st.Page(lambda: po_upload.render(user), title="Upload PO", icon="📤", url_path="upload-po"),
+    "picture": st.Page(lambda: read_picture.render(user), title="Read order picture", icon="📷",
+                       url_path="read-picture"),
     "tracker": st.Page(lambda: tracker.render(user), title="Hourly tracker", icon="⏱️", url_path="tracker"),
     "production": st.Page(lambda: production.render(user), title="Production sheet", icon="🏭",
                           url_path="production", default=not makes_indents),
@@ -120,7 +123,7 @@ common.PAGES.update(pages)
 # Sales: indents + PO.  Warehouse: production, batching, hourly tracker.  Owner: everything.
 sections = {}
 if makes_indents:
-    sections["Indents"] = [pages["home"], pages["indent"], pages["my_indents"], pages["po"]]
+    sections["Indents"] = [pages["home"], pages["indent"], pages["picture"], pages["my_indents"], pages["po"]]
 if sees_production:   # owner and warehouse; sales do not get production or the hourly tracker
     sections["Production"] = [pages["production"], pages["batching"], pages["tracker"]]
 if user.is_owner:
