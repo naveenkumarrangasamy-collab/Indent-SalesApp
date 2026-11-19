@@ -403,9 +403,11 @@ class GoogleBackend(_Base):
         from google.auth.transport.requests import AuthorizedSession
 
         sess = AuthorizedSession(self.creds)
-        meta = {"name": name, "parents": [folder_id], "mimeType": "application/pdf"}
+        from core.mailer import file_mime
+        mime = file_mime(name)
+        meta = {"name": name, "parents": [folder_id], "mimeType": mime}
         files = {"metadata": ("metadata", json.dumps(meta), "application/json; charset=UTF-8"),
-                 "file": (name, data, "application/pdf")}
+                 "file": (name, data, mime)}
         r = sess.post("https://www.googleapis.com/upload/drive/v3/files"
                       "?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink",
                       files=files, timeout=90)

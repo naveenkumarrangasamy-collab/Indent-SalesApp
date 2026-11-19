@@ -85,6 +85,8 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
     fl, new, red = dict(flags()), dict(s.get(NEW, {})), list(pending())
     same = list(s.get(SAME, []))
     parents = _all_parents(m, hdr.city)
+    base = state.base_snapshot()
+    saved_q = {x.customer_sku_name.strip().casefold(): float(x.qty) for x in base[1]} if base else None
     n_ok = n_check = n_new = 0
     taken: dict[str, str] = {}
     diff: list[dict] = []
@@ -104,7 +106,8 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
             if not parent or x.unsure:
                 why = "not readable" if x.unsure else "new Parent SKU: add it to the master first"
                 red.append({"text": x.name, "qty": x.qty, "why": why})
-                diff.append({"In the file": x.name, "Qty": x.qty, "Our SKU name": "", "Change": "🔴 " + why})
+                diff.append({"In the file": x.name, "Our SKU name": "", "Saved": None, "File": x.qty,
+                             "Change": "🔴 " + why})
                 continue
             sku = ours
             lot = master_add.lot_of(sku)
@@ -120,11 +123,12 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
         if sku.casefold() in taken:              # two lines of the file on one SKU: never overwrite
             why = f"same SKU as '{taken[sku.casefold()]}' ({sku}): pick the right one"
             red.append({"text": x.name, "qty": x.qty, "why": why})
-            diff.append({"In the file": x.name, "Qty": x.qty, "Our SKU name": sku, "Change": "🔴 " + why})
+            diff.append({"In the file": x.name, "Our SKU name": sku, "Saved": None, "File": x.qty,
+                         "Change": "🔴 " + why})
             continue
-        diff.append({"In the file": x.name, "Qty": x.qty, "Our SKU name": sku,
-                     "Change": "🆕 new SKU: added to All Cux City + New tab on submit" if flag == "new"
-                     else ("🟡 check" if flag else "✓ exact name")})
+        was = saved_q.get(sku.strip().casefold()) if saved_q is not None else None
+        diff.append({"In the file": x.name, "Our SKU name": sku, "Saved": was, "File": x.qty,
+                     "Change": _change(flag, was, float(x.qty), saved_q is not None)})
         taken[sku.casefold()] = x.name
         old = current.get(sku.casefold())
         if old is not None:                      # already on the indent: take the qty from the file
@@ -154,11 +158,39 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
         msg += (f" File total {fmt_num(read.total)}; read {fmt_num(read.read_total)}"
                 + (" ✓" if abs(read.total - read.read_total) < 0.5 else " — a qty may be off or missing") + ".")
     missing = [n for n in order if n.casefold() not in taken and n.strip().casefold() in state.saved_names()]
-    if missing:
-        msg += " Saved items not in this file (set to 0 if the file replaces them): " + ", ".join(missing) + "."
+    for n in missing:
+        was = (saved_q or {}).get(n.strip().casefold())
+        if was:                                  # a saved item already at 0 needs nothing
+            diff.append({"In the file": "", "Our SKU name": n, "Saved": was, "File": None,
+                         "Change": "🔴 not in file"})
+    if saved_q is not None and diff and all(d["Change"] == "✓ same" for d in diff):
+        s[SUMMARY] = (f"Same as the saved indent ({len(diff)} lines, {fmt_num(sum(d['File'] for d in diff))} qty). "
+                      "Nothing to update.", False)
+        s["rd_same_all"] = True
+        return
+    s["rd_same_all"] = False
+    if saved_q is not None:
+        ch = sum(d["Change"][:1] in ("🟡", "🔻") and "check" not in d["Change"] for d in diff)
+        gone = sum(d["Change"] == "🔴 not in file" for d in diff)
+        bits = ([f"{ch} changed"] if ch else []) + ([f"{gone} saved item(s) not in the file"] if gone else [])
+        if bits:
+            msg += " Vs the saved indent: " + ", ".join(bits) + "."
     if read.kind == "picture":
         msg += " Pictures can miss lines: compare with the picture."
     s[SUMMARY] = (msg, bool(n_check or bad or (read.total and abs(read.total - read.read_total) >= 0.5)))
+
+
+def _change(flag: str, was: float | None, now: float, editing: bool) -> str:
+    """The Change cell: vs the saved indent when editing, else how the name matched."""
+    if flag == "new":
+        return "🆕 new item"
+    if editing:
+        if was is None:
+            return "🆕 added" + (" · 🟡 check" if flag == "check" else "")
+        d = now - was
+        tag = "✓ same" if not d else (f"🟡 +{fmt_num(d)}" if d > 0 else f"🔻 −{fmt_num(-d)}")
+        return tag + (" · 🟡 check" if flag == "check" else "")
+    return "🟡 check" if flag else "✓ exact name"
 
 
 def render(m: Masters, user=None) -> None:
@@ -183,6 +215,15 @@ def render(m: Masters, user=None) -> None:
                     st.error(str(e))
                     return
                 s[DONE] = h
+                other = order_reader.wrong_customer(
+                    state.header().customer,
+                    order_reader.whose(read.text, config.customer_aliases(), read.customer_hint, up.name))
+                if other:
+                    s[SUMMARY] = (f"🔴 This file looks like a **{other}** order, not **{state.header().customer}**. "
+                                  f"Nothing was added. Attach the {state.header().customer} order, or change the "
+                                  "customer.", True)
+                    s[DIFF] = []
+                    st.rerun()
                 if not read.lines:
                     s[SUMMARY] = ("Nothing could be read from this file. Add the items with Add item.", True)
                 else:
@@ -196,25 +237,53 @@ def render(m: Masters, user=None) -> None:
     _pending_box(m)
 
 
+ORDER = {"🔴": 0, "🔻": 1, "🟡": 2, "🆕": 3, "✓": 9}
+
+
 def _diff_box() -> None:
-    """What was in the file vs what we put in the item list: new SKUs in blue."""
+    """What was in the file vs what we put in the item list. Editing a saved indent:
+    Saved vs File per item (19 Nov), changed lines first; saved items missing from
+    the file can be set to 0 or kept right here."""
     rows = st.session_state.get(DIFF) or []
     if not rows:
         return
     import pandas as pd
+    editing = state.base_snapshot() is not None
     n_new = sum(r["Change"].startswith("🆕") for r in rows)
     n_red = sum(r["Change"].startswith("🔴") for r in rows)
-    label = f"File vs item list · {len(rows)} line(s)" + (f" · 🆕 {n_new} new" if n_new else "") + \
-        (f" · 🔴 {n_red} need you" if n_red else "")
-    with st.expander(label, expanded=bool(n_new or n_red)):
-        df = pd.DataFrame(rows)
+    n_ch = sum(r["Change"][:1] in ("🟡", "🔻") for r in rows)
+    label = (f"File vs {'saved indent' if editing else 'item list'} · {len(rows)} line(s)"
+             + (f" · {n_ch} changed" if n_ch else "") + (f" · 🆕 {n_new} new" if n_new else "")
+             + (f" · 🔴 {n_red} need you" if n_red else ""))
+    with st.expander(label, expanded=bool(n_new or n_red or n_ch)):
+        only = editing and st.toggle("Only changed lines", key="rd_only_changed")
+        show = sorted(rows, key=lambda r: ORDER.get(r["Change"][:1], 5))
+        if only:
+            show = [r for r in show if not r["Change"].startswith("✓")]
+        cols = ["In the file", "Our SKU name"] + (["Saved", "File"] if editing else ["File"]) + ["Change"]
+        df = pd.DataFrame(show, columns=cols).rename(columns={} if editing else {"File": "Qty"})
 
         def color(r):
             c = r["Change"]
-            bg = "#e0ecff" if c.startswith("🆕") else "#fde2e1" if c.startswith("🔴") else \
+            bg = "#fde2e1" if c[:1] in ("🔴", "🔻") else "#e0ecff" if c.startswith("🆕") else \
                 "#fff4c2" if c.startswith("🟡") else ""
             return [f"background-color:{bg}" if bg else ""] * len(r)
-        st.dataframe(df.style.apply(color, axis=1).format({"Qty": "{:,.0f}"}), hide_index=True, width="stretch")
+        fmt = {c: (lambda v: "—" if v is None or pd.isna(v) else f"{v:,.0f}") for c in ("Saved", "File", "Qty")
+               if c in df.columns}
+        st.dataframe(df.style.apply(color, axis=1).format(fmt), hide_index=True, width="stretch")
+        for k, r in enumerate([r for r in rows if r["Change"] == "🔴 not in file"]):
+            c = st.columns([4, 1, 1], vertical_alignment="center")
+            c[0].markdown(f"<span style='color:#b42318'>{r['Our SKU name']}</span> · saved "
+                          f"{fmt_num(r['Saved'])}, not in the file", unsafe_allow_html=True)
+            if c[1].button("Set 0", key=f"rd_zero_{k}", width="stretch"):
+                state.set_lines([IndentLine(**{**x.to_dict(), "qty": 0.0})
+                                 if x.customer_sku_name.casefold() == r["Our SKU name"].casefold() else x
+                                 for x in state.lines()], structural=True)
+                r["File"], r["Change"] = 0.0, f"🔻 −{fmt_num(r['Saved'])} (set 0)"
+                st.rerun()
+            if c[2].button("Keep", key=f"rd_keep_{k}", width="stretch"):
+                r["File"], r["Change"] = r["Saved"], "✓ same (kept)"
+                st.rerun()
 
 
 def _same_box(m: Masters, user) -> None:

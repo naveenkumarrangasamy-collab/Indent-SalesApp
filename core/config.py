@@ -166,6 +166,31 @@ def multi_po_customers() -> set[str]:
     return {str(x).strip().casefold() for x in v if str(x).strip()}
 
 
+def no_po_customers() -> set[str]:
+    """Customers that send no PO / PO number (19 Nov: More; orders come in WhatsApp
+    groups). Their 'PO' can be a screenshot (PNG/JPG) and the PO qty starts from the
+    indent qty. Secret `no_po_customers`, default ["More"]."""
+    v = get("no_po_customers", ["More"])
+    v = [v] if isinstance(v, str) else list(v or [])
+    return {str(x).strip().casefold() for x in v if str(x).strip()}
+
+
+def customer_aliases() -> dict[str, list[str]]:
+    """Other names a customer's files carry, to check an attached order belongs to
+    the chosen customer (19 Nov). Secret `customer_aliases` adds to / replaces these."""
+    base = {"Zepto": ["zepto", "kiranakart", "kwpl"],
+            "Swiggy": ["swiggy", "instamart", "scootsy", "moksh", "cloudkart", "cloudstore", "jupiterkart"],
+            "Zomato": ["zomato"], "Flipkart": ["flipkart"], "Firstclub": ["firstclub", "first club"],
+            "Namdhari": ["namdhari"], "More": ["more retail", "more_blr", "more supermarket", "more hyper"]}
+    try:
+        extra = dict(get("customer_aliases", {}) or {})
+    except (TypeError, ValueError):
+        extra = {}
+    for k, v in extra.items():
+        base[str(k)] = [str(x).casefold() for x in ([v] if isinstance(v, str) else v)]
+    return base
+
+
 def po_store_prefixes() -> dict[str, str]:
     """Store a PO belongs to by its PO number's first letter (Swiggy: M = WH1, B = WH2).
     Secret `po_store_prefixes`."""

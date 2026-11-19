@@ -348,6 +348,21 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   Indent_Changes: item changes only (qty/price, added, removed, delivery moved), newest first. The app never reads them.
 - Mail_Log stays (stops double hourly mails). The 4 Backup_20261115_2238 tabs: user to decide.
 
+### 19 Nov night (user-approved)
+
+- **Attach the order, editing a saved indent**: "File vs saved indent" table: In the file, Our SKU name, **Saved**,
+  **File**, Change (🟡 +n up, 🔻 −n down, 🆕 new/added, ✓ same, 🔴 not in file); changed lines first, "Only
+  changed lines" toggle; saved items missing from the file get **Set 0 / Keep** buttons; a file equal to the saved
+  indent → green "Same as the saved indent … Nothing to update." File qty still replaces (never adds to) saved qty.
+- **Customer check on attach**: `order_reader.whose` finds customer names in the file (text, file name, Zepto
+  format) using `config.customer_aliases()` (secret `customer_aliases`; More only by "more retail"/"more_blr"/…,
+  never the plain word); if the file names only other customers, nothing is added ("looks like a X order").
+  A file naming nobody is allowed.
+- **No-PO customers** (secret `no_po_customers`, default ["More"]): Upload PO takes a **screenshot** (PNG/JPG/WEBP)
+  or PDF; PO number optional; PO qty starts from the indent qty. SO/PO mail attaches the screenshot as is
+  (`mailer.file_mime`). To be refined as we go.
+- Next (waiting on user): AI picture reading (Gemini, key in Secrets by the user) for indent photos.
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.
@@ -375,7 +390,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **174 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **180 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl, pdfplumber; packages.txt: tesseract-ocr.
 

@@ -37,6 +37,8 @@ class OrderRead:
     total: float | None = None     # the total written in the file, when found
     kind: str = ""                 # excel / pdf / picture
     note: str = ""
+    text: str = ""                 # all text in the file (to check whose order it is)
+    customer_hint: str = ""        # a customer known from the file's format (Zepto Excel)
 
     @property
     def read_total(self) -> float:
@@ -55,7 +57,8 @@ def _excel(data: bytes, store: str) -> OrderRead:
     if zf is not None:
         cols = [c for c, q in zf.qty.items() if sum(q) > 0]
         pick = next((c for c in cols if store and zepto_import.guess_store(c, [store]) == store), None)
-        out = OrderRead(kind="excel", note=f"Zepto file · column {pick}" if pick else "Zepto file · all columns")
+        out = OrderRead(kind="excel", note=f"Zepto file · column {pick}" if pick else "Zepto file · all columns",
+                        customer_hint="Zepto")
         for i, p in enumerate(zf.products):
             q = zf.qty[pick][i] if pick else p.qty
             if q > 0:
@@ -65,6 +68,9 @@ def _excel(data: bytes, store: str) -> OrderRead:
         sheets = pd.read_excel(io.BytesIO(data), sheet_name=None, header=None, dtype=object)
     except Exception as e:  # noqa: BLE001 - any unreadable file
         raise ImportFileError(f"Could not read the Excel file ({e}).") from e
+    alltext = " ".join(str(n) for n in sheets) + " " + " ".join(
+        str(x) for raw in sheets.values() for row in raw.values.tolist()[:400] for x in row
+        if isinstance(x, str))
     for raw in sheets.values():
         values = raw.values.tolist()
         for h in range(min(15, len(values))):
@@ -75,7 +81,7 @@ def _excel(data: bytes, store: str) -> OrderRead:
                 continue
             ui = next((head.index(n) for n in ("uom", "unit") if n in head), None)
             pi = next((head.index(n) for n in ("packsize", "pack", "packqty") if n in head), None)
-            out = OrderRead(kind="excel")
+            out = OrderRead(kind="excel", text=alltext)
             for row in values[h + 1:]:
                 get = lambda i: row[i] if i is not None and i < len(row) else None  # noqa: E731
                 name, q = _s(get(ni)), _num(get(qi))
@@ -132,7 +138,9 @@ def _picture(data: bytes) -> OrderRead:
     if not ocr_available():
         raise ImportFileError("Reading pictures is not set up on this server (Tesseract missing).")
     out = OrderRead(kind="picture")
-    for text, conf in _ocr_lines(data):
+    got = _ocr_lines(data)
+    out.text = " ".join(t for t, _ in got)
+    for text, conf in got:
         text = text.replace("|", " ").strip()
         toks = text.split()
         nums = [i for i, t in enumerate(toks) if re.fullmatch(r"\d+(\.\d+)?", t)]
@@ -155,13 +163,35 @@ def _picture(data: bytes) -> OrderRead:
     return out
 
 
+def whose(text: str, aliases: dict[str, list[str]], hint: str = "", file_name: str = "") -> set[str]:
+    """Customers whose name (or another name they go by) appears in the file."""
+    t = " " + re.sub(r"[^a-z0-9]+", " ", f"{file_name} {text}".casefold()) + " "
+    found = {hint} if hint else set()
+    for cust, names in aliases.items():
+        for n in names:
+            n2 = " " + re.sub(r"[^a-z0-9]+", " ", n.casefold()).strip() + " "
+            if n2.strip() and n2 in t:
+                found.add(cust)
+                break
+    return found
+
+
+def wrong_customer(chosen: str, found: set[str]) -> str:
+    """'' when the file may be the chosen customer's; else the other customer's name.
+    The file must not name only other customers (a file naming nobody is allowed)."""
+    f = {c.casefold(): c for c in found}
+    if not f or chosen.strip().casefold() in f:
+        return ""
+    return ", ".join(sorted(f.values()))
+
+
 def read(file_name: str, data: bytes, store: str = "") -> OrderRead:
     ext = file_name.rsplit(".", 1)[-1].casefold() if "." in file_name else ""
     if ext in ("xlsx", "xls"):
         return _excel(data, store)
     if ext == "pdf":
         r = po_reader.read_pdf(data)
-        return OrderRead(lines=r.lines, total=None, kind="pdf", note=" ".join(r.checks))
+        return OrderRead(lines=r.lines, total=None, kind="pdf", note=" ".join(r.checks), text=r.text)
     if ext in PICTURE_TYPES:
         return _picture(data)
     raise ImportFileError("Attach a picture (PNG/JPG), an Excel or a PDF file.")

@@ -41,6 +41,7 @@ class POReadResult:
     total: float | None = None       # PO total printed on the PDF
     has_text: bool = True
     checks: list[str] = field(default_factory=list)   # problems found
+    text: str = ""                                     # all text of the PDF (customer check)
 
     @property
     def total_qty(self) -> float:
@@ -126,6 +127,7 @@ def read_pdf(data: bytes) -> POReadResult:
         res.checks.append(f"The PDF could not be read ({type(e).__name__}).")
         return res
     full = "\n".join(text)
+    res.text = full
     res.has_text = bool(full.strip())
     res.po_number = _po_number(full)
     res.total = _po_total(full)

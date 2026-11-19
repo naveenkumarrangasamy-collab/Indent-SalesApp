@@ -91,17 +91,27 @@ def _po_dialog(indent_id: str, user: User) -> None:
                 f"({info['pos']} received so far). Press **End of POs** after the last one; the indent "
                 "is then frozen and the differences are shown.", icon=":material/library_add:")
     pre = _prefill(indent_id)
+    no_po = cur.header.customer.strip().casefold() in config.no_po_customers()
+    if no_po:
+        st.info(f"{cur.header.customer} sends no PO: attach the order screenshot (e.g. from WhatsApp) or a PDF. "
+                "The PO number can stay blank. PO qty starts from the indent qty: change only what differs.",
+                icon=":material/screenshot:")
+        if not pre.get("po_qty") and "init" not in pre:
+            pre["po_qty"] = {x.customer_sku_name: float(x.qty) for x in cur.lines}
 
     # 1. the PO file (read automatically when it is a text PDF)
     c = st.columns([1, 1.6])
-    up = c[1].file_uploader("PO file (PDF)", type=["pdf"], key=f"po_file_{indent_id}")
+    up = c[1].file_uploader("PO (PDF or screenshot)" if no_po else "PO file (PDF)",
+                            type=["pdf"] + (["png", "jpg", "jpeg", "webp"] if no_po else []),
+                            key=f"po_file_{indent_id}")
     files = st.session_state.setdefault("po_files", {})
     if up is not None:
         files[indent_id] = (up.name, up.getvalue())
     elif indent_id in files:
         c[1].caption(f"Using **{files[indent_id][0]}** chosen earlier (choose another file to replace it).")
     file_name, file_bytes = files.get(indent_id, (None, None))
-    read = _read(file_bytes) if file_bytes else None
+    is_pdf = bool(file_name) and file_name.casefold().endswith(".pdf")
+    read = _read(file_bytes) if file_bytes and is_pdf else None
     no_key = f"po_no_{indent_id}"
     if read and read.po_number and not st.session_state.get(no_key):
         st.session_state[no_key] = read.po_number
@@ -114,7 +124,7 @@ def _po_dialog(indent_id: str, user: User) -> None:
     if read and read.lines:
         this_po, learned = _read_table(cur, read, po_number, indent_id, user)
     else:
-        if read is not None:
+        if read is not None and not no_po:
             st.warning(" ".join(read.checks) or "No item lines found in this PDF: type the quantities.")
         this_po = _manual_table(cur, pre, indent_id, multi, so_far)
     tot_i = sum(float(x.qty) for x in cur.lines)
@@ -135,7 +145,7 @@ def _po_dialog(indent_id: str, user: User) -> None:
     mail_again = replacing and st.checkbox("E-mail the replaced PO again", value=False, key=f"po_mail_{indent_id}")
     b = st.columns(3 if multi else 2)
     label = "Replace PO" if replacing else "Add this PO" if multi else ("Upload with differences" if diffs else "Upload PO")
-    need = [w for w, ok in (("choose the PO PDF", file_bytes), ("type the PO qty of at least one item",
+    need = [w for w, ok in (("choose the PO " + ("PDF or screenshot" if no_po else "PDF"), file_bytes), ("type the PO qty of at least one item",
                                                                 this_po)) if not ok]
     if need:
         st.caption("To upload: " + " and ".join(need) + ".")

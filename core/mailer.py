@@ -137,6 +137,13 @@ def po_recipients(header) -> list[str]:
     return out or list(DEFAULT_TO)
 
 
+def file_mime(name: str) -> str:
+    """The PO file's type: a PDF, or a screenshot for customers without a PO (19 Nov)."""
+    ext = str(name or "").rsplit(".", 1)[-1].casefold()
+    return {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(
+        ext, "application/pdf")
+
+
 def send_so_mail(cur, file_name: str, pdf: bytes, uploaded_by: str,
                  po_number: str = "", to_override: list[str] | None = None,
                  sample: bool = False, po_qty: dict | None = None) -> tuple[bool, str]:
@@ -152,7 +159,7 @@ def send_so_mail(cur, file_name: str, pdf: bytes, uploaded_by: str,
     so = reports.so_files(cur, po_number, file_name, uploaded_by, po_qty)
     xlsx = [(f"PO_{cur.indent_id}{('_' + po_number) if po_number else ''}.xlsx", f[1], f[2])
             for f in so if f[0].endswith(".xlsx")]
-    files = ([(file_name or "PO.pdf", pdf, "application/pdf")] if pdf
+    files = ([(file_name or "PO.pdf", pdf, file_mime(file_name))] if pdf
              else [f for f in so if f[0].endswith(".pdf")]) + xlsx
     text = (f"SO placed for {h.customer} / {h.store} ({h.city}), delivery {h.delivery_date}. "
             f"Indent {cur.indent_id}, PO {po_number or file_name}. The PO is attached as PDF and Excel.")
