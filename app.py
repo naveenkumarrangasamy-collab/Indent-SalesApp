@@ -69,6 +69,17 @@ if st.query_params.get("hourly") == "run":
 
 common.inject_css()
 common.connection_banner()
+
+
+@st.cache_resource(show_spinner=False)
+def _views_once() -> bool:
+    """After a redeploy: rebuild the Indent_vs_PO / Indent_Changes tabs once (background)."""
+    from core import sheet_views
+    sheet_views.refresh_soon()
+    return True
+
+
+_views_once()
 user = common.current_user()
 common.flush_cookie()
 

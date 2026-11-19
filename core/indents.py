@@ -729,13 +729,23 @@ def _nkey(s: str) -> str:
     return " ".join(str(s or "").split()).casefold()
 
 
-def _rematch(by: dict, lines: list[IndentLine]) -> None:
+def _rematch(by: dict, lines: list[IndentLine], item_map: dict | None = None) -> None:
     """PO names that are not exactly an indent item (e.g. a PO saved with the
-    customer's own name) are matched to a still-unmatched indent item with the
-    same words (core.po_reader), so old POs compare correctly too."""
+    customer's own name) are matched to a still-unmatched indent item: first by
+    PO_Item_Map (a link approved by an owner, e.g. 'Avocada Jumbo (PCS) - FK - Grade A'
+    = '1Pc - Avocado Jumbo - FK'), then by the same words (core.po_reader), so old
+    POs compare correctly too."""
     from core import po_reader
     names = {_nkey(x.customer_sku_name): x.customer_sku_name for x in lines}
     free = [n for k, n in names.items() if k not in by]
+    for k in [k for k in list(by) if k not in names]:
+        target = (item_map or {}).get(k)
+        if target and _nkey(target) in names and _nkey(target) not in by:
+            name, v = by.pop(k)
+            hit = names[_nkey(target)]
+            by[_nkey(hit)] = (hit, v)
+            if hit in free:
+                free.remove(hit)
     for k in [k for k in list(by) if k not in names]:
         if not free:
             break
@@ -747,14 +757,28 @@ def _rematch(by: dict, lines: list[IndentLine]) -> None:
             free.remove(hit)
 
 
-def po_vs_indent(lines: list[IndentLine], info: dict) -> list[dict]:
-    """Indent qty vs PO qty, per item (same Customer SKU Name, spaces/case ignored).
-    An indent item that is not on the PO has po_qty None (never shown as 0);
-    PO-only items come last with indent_qty None."""
+def po_item_links() -> dict[str, dict[str, str]]:
+    """PO_Item_Map per customer: {customer: {PO name/code (normalised): our SKU}}."""
+    from core import sheet_views
+    from core.schema import PO_ITEM_MAP
+    try:
+        return sheet_views.item_map(_cached_tab(PO_ITEM_MAP))
+    except Exception:  # noqa: BLE001 - no map tab yet: plain matching
+        return {}
+
+
+def po_vs_indent(lines: list[IndentLine], info: dict, item_map: dict | None = None,
+                 customer: str = "") -> list[dict]:
+    """Indent qty vs PO qty, per item (same Customer SKU Name, spaces/case ignored,
+    or linked in PO_Item_Map). An indent item that is not on the PO has po_qty None
+    (never shown as 0); PO-only items come last with indent_qty None.
+    item_map: this customer's links; when not given, read for `customer`."""
     if info["qty"] is None:
         return []
+    if item_map is None and customer:
+        item_map = po_item_links().get(customer.strip().casefold(), {})
     by = {_nkey(k): (k, v) for k, v in info["qty"].items()}
-    _rematch(by, lines)
+    _rematch(by, lines, item_map)
     out = []
     for x in lines:
         hit = by.pop(_nkey(x.customer_sku_name), None)
@@ -898,3 +922,27 @@ def backup_and_clear(user: str) -> dict:
         backend._headers[tab] = header
     clear_cache()
     return done
+
+
+# ------------------------------------------------ sheet views (19 Nov)
+
+def _with_views(fn):
+    """After a successful save, rebuild the Indent_vs_PO / Indent_Changes tabs
+    (in the background; never fails the save)."""
+    import functools
+
+    @functools.wraps(fn)
+    def run(*a, **k):
+        out = fn(*a, **k)
+        try:
+            from core import sheet_views
+            sheet_views.refresh_soon()
+        except Exception:  # noqa: BLE001 - only a view
+            pass
+        return out
+    return run
+
+
+for _name in ("submit_new", "submit_update", "freeze", "end_pos", "lock", "cancel", "move_date"):
+    globals()[_name] = _with_views(globals()[_name])
+del _name

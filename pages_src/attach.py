@@ -14,7 +14,7 @@ import hashlib
 
 import streamlit as st
 
-from core import config, master_add, order_reader
+from core import config, master_add, order_reader, po_reader
 from core.bulk_import import ImportFileError
 from core.masters import Masters
 from core.models import IndentLine, fmt_num
@@ -26,6 +26,7 @@ PENDING = "rd_pending"    # [{"text", "qty", "why"}] red lines
 SUMMARY = "rd_summary"    # text of the last read
 DIFF = "rd_diff"          # [{"In the file", "Qty", "Our SKU name", "Change"}] what the reader did
 DONE = "rd_done"          # hash of the file already read
+SAME = "rd_same"          # [{"text", "new", "sku"}] new names that look like one of our SKUs (19 Nov)
 FLAG_LABEL = {"check": "🟡 check", "new": "🆕 new"}
 
 
@@ -82,6 +83,7 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
     current = {x.customer_sku_name.casefold(): x for x in state.lines()}
     order = [x.customer_sku_name for x in state.lines()]
     fl, new, red = dict(flags()), dict(s.get(NEW, {})), list(pending())
+    same = list(s.get(SAME, []))
     parents = _all_parents(m, hdr.city)
     n_ok = n_check = n_new = 0
     taken: dict[str, str] = {}
@@ -108,6 +110,11 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
             lot = master_add.lot_of(sku)
             variety = m.variety_from_name(parent, sku) if m.needs_variety(parent) else ""
             flag = "new"
+            sug = po_reader.suggest(x.name, list(names.values())) or \
+                po_reader.suggest(ours, list(names.values()))
+            if sug and sug.casefold() not in {n.casefold() for n in taken} and \
+                    sug.casefold() not in current:
+                same.append({"text": x.name, "new": sku, "sku": sug})
             new[sku] = {"Parent SKU": parent, "Customer SKU Name": sku, "Variety": variety, "Lot": lot,
                         "needs_variety": m.needs_variety(parent)}
         if sku.casefold() in taken:              # two lines of the file on one SKU: never overwrite
@@ -132,7 +139,7 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
         n_check += flag == "check"
         n_new += flag == "new"
     state.set_lines([current[n.casefold()] for n in order if n.casefold() in current], structural=True)
-    s[FLAGS], s[NEW], s[PENDING] = fl, new, red
+    s[FLAGS], s[NEW], s[PENDING], s[SAME] = fl, new, red, same
     s[DIFF] = diff
     parts = [f"Read {len(lines)} line(s) from the {read.kind}: {n_ok} clear"]
     if n_check:
@@ -154,7 +161,7 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
     s[SUMMARY] = (msg, bool(n_check or bad or (read.total and abs(read.total - read.read_total) >= 0.5)))
 
 
-def render(m: Masters) -> None:
+def render(m: Masters, user=None) -> None:
     s = st.session_state
     with st.container(border=True, key="mt_attach"):
         c = st.columns([3, 1])
@@ -185,6 +192,7 @@ def render(m: Masters) -> None:
             msg, warn = s[SUMMARY]
             (st.warning if warn else st.success)(msg)
         _diff_box()
+    _same_box(m, user)
     _pending_box(m)
 
 
@@ -207,6 +215,62 @@ def _diff_box() -> None:
                 "#fff4c2" if c.startswith("🟡") else ""
             return [f"background-color:{bg}" if bg else ""] * len(r)
         st.dataframe(df.style.apply(color, axis=1).format({"Qty": "{:,.0f}"}), hide_index=True, width="stretch")
+
+
+def _same_box(m: Masters, user) -> None:
+    """New names that look like one of our SKUs ('Avocada Jumbo (PCS) - FK - Grade A'
+    -> '1Pc - Avocado Jumbo - FK'). Owner: Approve = use our SKU and remember the link
+    (PO_Item_Map), so both names work from now on. Others: use our SKU for this order
+    only. Keep as new = add it as a new SKU (as before)."""
+    rows = st.session_state.get(SAME) or []
+    if not rows:
+        return
+    owner = bool(getattr(user, "is_owner", False))
+    hdr = state.header()
+    with st.container(border=True, key="mt_same"):
+        st.info(f"**{len(rows)} new name(s) look like items we have.** "
+                + ("Approve = same item (the name is remembered)." if owner else
+                   "Use ours for this order, or keep as new. An Owner approves name links."))
+        for i, r in enumerate(list(rows)):
+            c = st.columns([2.4, 2.4, 1, 1], vertical_alignment="center")
+            c[0].markdown(f"<span style='color:#1d4ed8'>{r['text']}</span>", unsafe_allow_html=True)
+            c[1].markdown(f"Same as **{r['sku']}**?")
+            if c[2].button("Approve" if owner else "Use ours", key=f"rd_same_ok_{i}", type="primary",
+                           width="stretch"):
+                _use_ours(m, r)
+                if owner:
+                    from pages_src.indent_actions import _learn
+                    _learn([{"Customer": hdr.customer, "PO Item Code": "", "PO Item Name": r["text"],
+                             "Customer SKU Name": r["sku"], "Updated_At": config.now_iso()}])
+                rows.pop(i)
+                st.session_state[SAME] = rows
+                st.rerun()
+            if c[3].button("Keep as new", key=f"rd_same_no_{i}", width="stretch"):
+                rows.pop(i)
+                st.session_state[SAME] = rows
+                st.rerun()
+
+
+def _use_ours(m: Masters, r: dict) -> None:
+    """Put our SKU in place of the new name on the item list (same qty and price)."""
+    hdr = state.header()
+    sku, gone = r["sku"], r["new"].casefold()
+    parent = m.parent_of(hdr.city, hdr.customer, sku)
+    out = []
+    for x in state.lines():
+        if x.customer_sku_name.casefold() == gone:
+            x = IndentLine(**{**x.to_dict(), "customer_sku_name": sku, "parent_sku": parent,
+                              "lot": m.lot_for(hdr.city, hdr.customer, sku),
+                              "variety": m.default_variety(hdr.city, hdr.customer, sku)
+                              if m.needs_variety(parent) else ""})
+        out.append(x)
+    state.set_lines(out, structural=True)
+    s = st.session_state
+    s[NEW] = {k: v for k, v in s.get(NEW, {}).items() if k.casefold() != gone}
+    s[FLAGS] = {k: v for k, v in s.get(FLAGS, {}).items() if k.casefold() != gone}
+    for d in s.get(DIFF) or []:
+        if d.get("In the file") == r["text"]:
+            d["Our SKU name"], d["Change"] = sku, "✓ same as ours (approved)"
 
 
 def _pending_box(m: Masters) -> None:

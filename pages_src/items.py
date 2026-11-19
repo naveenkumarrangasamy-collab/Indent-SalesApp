@@ -572,7 +572,7 @@ def render(m: Masters, user: User) -> None:
         st.info(f"Mapping pending: no SKU names in 'All Cux City' for {hdr.customer} in {hdr.city}.")
     else:
         from pages_src import attach
-        attach.render(m)
+        attach.render(m, user)
         _add_form(m)
 
     if state.po_fix():

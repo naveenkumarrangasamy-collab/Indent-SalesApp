@@ -79,7 +79,7 @@ def po_rows(lines: pd.DataFrame, po: pd.DataFrame, ids) -> pd.DataFrame:
             state_ = f"{info['pos']} PO(s), more coming"
         else:
             state_ = ""
-        rows = indents.po_vs_indent(cur.lines, info) if info["qty"] is not None else [
+        rows = indents.po_vs_indent(cur.lines, info, customer=h.customer) if info["qty"] is not None else [
             {"customer_sku_name": x.customer_sku_name, "indent_qty": float(x.qty), "po_qty": None,
              "diff": None, "ok": None} for x in cur.lines]
         for r in rows:
@@ -204,6 +204,12 @@ def grid(lines: pd.DataFrame, po: pd.DataFrame | None, day: str,
                 po_txt, po_kind = r["Status"], ""
             rows.append({"name": n, "cells": cells, "po": po_txt, "po_kind": po_kind,
                          "changed": any(c[2] in ("up", "down", "swing") for c in cells)})
+        # PO-only items (on the customer's PO, never on the indent): last, in red (19 Nov)
+        for (pid, k), r in po_map.items():
+            if pid == iid and r["Status"] == "Not on indent" and k not in seen:
+                rows.append({"name": r["Customer SKU Name"], "cells": [("·", "", "")] * len(pts),
+                             "po": f"Not on indent · PO {r['PO qty']}", "po_kind": "bad",
+                             "changed": True, "po_only": True})
         edits = [ts_of[v] for v, g in vers[1:] if str(g["status"].iloc[0]) != "Frozen"]
         blocks.append({"indent": iid, "customer": str(last["customer"]), "store": str(last["store"]),
                        "city": str(last["city"]), "status": str(last["status"]),

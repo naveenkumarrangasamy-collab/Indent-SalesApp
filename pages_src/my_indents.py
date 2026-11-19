@@ -404,7 +404,7 @@ def _po(cur, user: User) -> None:
         "At": mine["confirmed_at"].map(fmt_ts)}), hide_index=True, width="stretch")
     if indents.is_multi_po(cur.header.customer) and not info["ended"]:
         st.caption("More POs can still be added. Press **End of POs** after the last one.")
-    rows = indents.po_vs_indent(cur.lines, info)
+    rows = indents.po_vs_indent(cur.lines, info, customer=cur.header.customer)
     bad = [r for r in rows if not r["ok"]]
     if bad:
         st.warning(f"{len(bad)} item(s) differ between the indent and the PO(s):")

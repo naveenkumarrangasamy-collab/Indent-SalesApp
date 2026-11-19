@@ -1,6 +1,6 @@
 # CLAUDE.md: MT Indent app (project context for Claude sessions)
 
-Last updated: 17 Nov 2026. Owner of this work: MT Direct Sales team, Ninjacart (PTP Bangalore).
+Last updated: 19 Nov 2026. Owner of this work: MT Direct Sales team, Ninjacart (PTP Bangalore).
 
 Read automatically by Claude Code. Keep it current when rules change.
 The live user list and e-mail lists are NOT kept here (this repo is public); see the app's Access tab.
@@ -332,6 +332,22 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   tomorrow), ignoring the cutoff; same status, new version + Change_Log (`indents.move_date`).
 - **Start fresh** (Owner only): type CLEAR. It backs up the indent tabs to Backup_ tabs and then empties them.
 
+### 19 Nov afternoon (user-approved)
+
+- **Name links with owner approval**: a PO / order name that is not exactly ours gets a suggestion
+  (`po_reader.suggest` / `_soft`: every word of our SKU in the name, small spelling slips allowed, markers agree;
+  'Avocada Jumbo (PCS) - FK - Grade A' → '1Pc - Avocado Jumbo - FK'). Upload PO: an **Approve** column (owners
+  only) saves the link to PO_Item_Map; others' picks count for that PO only. Attach the order: a **"look like items
+  we have"** box: Owner **Approve** (use ours + save link) / others **Use ours** (this order only) / **Keep as new**.
+- **PO vs indent uses PO_Item_Map** (`indents.po_vs_indent(..., item_map | customer=)`), so linked names match.
+- **Hourly tracker**: PO-only items (on the PO, not on the indent) show last in their indent, name in red,
+  "Not on indent · PO n".
+- **Sheet tabs Indent_vs_PO and Indent_Changes** (`core/sheet_views.py`): rebuilt after every save (indents.*
+  write functions wrapped by `_with_views`, background thread on Google) and once after a redeploy. Indent_vs_PO:
+  one row per item, Result Match / Differs / Not on PO / Not on indent (red rows) / No PO yet / More POs coming.
+  Indent_Changes: item changes only (qty/price, added, removed, delivery moved), newest first. The app never reads them.
+- Mail_Log stays (stops double hourly mails). The 4 Backup_20261115_2238 tabs: user to decide.
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.
@@ -359,7 +375,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **166 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **174 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl, pdfplumber; packages.txt: tesseract-ocr.
 

@@ -112,7 +112,7 @@ def _po_dialog(indent_id: str, user: User) -> None:
 
     learned: list[dict] = []
     if read and read.lines:
-        this_po, learned = _read_table(cur, read, po_number, indent_id)
+        this_po, learned = _read_table(cur, read, po_number, indent_id, user)
     else:
         if read is not None:
             st.warning(" ".join(read.checks) or "No item lines found in this PDF: type the quantities.")
@@ -122,7 +122,7 @@ def _po_dialog(indent_id: str, user: User) -> None:
                + (f" · earlier POs **{fmt_num(sum(so_far.values()))}**" if multi else ""))
 
     # 3. differences (multi-PO: shown after End of POs)
-    diffs = [] if multi else [r for r in indents.po_vs_indent(cur.lines, {"qty": this_po}) if not r["ok"]]
+    diffs = [] if multi else [r for r in indents.po_vs_indent(cur.lines, {"qty": this_po}, customer=cur.header.customer) if not r["ok"]]
     if diffs:
         st.warning(f"**{len(diffs)} item(s) differ from the indent.** The PO is still uploaded; the "
                    "difference is flagged on the indent and in the hourly tracker.")
@@ -223,6 +223,10 @@ def _item_map(customer: str) -> dict[str, str]:
     return out
 
 
+def _norm(s) -> str:
+    return " ".join(str(s or "").split()).casefold()
+
+
 def _learn(rows: list[dict]) -> None:
     """Save the user's matches to PO_Item_Map, so the next PO matches by itself."""
     if rows:
@@ -237,9 +241,10 @@ HOW = {"map": "✓ saved match", "name": "✓ same name", "close": "✓ close na
        "": "✗ pick SKU"}
 
 
-def _read_table(cur, read, po_number: str, indent_id: str) -> tuple[dict, list[dict]]:
+def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[dict, list[dict]]:
     """The lines read from the PDF, matched to our SKUs; the user can change
-    'Our SKU'. Returns (PO qty per SKU, new matches to remember)."""
+    'Our SKU'. A new name link (PO name = our SKU) is remembered in PO_Item_Map
+    only when an owner ticks Approve (19 Nov). Returns (PO qty per SKU, links to save)."""
     h = cur.header
     cands = _candidates(cur)
     lines = po_reader.match(read.lines, cands, _item_map(h.customer),
@@ -252,23 +257,31 @@ def _read_table(cur, read, po_number: str, indent_id: str) -> tuple[dict, list[d
     store = po_reader.store_hint(po_number, config.po_store_prefixes())
     if store and store.strip().casefold() != h.store.strip().casefold():
         st.error(f"PO number {po_number} looks like **{store}**, but this indent is for **{h.store}**.")
+    owner = bool(getattr(user, "is_owner", False))
     base = pd.DataFrame([{"On the PO": x.name, "Code": x.code, "Qty": fmt_num(x.qty),
-                          "Our SKU": x.sku or None, "Match": HOW.get(x.how, "")} for x in lines])
+                          "Our SKU": x.sku or None, "Match": HOW.get(x.how, ""),
+                          **({"Approve": False} if owner else {})} for x in lines])
     ed = st.data_editor(base, key=f"po_read_{indent_id}_{hash(read.po_number)}_{len(lines)}",
                         hide_index=True, width="stretch",
                         disabled=["On the PO", "Code", "Qty", "Match"],
                         column_config={"Our SKU": st.column_config.SelectboxColumn(
-                            options=cands + [NOT_OURS], width="large")})
+                            options=cands + [NOT_OURS], width="large"),
+                            "Approve": st.column_config.CheckboxColumn(
+                                "Approve", help="Same item: remember this PO name for next time")})
     picks = [p if isinstance(p, str) and p.strip() else None for p in ed["Our SKU"]]
+    approved = list(ed["Approve"]) if owner else [False] * len(lines)
     if any(p is None for p in picks):
-        st.caption("✗ lines: pick **Our SKU** (or “not in our list”). Your choice is remembered for next time.")
+        st.caption("✗ lines: pick **Our SKU** (or “not in our list”).")
+    if any(x.how in ("close", "guess", "") for x in lines):
+        st.caption("? lines: check **Our SKU**. " + ("Tick **Approve** to link the PO name to our SKU for next time."
+                                                    if owner else "An Owner approves new name links."))
     this_po: dict[str, float] = {}
     learned = []
     stamp = config.now_iso()
-    for x, pick in zip(lines, picks):
+    for x, pick, ok in zip(lines, picks, approved):
         key = pick if pick and pick != NOT_OURS else x.name
         this_po[key] = this_po.get(key, 0.0) + x.qty
-        if pick and pick != NOT_OURS and (x.how in ("close", "") or pick != x.sku):
+        if ok and pick and pick != NOT_OURS and x.how != "map" and _norm(pick) != _norm(x.name):
             learned.append({"Customer": h.customer, "PO Item Code": x.code, "PO Item Name": x.name,
                             "Customer SKU Name": pick, "Updated_At": stamp})
     return this_po, learned
@@ -313,7 +326,7 @@ def _end_dialog(indent_id: str, user: User) -> None:
         st.rerun()
     _strip(cur)
     info = indents.po_info(indents.read_po_freeze(), indent_id)
-    rows = indents.po_vs_indent(cur.lines, info)
+    rows = indents.po_vs_indent(cur.lines, info, customer=cur.header.customer)
     bad = [r for r in rows if not r["ok"]]
     st.write(f"**{info['pos']} PO(s)** received" + (f": {', '.join(info['numbers'])}" if info["numbers"] else "")
              + ". After this, no more POs can be added and the indent is frozen.")

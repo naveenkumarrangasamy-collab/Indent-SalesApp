@@ -208,13 +208,17 @@ def _compact(s: str) -> str:
 
 def _fuzzy(name: str, keys: list[tuple]) -> tuple[str, str]:
     """Last try for badly read text (OCR glued words, typos): letters only,
-    'AvocadoHassimpored' ~ 'avocadohassimported'."""
+    'AvocadoHassimpored' ~ 'avocadohassimported', 'Avocada Jumbo (PCS) - FK - Grade A'
+    ~ '1Pc - Avocado Jumbo - FK'. Bloom / Snacky / Jumbo ... must agree."""
     from difflib import SequenceMatcher
     a = _compact(name)
     if len(a) < 5:
         return "", ""
+    marks = set(re.findall(r"[a-z]+", name.casefold())) & MARKERS
     best, score = "", 0.0
-    for c, _, _ in keys:
+    for c, w, _ in keys:
+        if marks != (set(w) & MARKERS):
+            continue
         r = SequenceMatcher(None, a, _compact(c)).ratio()
         if r > score:
             best, score = c, r
@@ -298,12 +302,60 @@ def match(lines: list[POLine], candidates: list[str], item_map: dict[str, str] |
             x.sku, x.how = next((c for c, _, _ in own if _norm(c) == _norm(hit)), hit), "map"
             continue
         sku, how = _find(x.name, own, 0.5, loose=True, auto=False) if own else ("", "")
+        if not sku and not hit and own:
+            sku, how = _soft(x.name, own)          # a spelling of one of the indent's items
+            if not sku:
+                sku, how = _fuzzy(x.name, own)
         if not sku and hit:
             sku, how = hit, "map"
         if not sku:
             sku, how = _find(x.name, rest, 0.6)
         x.sku, x.how = sku, how
     return lines
+
+
+FILLER = frozenset({"a", "grade", "pcs", "pc", "imported", "import", "fresh", "loose", "the"})
+
+
+def _soft(name: str, keys: list[tuple]) -> tuple[str, str]:
+    """Every word of our SKU is in the name, allowing a small spelling slip
+    ('Avocada Jumbo (PCS) - FK - Grade A' has avocado~avocada, jumbo, fk of
+    '1Pc - Avocado Jumbo - FK'); at most one other real word; markers agree."""
+    from difflib import SequenceMatcher
+    words = set(po_key(name)[0]) | set(our_key(name)[0])
+    if not words:
+        return "", ""
+    marks = words & MARKERS
+    best, rank = "", None
+    for c, w, _ in keys:
+        if len(w) < 2 or (set(w) & MARKERS) != marks:
+            continue
+        used, score = set(), 0.0
+        for ow in w:
+            r, hit = max(((1.0 if ow == nw else SequenceMatcher(None, ow, nw).ratio(), nw) for nw in words),
+                         default=(0.0, ""))
+            if r < 0.8:
+                break
+            used.add(hit)
+            score += r
+        else:
+            if len(words - used - FILLER) <= 1:
+                rk = (len(w), score)
+                if rank is None or rk > rank:
+                    best, rank = c, rk
+    return (best, "guess") if best else ("", "")
+
+
+def suggest(name: str, names: list[str]) -> str:
+    """The existing SKU that a new name most likely means (same words, close name,
+    or a spelling of it), for an owner to approve; '' when none is close."""
+    keys = _keys(names)
+    sku, _ = _find(name, keys, 0.5, auto=False)
+    if not sku:
+        sku, _ = _soft(name, keys)
+    if not sku:
+        sku, _ = _fuzzy(name, keys)
+    return sku
 
 
 def store_hint(po_number: str, prefixes: dict[str, str]) -> str:
