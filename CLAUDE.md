@@ -247,11 +247,17 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
     Lot Size as on production, so batching matches the production sheet; missing SKUs show "not in New tab (name)"
     and are listed in a warning. Without a New tab it falls back to Mapping Whole. The user will decide the
     permanent master (where production and batching pull from) later.
-- **Tracker every 30 min (19 Nov, `core/tracking.py`)**: columns 8:00, 8:30 … 2:00 PM (+ Now); "Indent changes"
-  starts with **Item changes** (only SKUs whose qty changed), then by customer / by store. The production e-mail
-  (combined, user 19 Nov) adds **3) SKU changes since the last mail** (previous hour → now, only changed items,
-  Before / Now / Change) and **4) Indent vs PO differences** (only rows that differ) to the body, PDF and Excel.
-- **Hourly tracker:** two tabs. **Indent changes**: 8 AM–2 PM columns per customer/store row; changed cells are amber, shown as previous → new (▲/▼), unchanged cells green. **Indent vs PO**: per store and item, indent qty, PO qty (all POs), difference, status (Match / Differs / Not on PO / Not on indent / No PO yet / more coming); differences in red. It has a Status column and a detail dialog when a cell is clicked. Owner and warehouse only.
+- **Hourly tracker (19 Nov v3, user-approved; `core/tracking.grid`, `pages_src/tracker.py`)**: ONE view. Filters:
+  delivery date, city (>1), customer pills with counts, "Only changed items" toggle (off = every SKU). Customer
+  (A-Z) → store/indent header (entered, edited times, PO time, items, qty, changes) → every item. Columns every 30
+  min from 8 AM (+ Now) and a last **PO vs indent** column (No PO yet / "PO n · Match" green / "PO n · −3" red).
+  Cell = qty; **only in the half hour it changed** the change in brackets: green (+46), red (−50), yellow (±) =
+  changed and back. After that the qty stays **yellow** (went up) or **red** (went down) **until the PO**; from the
+  PO (status Frozen) on, plain. An item entered and changed in the same half hour is compared with what was first
+  entered; an item added to an existing indent shows (+qty). PDF (one customer per page) + Excel downloads.
+  Old tabs (By customer / By store / Indent vs PO) removed. **Not in the mail yet** (user will decide later).
+- **Production e-mail content (19 Nov)**: back to the first format: 1) Make-ready list, 2) By spec size (body +
+  PDF + Excel) + the **Production_by_customer PDF**. The SKU-changes / Indent-vs-PO sections were removed.
 - The City/SKU report was removed.
 
 ### Home page
@@ -353,7 +359,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **165 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **166 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl, pdfplumber; packages.txt: tesseract-ocr.
 

@@ -1,22 +1,43 @@
-"""Hourly indent tracker: how each customer's and store's indent changed every
-30 minutes (19 Nov; was hourly) from 8 AM to 2 PM on the delivery day (the same hours as the hourly
-e-mail). Rebuilt from the saved versions in Indent_Lines, so nothing extra
-has to be recorded. Click a customer or a store to see what changed."""
+"""Hourly tracker (19 Nov, v3, approved by the user): one view, customer by customer.
+Every indent of the delivery day with every item; columns every 30 minutes from 8 AM
+(+ Now) and a last "PO vs indent" column. Built from the saved versions in Indent_Lines
+(core.tracking.grid), so nothing extra is recorded.
+
+Cells: qty, and only in the half hour it changed the change in brackets — green (+46)
+up, red (−50) down, yellow (±) changed and back. After that the qty stays yellow (it
+went up) or red (it went down) until the PO is uploaded; from the PO on it is plain."""
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, timedelta
 from html import escape
 
 import pandas as pd
 import streamlit as st
 
-from core import config, hourly, indents, reports, tracking
+from core import config, indents, reports, tracking
 from core.auth import User
 from core.sheets import SheetError
 from pages_src import common
 
 ALL_C = "All cities"
-ALL_K = "All customers"
+
+CSS = """<style>
+.tk{width:100%;border-collapse:collapse;font-size:13px;table-layout:auto}
+.tk th{font-weight:600;color:#555;padding:6px 6px;border-bottom:1px solid #bbb;text-align:center;white-space:nowrap;
+ position:sticky;top:0;background:#fff}
+.tk th.l,.tk td.l{text-align:left}
+.tk td{padding:5px 6px;border-bottom:1px solid #eee;text-align:center;white-space:nowrap}
+.tk td.l{white-space:normal;min-width:220px}
+.tk .up{color:#1a7f37;font-weight:700}.tk .down{color:#cf222e;font-weight:700}.tk .swing{color:#b8860b;font-weight:700}
+.tk .yellow{color:#b8860b;font-weight:700}.tk .red{color:#cf222e;font-weight:700}
+.tk .m{color:#aaa}
+.tk tr.c0 td{background:#e7f0fb;color:#0b4f9c;font-weight:700;text-align:left;font-size:14px}
+.tk tr.c1 td{background:#f3f4f6;font-weight:600;text-align:left;white-space:normal}
+.tk td.po{border-left:1px solid #ccc}
+.tk .ok{background:#e6f4ea;color:#1a7f37;border-radius:6px;padding:1px 6px}
+.tk .bad{background:#fde8e8;color:#cf222e;border-radius:6px;padding:1px 6px}
+.tk-legend{font-size:12px;color:#666;margin:4px 0 8px}
+</style>"""
 
 
 def _fmt_day(iso: str) -> str:
@@ -26,118 +47,82 @@ def _fmt_day(iso: str) -> str:
     return f"{word} · {d:%a %d %b}" if word else f"{d:%a %d %b}"
 
 
-def _hour_label(h: int) -> str:
-    return f"{(h - 1) % 12 + 1} {'AM' if h < 12 else 'PM'}"
+def _hm(ts) -> str:
+    if ts is None or pd.isna(ts):
+        return ""
+    t = pd.Timestamp(ts).tz_convert(config.IST)
+    day = t.date() != config.now_ist().date()
+    return t.strftime("%d %b %I:%M %p" if day else "%I:%M %p").replace(" 0", " ").lstrip("0")
 
 
-def _points(day: str) -> list[tuple[str, datetime | None]]:
-    """Every 30 min from 8 AM to 2 PM of the delivery day (+ Now)."""
-    return tracking.points(day)
+def _head(b: dict) -> str:
+    bits = [b["store"], b["indent"], f"entered {_hm(b['entered'])}"]
+    if b["edited"]:
+        bits.append("edited " + ", ".join(_hm(t) for t in b["edited"]))
+    if b["frozen_at"] is not None:
+        bits.append(f"PO {_hm(b['frozen_at'])} · tracking stopped")
+    bits.append(f"{b['items']} item(s) · {fmt(b['qty'])} qty")
+    bits.append(f"{b['changes']} change(s)" if b["changes"] else "no change")
+    return " · ".join(bits)
 
 
-def _states(lines: pd.DataFrame, day: str, points) -> dict[str, pd.DataFrame | None]:
-    out = {}
-    for label, t in points:
-        if t is None:
-            out[label] = None
+def fmt(q) -> str:
+    return f"{q:,.0f}" if float(q).is_integer() else f"{q:,.2f}"
+
+
+def _table(blocks: list[dict], labels: list[str], only_changed: bool) -> str:
+    n = len(labels) + 2
+    out = [CSS, "<div style='overflow-x:auto'><table class='tk'><tr><th class='l'>Customer · store · item</th>"]
+    out += [f"<th>{escape(lbl)}</th>" for lbl in labels]
+    out.append("<th class='po'>PO vs indent</th></tr>")
+    last = None
+    for b in blocks:
+        rows = [r for r in b["rows"] if r["changed"]] if only_changed else b["rows"]
+        if only_changed and not rows:
             continue
-        st_ = reports.state_at(lines, t)
-        out[label] = st_[st_["delivery_date"].astype(str) == day] if st_ is not None and not st_.empty else st_
-    return out
-
-
-def _pivot(states: dict, keys: list[str]) -> pd.DataFrame:
-    """Rows = keys (e.g. customer, store), columns = hours, values = total qty."""
-    frames = []
-    for label, df in states.items():
-        if df is None or df.empty:
-            continue
-        g = df.groupby(keys)["qty"].sum().rename(label)
-        frames.append(g)
-    if not frames:
-        return pd.DataFrame(columns=keys + list(states))
-    p = pd.concat(frames, axis=1)
-    for label in states:
-        if label not in p.columns:
-            p[label] = pd.NA
-    p = p[list(states)].reset_index()
-    return p.sort_values(keys, key=lambda s: s.astype(str).str.casefold()).reset_index(drop=True)
-
-
-CHANGED = "background-color:#fff1c2;color:#7d4e00;font-weight:700"
-SAME = "background-color:#dafbe1;color:#116329"
-
-
-def _with_change(p: pd.DataFrame, hours: list[str]) -> pd.DataFrame:
-    """Adds Status (changed / no change since the first hour it appeared) and
-    Change (last qty minus first qty)."""
-    vals = p[hours].apply(pd.to_numeric, errors="coerce") if len(hours) else pd.DataFrame(index=p.index)
-    status, change = [], []
-    for i in p.index:
-        seq = [v for v in vals.loc[i].tolist()] if len(hours) else []
-        n, prev, first, last = 0, None, None, None
-        for v in seq:
-            if pd.notna(v):
-                if first is None:
-                    first = v
-                elif prev is None or pd.isna(prev) or v != prev:
-                    n += 1
-                last = v
-            elif prev is not None and pd.notna(prev):
-                n += 1                       # indent went away
-            prev = v
-        status.append("No change" if n == 0 else f"Changed ×{n}" if n > 1 else "Changed")
-        change.append(0 if first is None or last is None else last - first)
-    p = p.copy()
-    at = list(p.columns).index(hours[0]) if hours and hours[0] in p.columns else len(p.columns)
-    p.insert(at, "Status", status)        # right after the customer / store names
-    p["Change"] = change
-    return p
-
-
-def _style(p: pd.DataFrame, hours: list[str]):
-    """Amber with ▲/▼ where the qty changed since the previous hour, green
-    where it stayed the same. Hours without an indent show '–'."""
-    num = p.copy()
-    for c in hours + ["Change"]:
-        if c in num.columns:
-            num[c] = pd.to_numeric(num[c], errors="coerce")
-    css = pd.DataFrame("", index=p.index, columns=p.columns)
-    shown = p.copy()
-    for c in hours:
-        shown[c] = shown[c].astype(object)
-    for i in p.index:
-        prev, seen = None, False
-        for c in hours:
-            v = num.at[i, c]
-            if pd.isna(v):
-                shown.at[i, c] = "–"
-            else:
-                txt = f"{v:,.0f}"
-                if not seen:
-                    css.at[i, c] = SAME
-                elif prev is None or pd.isna(prev) or v != prev:
-                    arrow = "▲" if prev is None or pd.isna(prev) or v > prev else "▼"
-                    css.at[i, c] = CHANGED
-                    was = "0" if prev is None or pd.isna(prev) else f"{prev:,.0f}"
-                    txt = f"{was} → {txt} {arrow}"
+        if b["customer"] != last:
+            out.append(f"<tr class='c0'><td colspan='{n}'>{escape(b['customer'])}</td></tr>")
+            last = b["customer"]
+        out.append(f"<tr class='c1'><td colspan='{n}'>{escape(_head(b))}</td></tr>")
+        for r in rows:
+            tds = []
+            for q, ch, kind in r["cells"]:
+                if q == "·":
+                    tds.append("<td class='m'>·</td>")
+                elif kind in ("up", "down", "swing"):
+                    tds.append(f"<td>{q} <span class='{kind}'>{escape(ch)}</span></td>")
                 else:
-                    css.at[i, c] = SAME
-                shown.at[i, c] = txt
-                seen = True
-            prev = v
-        if "Status" in p.columns:
-            css.at[i, "Status"] = (SAME if p.at[i, "Status"] == "No change" else CHANGED) + ";font-weight:600"
-        if "Change" in p.columns:
-            ch = num.at[i, "Change"]
-            css.at[i, "Change"] = "" if pd.isna(ch) or not ch else (
-                "color:#116329;font-weight:700" if ch > 0 else "color:#a40e26;font-weight:700")
-    if "Change" in shown.columns:
-        shown["Change"] = num["Change"].map(lambda v: "" if pd.isna(v) or not v else f"{v:+,.0f}")
-    for c in hours + ["Change"]:
-        if c in css.columns:
-            css[c] = css[c].map(lambda x: (x + ";" if x else "") + "text-align:right")
-    return shown.style.apply(lambda _: css, axis=None)
+                    tds.append(f"<td class='{kind}'>{q}</td>")
+            po = (f"<span class='{r['po_kind']}'>{escape(r['po'])}</span>" if r["po_kind"]
+                  else f"<span class='m'>{escape(r['po'])}</span>")
+            out.append(f"<tr><td class='l'>{escape(r['name'])}</td>{''.join(tds)}<td class='po'>{po}</td></tr>")
+    out.append("</table></div>")
+    return "".join(out)
+
+
+def _frame(blocks: list[dict], labels: list[str]) -> pd.DataFrame:
+    """Flat table for Excel / PDF: the cell text with its change, e.g. '459 (+46)'."""
+    recs = []
+    for b in blocks:
+        for r in b["rows"]:
+            d = {"Customer": b["customer"], "Store": b["store"], "Indent": b["indent"], "Customer SKU Name": r["name"]}
+            for lbl, (q, ch, _) in zip(labels, r["cells"]):
+                d[lbl] = f"{q} {ch}".strip()
+            d["PO vs indent"] = r["po"]
+            recs.append(d)
+    return pd.DataFrame(recs, columns=["Customer", "Store", "Indent", "Customer SKU Name"] + labels + ["PO vs indent"])
+
+
+def _pdf(blocks: list[dict], labels: list[str], day: str) -> bytes:
+    from core.pdf_report import sections_pdf
+    secs = []
+    for cust in dict.fromkeys(b["customer"] for b in blocks):
+        part = [b for b in blocks if b["customer"] == cust]
+        df = _frame(part, labels).drop(columns=["Customer"])
+        secs.append((cust, " | ".join(_head(b) for b in part), df))
+    return sections_pdf("Hourly tracker", [f"Delivery {_fmt_day(day)} - as of {_hm(config.now_ist())}",
+                                           "(+n) / (-n) = changed in that half hour; (±) = changed and back"],
+                        secs, footer="MT Indent - hourly tracker", page_each=True)
 
 
 def render(user: User) -> None:
@@ -147,177 +132,63 @@ def render(user: User) -> None:
         return
     try:
         lines = indents.read_lines()
+        po = indents.read_po_freeze()
     except SheetError as e:
         common.sheet_error(e, "Indents could not be loaded.")
         return
     allowed = set(indents.visible_to(indents.summary(lines), user)["indent_id"]) if not lines.empty else set()
     lines = lines[lines["indent_id"].isin(allowed)] if not lines.empty else lines
 
-    st.markdown("### Hourly indent tracker")
-    first, last = hourly.hours()
-    st.caption(f"Each store's indent qty every 30 minutes from {_hour_label(first)} to {_hour_label(last)} "
-               "on the delivery day. 🟨 previous → new qty where it changed · 🟩 no change. "
-               "**Indent vs PO** compares each item with its PO(s).")
+    head = st.columns([3, 1, 1], vertical_alignment="bottom")
+    head[0].markdown("### Hourly tracker")
+    head[0].caption("Every half hour from 8 AM · tracking stops for an indent once its PO is uploaded")
 
-    # ---- the three filters
     today = config.now_ist().date()
     days = [(today + timedelta(days=k)).isoformat() for k in (-1, 0, 1)]
-    if not lines.empty:
-        recent = {d for d in lines["delivery_date"].astype(str)
-                  if d and (today - date.fromisoformat(d)).days <= 7}
-        days = sorted(set(days) | recent)
     if st.session_state.get("tk_day") not in days:
         st.session_state["tk_day"] = today.isoformat()
-    day = st.segmented_control("Delivery date", days, key="tk_day", format_func=_fmt_day,
-                               required=True) or today.isoformat()
+    day = st.pills("Delivery date", days, key="tk_day", format_func=_fmt_day) or today.isoformat()
     on_day = lines[lines["delivery_date"].astype(str) == day] if not lines.empty else lines
+    if not on_day.empty:
+        on_day = on_day[on_day["indent_id"].isin(set(indents.summary(on_day).query("status != 'Cancelled'")["indent_id"]))]
     cities = sorted(set(on_day["city"].astype(str))) if not on_day.empty else []
-    c = st.columns(2)
-    city = c[0].pills("City", [ALL_C] + cities, default=ALL_C, key="tk_city") if len(cities) > 1 else None
-    if city and city != ALL_C:
-        on_day = on_day[on_day["city"] == city]
-    custs = sorted(set(on_day["customer"].astype(str))) if not on_day.empty else []
-    cust = (c[1] if len(cities) > 1 else c[0]).pills("Customer", [ALL_K] + custs, default=ALL_K, key="tk_cust")
-    if cust and cust != ALL_K:
-        on_day = on_day[on_day["customer"] == cust]
-
+    if len(cities) > 1:
+        c = st.pills("City", [ALL_C] + cities, default=ALL_C, key="tk_city")
+        if c and c != ALL_C:
+            on_day = on_day[on_day["city"] == c]
     if on_day.empty:
-        st.info("No indents for this delivery date with these filters.")
+        st.info("No indents for this delivery date.")
         return
-    ids = set(on_day["indent_id"])
-    scoped = lines[lines["indent_id"].isin(ids)]
-    points = _points(day)
-    hours = [lbl for lbl, _ in points]
-    states = _states(scoped, day, points)
-    if all(v is None for v in states.values()):
-        st.info(f"The 8 AM snapshot for {_fmt_day(day)} is not there yet: tracking starts at "
-                f"{_hour_label(first)} on the delivery day.")
+    counts = on_day.drop_duplicates("indent_id")["customer"].value_counts()
+    opts = [f"All · {int(counts.sum())}"] + [f"{k} · {n}" for k, n in sorted(counts.items())]
+    cu = st.pills("Customer", opts, default=opts[0], key=f"tk_cust_{day}")
+    if cu and not cu.startswith("All · "):
+        on_day = on_day[on_day["customer"] == cu.rsplit(" · ", 1)[0]]
+    only = st.toggle("Only changed items", key="tk_only")
 
-    t1, t2 = st.tabs(["Indent changes", "Indent vs PO"])
-    with t2:
-        _po_tracker(lines, ids)
-    with t1:
-        _changes(scoped, day, points, hours, states, city, cust)
-
-
-def _changes(scoped, day, points, hours, states, city, cust) -> None:
-    # ---- only the items that changed (19 Nov: easiest to read)
-    st.markdown("**Item changes** (only SKUs whose qty changed)")
-    pi = _with_change(_pivot(states, ["customer", "store", "customer_sku_name"]), hours).rename(
-        columns={"customer": "Customer", "store": "Store", "customer_sku_name": "Customer SKU Name"})
-    pi = pi[pi["Status"] != "No change"].reset_index(drop=True) if not pi.empty else pi
-    if pi.empty:
-        st.caption("No item changed in these half hours.")
-    else:
-        st.dataframe(_style(pi, hours), hide_index=True, width="stretch")
-    # ---- by customer
-    st.markdown("**By customer**")
-    pc = _with_change(_pivot(states, ["customer"]), hours).rename(columns={"customer": "Customer"})
-    rev = st.session_state.get("tk_rev", 0)   # bumped when the detail closes, to clear the selection
-    sel_c = st.dataframe(_style(pc, hours), hide_index=True, width="stretch", on_select="rerun",
-                         selection_mode="single-row", key=f"tk_tc_{day}_{city}_{cust}_{rev}")
-    # ---- by store
-    st.markdown("**By store**")
-    ps = _with_change(_pivot(states, ["customer", "store"]), hours).rename(
-        columns={"customer": "Customer", "store": "Store"})
-    sel_s = st.dataframe(_style(ps, hours), hide_index=True, width="stretch", on_select="rerun",
-                         selection_mode="single-row", key=f"tk_ts_{day}_{city}_{cust}_{rev}")
-    st.caption("Tip: tap a row to open its hour-by-hour detail.")
-
-    rc = sel_c.selection.rows if sel_c and sel_c.selection else []
-    rs = sel_s.selection.rows if sel_s and sel_s.selection else []
-    if rs:
-        r = ps.iloc[rs[0]]
-        _detail(scoped, day, points, r["Customer"], r["Store"])
-    elif rc:
-        _detail(scoped, day, points, pc.iloc[rc[0]]["Customer"], None)
-
-
-DIFF = "background-color:#ffe0e0;color:#a40e26;font-weight:700"
-PENDING = "background-color:#f1f3f5;color:#555"
-
-
-def _po_tracker(lines: pd.DataFrame, ids: set) -> None:
-    """Indent vs PO per store and item: the indent qty, the PO qty (all POs of
-    the indent together) and the difference."""
-    try:
-        po = indents.read_po_freeze()
-    except SheetError as e:
-        common.sheet_error(e)
-        return
-    df = tracking.po_rows(lines, po, ids)
-    if df.empty:
-        st.info("No indents with these filters.")
-        return
-    bad = df["Status"].isin(["Differs", "Not on PO", "Not on indent"])
-    n_st = df[bad][["Customer", "Store"]].drop_duplicates().shape[0]
-    show_all = st.toggle("Show matching items too", key="tk_po_all")
-    st.caption(f"**{int(bad.sum())}** item(s) differ in **{n_st}** store(s) · "
-               f"{int((df['Status'] == 'No PO yet').sum())} item(s) still without a PO. "
-               "Multi-PO customers are compared after End of POs.")
-    view = df if show_all else df[bad | ~df["Status"].isin(["Match"])]
-    if view.empty:
-        st.success("Every PO matches its indent.")
-        return
-
-    def _row(r):
-        css = DIFF if r["Status"] in ("Differs", "Not on PO", "Not on indent") else (
-            SAME if r["Status"] == "Match" else PENDING)
-        return [css if c in ("Difference", "Status", "PO qty") else "" for c in r.index]
-    st.dataframe(view.style.apply(_row, axis=1), hide_index=True, width="stretch")
-
-
-def _closed() -> None:
-    st.session_state["tk_rev"] = st.session_state.get("tk_rev", 0) + 1
-
-
-@st.dialog("What changed", width="large", on_dismiss=_closed)
-def _detail(lines: pd.DataFrame, day: str, points, customer: str, store: str | None) -> None:
-    part = lines[lines["customer"] == customer]
-    if store is not None:
-        part = part[part["store"] == store]
-    st.markdown(f"#### {escape(customer)}{' · ' + escape(store) if store else ' · all stores'}")
-    st.caption(f"Delivery {_fmt_day(day)}")
-    avail = [lbl for lbl, t in points if t is not None]
-    if not avail:
+    pts = [(lbl, t) for lbl, t in tracking.points(day) if t is not None]
+    if not pts:
         st.info("Tracking starts at 8 AM on the delivery day.")
-        upto, upto_t = "Now", config.now_ist()
-    else:
-        upto = st.segmented_control("Changes from 8 AM up to", avail, default=avail[-1],
-                                    key=f"tk_upto_{customer}_{store}", required=True) or avail[-1]
-        upto_t = dict(points)[upto]
-    shown = [(lbl, t) for lbl, t in points if t is not None and t <= upto_t] or [("Now", upto_t)]
-    hours = [lbl for lbl, _ in shown]
-    states = _states(part, day, shown)
-    keys = ["customer_sku_name"] if store else ["store", "customer_sku_name"]
-    p = _with_change(_pivot(states, keys), hours).rename(
-        columns={"customer_sku_name": "Customer SKU Name", "store": "Store"})
-    st.markdown("**Qty per item at each hour**")
-    if p.empty:
-        st.caption("No indent yet at these hours.")
-    else:
-        st.dataframe(_style(p, hours), hide_index=True, width="stretch")
-
-    # the edits behind it, from Indent_Lines versions (who, when, what)
-    day8 = pd.Timestamp(datetime.combine(date.fromisoformat(day), time(hourly.hours()[0]), tzinfo=config.IST))
-    ts = pd.to_datetime(part["submitted_at"], errors="coerce", utc=True)
-    window = part[(ts <= pd.Timestamp(upto_t).tz_convert("UTC"))]
-    events = (window.groupby(["indent_id", "version"])
-                    .agg(at=("submitted_at", "first"), by=("submitted_by", "first"),
-                         status=("status", "first"), note=("change_note", "first"),
-                         store=("store", "first"), qty=("qty", "sum"))
-                    .reset_index()) if not window.empty else pd.DataFrame()
-    st.markdown(f"**Saves up to {upto}**")
-    if events.empty:
-        st.caption("Nothing saved yet.")
         return
-    events["when"] = pd.to_datetime(events["at"], errors="coerce", utc=True).dt.tz_convert(config.IST)
-    events = events.sort_values("when", ascending=False)
-    rows = []
-    for e in events.itertuples():
-        before_8 = e.when < day8
-        rows.append({"When": e.when.strftime("%d %b %I:%M %p"), "Store": e.store, "Indent": e.indent_id,
-                     "Version": int(e.version), "By": e.by, "Total qty": int(e.qty) if float(e.qty).is_integer() else e.qty,
-                     "What": (e.note or e.status) + (" (before 8 AM)" if before_8 else "")})
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
-                 column_config={"What": st.column_config.TextColumn(width="large")})
+    labels = [lbl.replace(" AM", "").replace(" PM", "") if lbl != "Now" else "Now" for lbl, _ in pts]
+    scoped = lines[lines["indent_id"].isin(set(on_day["indent_id"]))]
+    blocks = tracking.grid(scoped, po, day, pts)
+    if not blocks:
+        st.info("No indents for these filters.")
+        return
+    stamp = day.replace("-", "")
+    head[1].download_button("PDF", lambda: _pdf(blocks, labels, day), file_name=f"Hourly_tracker_{stamp}.pdf",
+                            mime="application/pdf", icon=":material/picture_as_pdf:", width="stretch",
+                            on_click="ignore", key="tk_pdf")
+    head[2].download_button("Excel", lambda: reports.xlsx({"Hourly tracker": _frame(blocks, labels)}),
+                            file_name=f"Hourly_tracker_{stamp}.xlsx", mime=reports.XLSX,
+                            icon=":material/download:", width="stretch", on_click="ignore", key="tk_xlsx")
+    st.markdown("<div class='tk-legend'><b style='color:#1a7f37'>(+ green)</b> / <b style='color:#cf222e'>(− red)</b>"
+                " only in the half hour it changed · then <b style='color:#b8860b'>yellow</b> = went up, "
+                "<b style='color:#cf222e'>red</b> = went down, until the PO · <b style='color:#b8860b'>(±)</b> "
+                "changed and back · · = not entered yet</div>", unsafe_allow_html=True)
+    html = _table(blocks, labels, only)
+    if only and "class='c1'" not in html:
+        st.success("No item changed for these filters.")
+    else:
+        st.markdown(html, unsafe_allow_html=True)

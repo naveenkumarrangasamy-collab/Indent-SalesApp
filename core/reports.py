@@ -176,12 +176,6 @@ def production_mail_html(rows: pd.DataFrame, m: Masters | None, day: str,
         _html_table(mr, {"Make ready"}),
         "<h3 style='color:#1c6b49'>2. Production sheet by spec size</h3>",
         _html_table(p, {"Total"}),
-        "<h3 style='color:#1c6b49'>3. SKU changes" + (f" since {html.escape(since)}" if since else "") + "</h3>",
-        _html_table(changes, set()) if changes is not None and not changes.empty
-        else "<p style='color:#666'>No item changed.</p>",
-        "<h3 style='color:#1c6b49'>4. Indent vs PO differences</h3>",
-        _html_table(po_diff, set()) if po_diff is not None and not po_diff.empty
-        else "<p style='color:#666'>Every PO uploaded so far matches its indent.</p>",
         "<p style='color:#888;font-size:12px'>Sent by the MT Indent app.</p>"])
 
 

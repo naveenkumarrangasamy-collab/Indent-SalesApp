@@ -103,29 +103,16 @@ def run(now: datetime | None = None, force: bool = False, only: str | None = Non
 
 def _send_one(to: list[str], scope: recipients.Recipient | None, lines, m, days, slot, label,
               sample: bool = False) -> tuple[bool, str, int]:
-    from core import tracking
     html_parts, files, n = [], [], 0
     scope_txt = scope.scope_text() if scope else "everything"
-    mine = scope.filter(lines) if scope is not None and lines is not None and not lines.empty else lines
-    since = slot - timedelta(hours=1)
-    try:
-        po = indents.read_po_freeze()
-    except Exception:  # noqa: BLE001 - the PO part is extra; never block the mail
-        po = None
-    for day in days:
+    for day in days:     # 19 Nov: back to the first format (tracker sections come later)
         rows = reports.day_rows(lines, day)
         if scope is not None:
             rows = scope.filter(rows)
         n += 0 if rows is None or rows.empty else rows["indent_id"].nunique()
-        changes = tracking.sku_changes(mine, day, since, slot)
-        po_diff = None
-        if po is not None and rows is not None and not rows.empty:
-            pr = tracking.po_rows(mine, po, set(rows["indent_id"]))
-            po_diff = pr[pr["Status"].isin(tracking.BAD)].drop(columns=["Indent"])
         html_parts.append(reports.production_mail_html(rows, m, day, label,
-                                                       scope.name if scope else "", scope_txt,
-                                                       changes, po_diff, tracking.label(since)))
-        files += reports.production_mail_files(rows, m, day, label, scope_txt, changes, po_diff)
+                                                       scope.name if scope else "", scope_txt))
+        files += reports.production_mail_files(rows, m, day, label, scope_txt)
     day_txt = " + ".join(reports.fmt_day(d) for d in days)
     subject = (("[SAMPLE] " if sample else "") + f"Production {slot:%I:%M %p} - delivery {day_txt} - "
                f"{n} indent(s)").replace(" 0", " ", 1)
