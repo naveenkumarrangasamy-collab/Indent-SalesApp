@@ -11,7 +11,8 @@ GREEN = (28, 107, 73)
 _WEIGHTS = {"Store Names": 3.0, "Customer SKU Names": 4.2, "Customer SKU Name": 3.2, "Store": 2.2, "Parent SKU": 1.2,
             "Customer": 1.1, "City": 1.3, "Spec-Size": 1.3, "Lot Size": 1.1, "Variety": 1.1,
             "Origin": 1.1, "Total Qty": 0.9, "Qty": 0.8, "Lines": 0.6, "Indents": 0.7, "Stores": 0.6,
-            "Lot": 0.7}
+            "Lot": 0.7, "At spec": 2.4, "Spec Size": 2.4, "Make ready": 1.3, "Fruit needed": 1.2,
+            "Repacking": 1.3}
 _NUMERIC = {"Total Qty", "Qty", "Lines", "Indents", "Stores", "Price", "Amount"}
 
 
@@ -42,34 +43,53 @@ def _new_pdf(title: str, subtitle: list[str], footer: str) -> FPDF:
     pdf.set_auto_page_break(auto=True, margin=14)
     pdf.set_margins(10, 10, 10)
     pdf.add_page()
-    pdf.set_font("Helvetica", "B", 15)
+    pdf.set_font("Helvetica", "B", 17)
     pdf.set_text_color(*GREEN)
     pdf.cell(0, 8, _t(title), new_x="LMARGIN", new_y="NEXT")
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(60)
+    pdf.set_font("Helvetica", "", 10.5)
+    pdf.set_text_color(40)
     for line in subtitle:
-        pdf.cell(0, 5, _t(line), new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(0, 5.5, _t(line), new_x="LMARGIN", new_y="NEXT")
     pdf.ln(2)
     pdf.set_text_color(0)
     return pdf
 
 
+def _is_num(v) -> bool:
+    s = _t(v).replace(",", "").strip()
+    if s in ("", "-", "–"):
+        return True
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
+
 def _table(pdf: FPDF, df: pd.DataFrame) -> None:
+    """Crisp, readable table: 10 pt text, bold green header, bold Total rows,
+    numbers right-aligned (sized for reading on a phone as well as print)."""
     cols = list(df.columns)
     widths = [_WEIGHTS.get(c, 1.0) for c in cols]
-    align = ["RIGHT" if c in _NUMERIC else "LEFT" for c in cols]
-    pdf.set_font("Helvetica", "", 8)
-    heading = FontFace(emphasis="BOLD", color=255, fill_color=GREEN)
-    with pdf.table(col_widths=widths, text_align=align, headings_style=heading, line_height=4.6,
-                   cell_fill_color=(243, 247, 245), cell_fill_mode="ROWS", repeat_headings=1,
-                   padding=1.2) as table:
+    num = {c for c in cols if c in _NUMERIC or (len(df) and all(_is_num(v) for v in df[c]))}
+    align = ["RIGHT" if c in num else "LEFT" for c in cols]
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(0)
+    pdf.set_draw_color(150, 160, 155)
+    pdf.set_line_width(0.2)
+    heading = FontFace(emphasis="BOLD", color=255, fill_color=GREEN, size_pt=10)
+    bold = FontFace(emphasis="BOLD", fill_color=(214, 232, 222))
+    with pdf.table(col_widths=widths, text_align=align, headings_style=heading, line_height=6,
+                   cell_fill_color=(244, 248, 246), cell_fill_mode="ROWS", repeat_headings=1,
+                   padding=(1.6, 2.0), borders_layout="ALL") as table:
         row = table.row()
         for c in cols:
             row.cell(_t(c))
         for rec in df.itertuples(index=False):
+            total = str(rec[0]).strip().casefold() == "total"
             row = table.row()
             for v in rec:
-                row.cell(_t(v))
+                row.cell(_t(v), style=bold if total else None)
 
 
 def _lot_totals(pdf: FPDF, df: pd.DataFrame) -> None:
@@ -106,13 +126,13 @@ def sections_pdf(title: str, subtitle: list[str], sections: list[tuple[str, str,
         if i and (page_each or pdf.get_y() > 170):
             pdf.add_page()
         pdf.ln(2 if i else 0)
-        pdf.set_font("Helvetica", "B", 12)
+        pdf.set_font("Helvetica", "B", 14)
         pdf.set_text_color(*GREEN)
         pdf.cell(0, 7, _t(head), new_x="LMARGIN", new_y="NEXT")
         if sub:
-            pdf.set_font("Helvetica", "", 8.5)
-            pdf.set_text_color(60)
-            pdf.multi_cell(0, 4.5, _t(sub), new_x="LMARGIN", new_y="NEXT")
+            pdf.set_font("Helvetica", "", 10)
+            pdf.set_text_color(40)
+            pdf.multi_cell(0, 5.5, _t(sub), new_x="LMARGIN", new_y="NEXT")
         pdf.set_text_color(0)
         if df is None:          # a heading only (e.g. the customer above its stores)
             continue
