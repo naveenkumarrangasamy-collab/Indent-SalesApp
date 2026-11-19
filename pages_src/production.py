@@ -184,8 +184,9 @@ def render(user: User) -> None:
 
 
 def _by_customer(lines: pd.DataFrame, m, label: str) -> None:
-    """Make-ready list per customer + store (all customers of the date, Zepto too),
-    with a total; PDF = one customer per page, Excel = one sheet per customer."""
+    """Production per customer (stores clubbed, cold rooms apart; all customers of the
+    date, Zepto too): one row per Customer SKU Name with its own spec, a qty column
+    per store and a total; PDF = one customer per page, Excel = one sheet per customer."""
     blocks = make_ready_by_customer(lines, m)
     if not blocks:
         st.info("No indents for these filters.")
@@ -193,13 +194,13 @@ def _by_customer(lines: pd.DataFrame, m, label: str) -> None:
     desc = st.session_state.get("ps_desc", "")
     c = st.columns([1, 1, 4])
     c[0].download_button(
-        "PDF", lambda: sections_pdf("Make-ready list by customer", [desc], blocks,
-                                    footer="MT Indent - make-ready by customer", page_each=True),
-        file_name=f"make_ready_by_customer_{label}.pdf", mime="application/pdf",
+        "PDF", lambda: sections_pdf("Production by customer", [desc], blocks,
+                                    footer="MT Indent - production by customer", page_each=True),
+        file_name=f"production_by_customer_{label}.pdf", mime="application/pdf",
         icon=":material/picture_as_pdf:", width="stretch", key="mrc_pdf", on_click="ignore")
     c[1].download_button(
         "Excel", lambda: reports.xlsx({f"{i + 1} {h.split(' · ')[0]}"[:31]: df for i, (h, _, df) in enumerate(blocks)}),
-        file_name=f"make_ready_by_customer_{label}.xlsx", mime=reports.XLSX,
+        file_name=f"production_by_customer_{label}.xlsx", mime=reports.XLSX,
         icon=":material/download:", width="stretch", key="mrc_xlsx", on_click="ignore")
     c[2].caption("PDF: one customer per page. Excel: one sheet per customer.")
     for head, sub, df in blocks:

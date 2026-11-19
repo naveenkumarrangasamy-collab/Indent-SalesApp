@@ -151,7 +151,11 @@ def production_mail_files(rows: pd.DataFrame, m: Masters | None, day: str,
         secs.append(("4) Indent vs PO differences", "Only items that differ", po_diff))
         sheets["Indent vs PO"] = po_diff
     pdf = sections_pdf("Production sheet", sub, secs, footer=f"MT Indent - {slot_label}")
+    from core.production_calc import make_ready_by_customer
+    by_cust = sections_pdf("Production by customer", sub[:1], make_ready_by_customer(rows, m),
+                           footer=f"MT Indent - by customer - {slot_label}", page_each=True)
     return [(f"Production_{stamp}_{hh}.pdf", pdf, "application/pdf"),
+            (f"Production_by_customer_{stamp}_{hh}.pdf", by_cust, "application/pdf"),
             (f"Production_{stamp}_{hh}.xlsx", xlsx(sheets), XLSX)]
 
 
@@ -166,7 +170,8 @@ def production_mail_html(rows: pd.DataFrame, m: Masters | None, day: str,
         f"<p>Hello{(' ' + html.escape(name)) if name else ''},</p>",
         f"<p>Production for delivery on <b>{fmt_day(day)}</b>, as of <b>{slot_label}</b> "
         f"({html.escape(scope)}). {n} indent(s), {waiting} still waiting for a PO. "
-        "The same report is attached as PDF and Excel.</p>",
+        "The same report is attached as PDF and Excel, plus a second PDF: production by customer "
+        "(one customer per page, every SKU with its own spec).</p>",
         "<h3 style='color:#1c6b49'>1. Make-ready list</h3>",
         _html_table(mr, {"Make ready"}),
         "<h3 style='color:#1c6b49'>2. Production sheet by spec size</h3>",

@@ -224,9 +224,14 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
     (user asked to be reminded): box packs have no kg/pieces yet; fix later.
   - Mapping Whole / spec labels are only a fallback for the Batching sheet when there is no New tab. A permanent
     master for production is to be fixed later (user: "take it from New for now").
-- **By customer** (17 Nov 3:30 AM; 3rd tab on the Production page): the make-ready list per customer + store (same
-  rules/columns, all customers of the date incl. Zepto), each with a Total row. Downloads: **PDF = one customer per
-  page** (`sections_pdf(page_each=True)`), Excel = one sheet per customer. `production_calc.make_ready_by_customer`.
+- **By customer** (19 Nov, user-approved; 3rd tab on the Production page): one section per customer + city, **all its
+  stores clubbed** (Swiggy WH1 + WH2 = "Swiggy · WH1 + WH2"), **cold-room stores apart** ("Swiggy Cold Room").
+  **One row per exact Customer SKU Name** (only case/spaces ignored; Snacky Avocado and Avocado never clubbed).
+  Columns: Parent SKU, Customer SKU Name, Variety (only when any), Repacking, Spec-Size (that line's own New-tab
+  spec, e.g. "22C, 24C"; "to fill" / "not in New tab"), one qty column per store, Total, **At spec** (boxes/trays
+  at each count for piece packs, kg for kg packs, Blueberry 12 punnets a tray); Total row. **No Origin.**
+  PDF = one customer per page, Excel = one sheet per customer. `production_calc.make_ready_by_customer`,
+  `customer_group`, `_spec_cells`. Also mailed every hour as a **second PDF** (`Production_by_customer_*.pdf`).
 - **D+1 customers** (17 Nov 2:30 AM; secret `next_day_customers`, default {Zepto = ["Bangalore"]}, a word of the
   city; per customer/city, more later): their rows are **left out of the main production tables** for the selected
   date and shown in their own section at the bottom: **Today's order** (delivery = selected date) above, **Next-day
@@ -343,7 +348,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **157 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **165 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl, pdfplumber; packages.txt: tesseract-ocr.
 

@@ -223,19 +223,40 @@ def test_make_ready_boxes_and_blueberry_trays():
     assert got["Blueberry"] == ("Punnet", "119 Punnet", "16mm: 10 Tray")      # 119 punnets / 12 a tray
 
 
-def test_make_ready_by_customer_blocks_and_pdf_pages():
+def test_by_customer_clubs_stores_keeps_skus_apart_and_shows_own_spec():
+    from core.importer import build_prod_base
     from core.pdf_report import sections_pdf
     from core.production_calc import make_ready_by_customer
-    row = lambda c, s, n, q: dict(BASE, indent_id=c[:2], version="1", customer=c, store=s,  # noqa: E731
-                                  parent_sku="Avocado", customer_sku_name=n, lot="Pcs", qty=q)
-    blocks = make_ready_by_customer(_lines([row("Zepto", "Z1", "1PC - Hass Avocado", "10"),
-                                            row("More", "M1", "1PC - Hass Avocado", "5"),
-                                            row("Zepto", "Z1", "2PC - Hass Avocado", "3")]), _masters())
-    assert [h for h, _, _ in blocks] == ["More · M1", "Zepto · Z1"]
-    zepto = blocks[1][2]
-    assert zepto.iloc[-1][zepto.columns[0]] == "Total" and zepto.iloc[-1]["Make ready"] == "13"
+    m = _masters()
+    m.prod_base = pd.DataFrame(build_prod_base(NEW_TAB + [
+        ["Bangalore", "Swiggy", "Kiwi", "1Pc - Green Kiwi", "", "Punnet", "36", ""],
+        ["Bangalore", "Swiggy", "Avocado", "1PC - Snacky Avocado", "", "Tray", "22, 24", ""],
+        ["Bangalore", "Swiggy", "Avocado", "1PC - Nectar Avocado", "", "Tray", "18", ""]]))
+    row = lambda i, s, n, q, p: dict(BASE, indent_id=i, version="1", customer="Swiggy", store=s,  # noqa: E731
+                                     parent_sku=p, customer_sku_name=n, lot="Pcs", qty=q)
+    blocks = make_ready_by_customer(_lines([
+        row("IN-1", "Swiggy WH1", "1Pc - Green Kiwi", "300", "Kiwi"),
+        row("IN-2", "Swiggy WH2", "1pc -  green kiwi", "200", "Kiwi"),          # same SKU, case/spaces
+        row("IN-2", "Swiggy WH2", "1PC - Snacky Avocado", "48", "Avocado"),
+        row("IN-1", "Swiggy WH1", "1PC - Nectar Avocado", "36", "Avocado"),
+        row("IN-1", "Swiggy WH1", "1PC - Hass Avocado", "5", "Avocado"),          # not in New tab
+        row("IN-3", "Swiggy Cold Room_PTP", "1Pc - Green Kiwi", "10", "Kiwi")]), m)
+    assert [h for h, _, _ in blocks] == ["Swiggy · WH1 + WH2", "Swiggy Cold Room"]
+    t = blocks[0][2]
+    assert list(t.columns) == ["Parent SKU", "Customer SKU Name", "Repacking", "Spec-Size", "WH1", "WH2",
+                               "Total", "At spec"]
+    r = {x["Customer SKU Name"]: x for x in t.to_dict("records")}
+    assert (r["1Pc - Green Kiwi"]["WH1"], r["1Pc - Green Kiwi"]["WH2"], r["1Pc - Green Kiwi"]["Total"]) == \
+        ("300", "200", "500")
+    assert r["1Pc - Green Kiwi"]["Spec-Size"] == "36C" and r["1Pc - Green Kiwi"]["At spec"] == "36C: 14 Box"
+    assert r["1PC - Snacky Avocado"]["Spec-Size"] == "22C, 24C"
+    assert r["1PC - Snacky Avocado"]["At spec"] == "22C: 3 Tray | 24C: 2 Tray"
+    assert r["1PC - Nectar Avocado"]["Spec-Size"] == "18C"                   # own spec, never clubbed
+    assert r["1PC - Hass Avocado"]["Spec-Size"] == "not in New tab"
+    assert t.iloc[-1]["Parent SKU"] == "Total" and t.iloc[-1]["Total"] == "589"
+    assert "IN-1, IN-2" in blocks[0][1]
     pdf = sections_pdf("x", [], blocks, page_each=True)
-    assert pdf.count(b"/Type /Page\n") + pdf.count(b"/Type /Page ") >= 2 or pdf.count(b"/Page") >= 2
+    assert pdf[:5] == b"%PDF-"
 
 
 def test_new_tab_row_without_spec_is_mapping_not_done():

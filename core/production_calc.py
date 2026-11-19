@@ -245,10 +245,6 @@ def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[list[st
     - punnet parents (Blueberry, 12 punnets a tray): '16mm: 10 Tray' for 119 punnets;
     - kg packs: '18C: 70 kg'; otherwise just the spec ('180C, 198C' for gram packs).
     SKUs in one row with different specs each get their own part."""
-    import math
-    from core import config
-    trays = {p.casefold() for p in config.tray_parents()}
-    punnet = config.punnets_per_tray()
     fold = lambda r: tuple(str(r[k]).casefold() for k in keys)  # noqa: E731
     parts: dict[tuple, dict[str, float]] = {}
     for r in df.to_dict("records"):
@@ -257,28 +253,34 @@ def _by_size(df: pd.DataFrame, keys: list[str], g: pd.DataFrame) -> list[list[st
             continue
         d = parts.setdefault(fold(r), {})
         d[spec] = d.get(spec, 0.0) + to_number(r["qty"])
-    out = []
-    for r in g.to_dict("records"):
-        d = parts.get(fold(r), {})
-        parent = str(r["Parent SKU"]).casefold()
-        unit = "Tray" if parent in trays else "Box"
-        pcs, kg = _pcs_per_lot(r["Pack"]), _kg_per_lot(r["Pack"], r["_lot"])
-        if _is_container(r["Pack"]):
-            pcs = kg = None
-        cells = []
-        for spec, q in sorted(d.items(), key=lambda kv: (_counts(kv[0]) or [999])[0]):
-            counts = _counts(spec)
-            if parent in punnet:
-                cells.append(f"{_count_label(spec)}: {math.ceil(q / punnet[parent] - 1e-9)} Tray")
-            elif pcs and counts:
-                n = q * pcs
-                cells += [f"{c}C: {math.ceil(n / c - 1e-9)} {unit}" for c in counts]
-            elif kg:
-                cells.append(f"{_count_label(spec)}: {fmt_num(q * kg)} kg")
-            else:
-                cells.append(_count_label(spec))
-        out.append(cells)
-    return out
+    return [_spec_cells(r["Parent SKU"], r["Pack"], r["_lot"], parts.get(fold(r), {}))
+            for r in g.to_dict("records")]
+
+
+def _spec_cells(parent: str, pack: str, lot: str, specs: dict[str, float]) -> list[str]:
+    """The 'Spec Size' parts for one row: {spec: qty} -> ['90C: 10 Box', ...]."""
+    import math
+    from core import config
+    trays = {p.casefold() for p in config.tray_parents()}
+    punnet = config.punnets_per_tray()
+    parent = str(parent).casefold()
+    unit = "Tray" if parent in trays else "Box"
+    pcs, kg = _pcs_per_lot(pack), _kg_per_lot(pack, lot)
+    if _is_container(pack):
+        pcs = kg = None
+    cells = []
+    for spec, q in sorted(specs.items(), key=lambda kv: (_counts(kv[0]) or [999])[0]):
+        counts = _counts(spec)
+        if parent in punnet:
+            cells.append(f"{_count_label(spec)}: {math.ceil(q / punnet[parent] - 1e-9)} Tray")
+        elif pcs and counts:
+            n = q * pcs
+            cells += [f"{c}C: {math.ceil(n / c - 1e-9)} {unit}" for c in counts]
+        elif kg:
+            cells.append(f"{_count_label(spec)}: {fmt_num(q * kg)} kg")
+        else:
+            cells.append(_count_label(spec))
+    return cells
 
 
 def not_in_base(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
@@ -362,27 +364,85 @@ def default_date(dates: list[str], today: str) -> str | None:
     return upcoming[0] if upcoming else (dates[-1] if dates else None)
 
 
+BY_CUSTOMER_COLUMNS = ["Parent SKU", "Customer SKU Name", "Variety", "Repacking", "Spec-Size"]
+AT_SPEC = "At spec"
+
+
+def customer_group(customer: str, store: str) -> str:
+    """By-customer section: the customer's stores are clubbed (Swiggy WH1 + WH2 =
+    'Swiggy'); cold-room stores form their own section ('Swiggy Cold Room')."""
+    cust = " ".join(str(customer or "").split())
+    if "coldroom" in "".join(str(store or "").casefold().split()):
+        return f"{cust} Cold Room"
+    return cust
+
+
+def _store_label(customer: str, store: str) -> str:
+    """Column name for a store: 'Swiggy WH1' -> 'WH1', 'Zepto - Nelamangala' -> 'Nelamangala'."""
+    import re
+    s = " ".join(str(store or "").split())
+    c = " ".join(str(customer or "").split())
+    short = re.sub(rf"^{re.escape(c)}\s*[-_:·]?\s*", "", s, flags=re.IGNORECASE).strip(" -_") if c else s
+    return short or s or "Store"
+
+
 def make_ready_by_customer(lines: pd.DataFrame, masters: Masters | None) -> list[tuple[str, str, pd.DataFrame]]:
-    """Make-ready list per customer + store (same rules as make_ready), with a Total
-    row. Returns [(heading, subheading, table)] sorted by customer, store."""
+    """Production by customer: one section per customer (all its stores clubbed,
+    cold rooms apart) and city. One row per exact Customer SKU Name (only case
+    and spaces ignored), so different SKUs are never clubbed; each row shows its
+    own New-tab Repacking + Spec-Size, a qty column per store, Total and 'At spec'
+    (boxes / trays / kg at that line's spec). Ends with a Total row."""
     out = []
-    if lines is None or lines.empty:
+    df = _base_rows(lines, masters) if lines is not None and not lines.empty else None
+    if df is None or df.empty:
         return out
-    for (cust, store), part in sorted(lines.groupby(["customer", "store"]),
-                                     key=lambda kv: (str(kv[0][0]).casefold(), str(kv[0][1]).casefold())):
-        mr = make_ready(part, masters)
-        if mr.empty:
-            continue
-        if len(mr["City"].unique()) <= 1:
-            mr = mr.drop(columns=["City"])
-        qty = float(pd.to_numeric(part["qty"], errors="coerce").fillna(0).sum())
-        total = {c: "" for c in mr.columns}
-        total[mr.columns[0]] = "Total"
-        total["Make ready"] = fmt_num(qty)
-        mr = pd.concat([mr, pd.DataFrame([total])], ignore_index=True)
+    from core import config
+    clean = lambda v: " ".join(str(v or "").split())  # noqa: E731
+    punnet = config.punnets_per_tray()
+    df["_group"] = [customer_group(c, s) for c, s in zip(df["customer"], df["store"])]
+    df["_store"] = [_store_label(c, s) for c, s in zip(df["customer"], df["store"])]
+    df["Customer SKU Name"] = df["customer_sku_name"].map(clean)
+    df["_pack"] = ["Punnet" if str(p).casefold() in punnet else ls for p, ls in zip(df["Parent SKU"], df["Lot Size"])]
+    for (grp, city), part in sorted(df.groupby(["_group", "City"]),
+                                    key=lambda kv: (kv[0][0].casefold(), kv[0][1].casefold())):
+        stores = sorted(part["_store"].unique(), key=str.casefold)
+        keys = ["Parent SKU", "Customer SKU Name", "Variety"]
+        part = part.assign(_k=[tuple(str(r[k]).casefold() for k in keys) for r in part.to_dict("records")])
+        rows = []
+        for _, g in part.groupby("_k", sort=False):
+            r0 = g.iloc[0]
+            spec = str(r0["Spec-Size"])
+            if spec.startswith(NOT_IN_BASE):
+                shown, rep, specs = NOT_IN_BASE, "", {}
+            elif spec.startswith(PENDING):
+                shown, rep, specs = "to fill", "to fill", {}
+            else:
+                shown = _count_label(spec) if spec != "-" else ""
+                rep = r0["Repacking"]
+                specs = {spec: float(g["qty"].sum())} if spec != "-" else {}
+            row = {"Parent SKU": r0["Parent SKU"], "Customer SKU Name": r0["Customer SKU Name"],
+                   "Variety": r0["Variety"], "Repacking": rep, "Spec-Size": shown}
+            for s in stores:
+                q = float(g.loc[g["_store"] == s, "qty"].sum())
+                row[s] = fmt_num(q) if q else "–"
+            row["Total"] = fmt_num(float(g["qty"].sum()))
+            row[AT_SPEC] = " | ".join(_spec_cells(r0["Parent SKU"], r0["_pack"], r0["lot"], specs))
+            rows.append(row)
+        cols = BY_CUSTOMER_COLUMNS + stores + ["Total", AT_SPEC]
+        t = pd.DataFrame(rows, columns=cols)
+        t = t.sort_values(["Parent SKU", "Customer SKU Name"], key=_SORT).reset_index(drop=True)
+        total = {c: "" for c in cols}
+        total["Parent SKU"] = "Total"
+        for s in stores:
+            total[s] = fmt_num(float(part.loc[part["_store"] == s, "qty"].sum()))
+        total["Total"] = fmt_num(float(part["qty"].sum()))
+        t = pd.concat([t, pd.DataFrame([total])], ignore_index=True)
+        if not any(str(v).strip() for v in t["Variety"]):
+            t = t.drop(columns=["Variety"])
         ids = ", ".join(sorted(set(part["indent_id"].astype(str))))
         days = ", ".join(sorted(set(part["delivery_date"].astype(str))))
-        out.append((f"{cust} · {store}", f"Delivery {days} · {ids}", mr))
+        head = grp + (" · " + " + ".join(stores) if len(stores) > 1 else "")
+        out.append((head, f"{city} · Delivery {days} · {ids}", t))
     return out
 
 
