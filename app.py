@@ -51,7 +51,7 @@ _drop_stale_modules()
 st.set_page_config(page_title="MT Indent", page_icon="🧾", layout="wide")
 
 from pages_src import access, common, home, indent, login, my_indents, po_upload, production, tracker  # noqa: E402
-from pages_src import bulk_indents, delivery_times  # noqa: E402
+from pages_src import delivery_times  # noqa: E402   (Bulk indents page removed 21 Nov)
 
 _remember_modules()
 
@@ -110,7 +110,6 @@ pages = {
     "my_indents": st.Page(lambda: my_indents.render(user), title="All indents" if user.is_owner else "My indents",
                           icon="📋", url_path="indents"),
     "po": st.Page(lambda: po_upload.render(user), title="Upload PO", icon="📤", url_path="upload-po"),
-    "bulk": st.Page(lambda: bulk_indents.render(user), title="Bulk indents", icon="🗂️", url_path="bulk-indents"),
     "tracker": st.Page(lambda: tracker.render(user), title="Hourly tracker", icon="⏱️", url_path="tracker"),
     "production": st.Page(lambda: production.render(user), title="Production sheet", icon="🏭",
                           url_path="production", default=not makes_indents),
@@ -128,16 +127,17 @@ common.PAGES.update(pages)
 # Sales: indents + PO.  Warehouse: production, batching, hourly tracker.  Owner: everything.
 sections = {}
 if makes_indents:
-    sections["Indents"] = [pages["home"], pages["indent"], pages["bulk"], pages["my_indents"], pages["po"]]
+    sections["Indents"] = [pages["home"], pages["indent"], pages["my_indents"], pages["po"]]
 if sees_production:   # owner and warehouse; sales do not get production or the hourly tracker
     sections["Production"] = [pages["production"], pages["batching"], pages["tracker"]]
 if user.is_owner:
     sections["Admin"] = ([pages["access"]] if "access" in pages else []) + [pages["times"]]
 landing = pages["home"] if makes_indents else pages["production"]
-URLS = {"home": "home", "indent": "indent", "my_indents": "indents", "po": "upload-po", "bulk": "bulk-indents",
+URLS = {"home": "home", "indent": "indent", "my_indents": "indents", "po": "upload-po",
         "tracker": "tracker", "production": "production", "batching": "batching", "access": "access",
         "times": "delivery-times"}
-shown = {URLS[k] for k in pages}    # every page made above reserves its address, menu or not
+in_menu = [pg for group in sections.values() for pg in group]
+shown = {URLS[k] for k, pg in pages.items() if any(pg is q for q in in_menu)}   # addresses the menu already uses
 _away = [x for x in ("signin", "login") + GATE_PATHS if x not in shown]
 last = list(sections)[-1]
 sections[last] = sections[last] + [st.Page(lambda: st.switch_page(landing), title=f"go {x}", url_path=x)

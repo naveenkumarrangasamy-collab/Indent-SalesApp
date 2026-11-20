@@ -422,6 +422,9 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   gate's default is `login`, and `signin` + every old/role-missing address (GATE_PATHS) is its own page; signed
   in, those addresses are hidden menu pages that `st.switch_page` to Home (Production for warehouse)
   (`common.hide_nav_links`, `st.navigation(expanded=True)`).
+- **Bulk indents page removed from the menu** (user, 21 Nov 2 AM); `/bulk-indents` redirects to Home. Code
+  (`pages_src/bulk_indents.py`, `core/bulk_tabs.py`) kept. Redirect pages are made for every address not used by
+  *this user's menu* (a page built but not in the menu does not reserve its address).
 - Not done yet: the visible refresh when switching pages (user item 5).
 
 ## 6. Code map (repo root)
