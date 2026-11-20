@@ -167,6 +167,25 @@ def inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
+def numbered(df):
+    """21 Nov: an item number (#) as the first column: 1, 2, 3 ... ('Total' rows get none)."""
+    import pandas as pd
+    if df is None or not isinstance(df, pd.DataFrame) or df.empty or "#" in df.columns:
+        return df
+    out = df.reset_index(drop=True).copy()
+    lead = out.iloc[:, : min(3, out.shape[1])].astype(str).apply(lambda r: r.str.strip().str.lower())
+    total = lead.eq("total").any(axis=1)
+    n, nums = 0, []
+    for t in total:
+        if t:
+            nums.append("")
+        else:
+            n += 1
+            nums.append(str(n))
+    out.insert(0, "#", nums)
+    return out
+
+
 def hide_nav_links(paths: list[str]) -> None:
     """Hide the sidebar entries of the redirect-only pages (old addresses, /signin)."""
     if not paths:

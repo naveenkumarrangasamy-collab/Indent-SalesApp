@@ -146,7 +146,7 @@ def render(user: User) -> None:
                    "see their own section at the bottom.")
     v1, v2, v3 = st.tabs(["By spec size", "Make-ready list", "By customer"])
     with v1:
-        show = prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"])
+        show = common.numbered(prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"]))
         st.dataframe(show, hide_index=True, width="stretch",
                      column_config={"Qty": st.column_config.NumberColumn(format="%g"),
                                     "Total": st.column_config.TextColumn(
@@ -161,6 +161,7 @@ def render(user: User) -> None:
         mr = make_ready(lines, m)
         if len(mr["City"].unique()) <= 1:
             mr = mr.drop(columns=["City"])
+        mr = common.numbered(mr)
         st.dataframe(mr, hide_index=True, width="stretch")
         st.caption("For the ground team: **all customers and all sizes together**. Punnets / packs are counted as "
                    "packs; fruit going **loose** into a tray or box shows as pieces or kg (7 pcs loose, not "
@@ -187,7 +188,7 @@ def _by_customer(lines: pd.DataFrame, m, label: str) -> None:
     """Production per customer (stores clubbed, cold rooms apart; all customers of the
     date, Zepto too): one row per Customer SKU Name with its own spec, a qty column
     per store and a total; PDF = one customer per page, Excel = one sheet per customer."""
-    blocks = make_ready_by_customer(lines, m)
+    blocks = [(h, sub, common.numbered(df)) for h, sub, df in make_ready_by_customer(lines, m)]
     if not blocks:
         st.info("No indents for these filters.")
         return
@@ -233,11 +234,12 @@ def _next_day(m) -> None:
             mr = make_ready(rows, m)
             if len(mr["City"].unique()) <= 1:
                 mr = mr.drop(columns=["City"])
+            mr = common.numbered(mr)
             st.dataframe(mr, hide_index=True, width="stretch")
             _downloads(f"{names} {title} make-ready", mr, f"{key}_make_ready_{day}", f"{key}mr", rows)
         with t2:
             p = production(rows, m)
-            p = p if p["Variety"].astype(bool).any() else p.drop(columns=["Variety"])
+            p = common.numbered(p if p["Variety"].astype(bool).any() else p.drop(columns=["Variety"]))
             st.dataframe(p, hide_index=True, width="stretch",
                          column_config={"Qty": st.column_config.NumberColumn(format="%g")})
             _downloads(f"{names} {title} production", p, f"{key}_production_{day}", f"{key}ps", rows)
@@ -259,7 +261,7 @@ def render_batching(user: User) -> None:
     except SheetError as e:
         common.sheet_error(e)
         return
-    bat = batching(lines, m)
+    bat = common.numbered(batching(lines, m))
     _qty_strip(bat, "Qty", lines)
     has_var = bat["Variety"].astype(bool).any()
     cols = ["Parent SKU", "Customer SKU Name"] + (["Variety"] if has_var else []) + ["Lot", "Lot Size", "Spec", "Qty"]

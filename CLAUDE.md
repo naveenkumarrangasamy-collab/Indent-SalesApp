@@ -425,6 +425,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Bulk indents page removed from the menu** (user, 21 Nov 2 AM); `/bulk-indents` redirects to Home. Code
   (`pages_src/bulk_indents.py`, `core/bulk_tabs.py`) kept. Redirect pages are made for every address not used by
   *this user's menu* (a page built but not in the menu does not reserve its address).
+- **Item numbers (#) everywhere items are listed** (user, 21 Nov 2:15 AM; `common.numbered` adds a "#" first
+  column, 'Total' rows get none): Create indent item table + phone cards + review, All indents cards and the
+  Open detail, Upload PO items, Production (By spec size, Make-ready, By customer, D+1 tables), Batching sheet,
+  Hourly tracker (per indent, also its Excel/PDF). Page downloads (CSV/PDF/Excel) include it. The **hourly
+  e-mail is unchanged** (format kept stable).
 - Not done yet: the visible refresh when switching pages (user item 5).
 
 ## 6. Code map (repo root)

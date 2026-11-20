@@ -84,7 +84,7 @@ def _table(blocks: list[dict], labels: list[str], only_changed: bool) -> str:
             out.append(f"<tr class='c0'><td colspan='{n}'>{escape(b['customer'])}</td></tr>")
             last = b["customer"]
         out.append(f"<tr class='c1'><td colspan='{n}'>{escape(_head(b))}</td></tr>")
-        for r in rows:
+        for no, r in enumerate(rows, start=1):
             tds = []
             for q, ch, kind in r["cells"]:
                 if q == "·":
@@ -96,7 +96,7 @@ def _table(blocks: list[dict], labels: list[str], only_changed: bool) -> str:
             po = (f"<span class='{r['po_kind']}'>{escape(r['po'])}</span>" if r["po_kind"]
                   else f"<span class='m'>{escape(r['po'])}</span>")
             nm = (f"<span class='bad'>{escape(r['name'])}</span>" if r.get("po_only") else escape(r["name"]))
-            out.append(f"<tr><td class='l'>{nm}</td>{''.join(tds)}<td class='po'>{po}</td></tr>")
+            out.append(f"<tr><td class='l'>{no}. {nm}</td>{''.join(tds)}<td class='po'>{po}</td></tr>")
     out.append("</table></div>")
     return "".join(out)
 
@@ -105,13 +105,14 @@ def _frame(blocks: list[dict], labels: list[str]) -> pd.DataFrame:
     """Flat table for Excel / PDF: the cell text with its change, e.g. '459 (+46)'."""
     recs = []
     for b in blocks:
-        for r in b["rows"]:
-            d = {"Customer": b["customer"], "Store": b["store"], "Indent": b["indent"], "Customer SKU Name": r["name"]}
+        for no, r in enumerate(b["rows"], start=1):
+            d = {"#": no, "Customer": b["customer"], "Store": b["store"], "Indent": b["indent"],
+                 "Customer SKU Name": r["name"]}
             for lbl, (q, ch, _) in zip(labels, r["cells"]):
                 d[lbl] = f"{q} {ch}".strip()
             d["PO vs indent"] = r["po"]
             recs.append(d)
-    return pd.DataFrame(recs, columns=["Customer", "Store", "Indent", "Customer SKU Name"] + labels + ["PO vs indent"])
+    return pd.DataFrame(recs, columns=["#", "Customer", "Store", "Indent", "Customer SKU Name"] + labels + ["PO vs indent"])
 
 
 def _pdf(blocks: list[dict], labels: list[str], day: str) -> bytes:

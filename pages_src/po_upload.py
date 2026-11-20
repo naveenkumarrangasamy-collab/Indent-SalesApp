@@ -47,7 +47,7 @@ def _items_table(lines: pd.DataFrame, indent_id: str) -> None:
     show = rows[["customer_sku_name", "variety", "lot", "lot_size", "qty", "price", "amount"]].rename(
         columns={"customer_sku_name": "SKU", "variety": "Variety", "lot": "Lot", "lot_size": "Lot size",
                  "qty": "Qty", "price": "Price", "amount": "Amount"})
-    st.dataframe(show, hide_index=True, width="stretch")
+    st.dataframe(common.numbered(show), hide_index=True, width="stretch")
     st.caption(f"{len(rows)} items · qty {rows['qty'].sum():,.0f} · ₹ {rows['amount'].sum():,.0f}")
 
 

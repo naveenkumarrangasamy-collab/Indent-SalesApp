@@ -185,7 +185,7 @@ def _lines_phone(m: Masters, lines) -> None:
             var = x.variety or ("<span style='color:#b42318'>choose variety</span>" if needs else "")
             size = lot_size(x.customer_sku_name)
             st.markdown(
-                f"<div class='mt-card-head'><b>{escape(x.customer_sku_name)}</b></div>"
+                f"<div class='mt-card-head'><b>{i + 1}. {escape(x.customer_sku_name)}</b></div>"
                 f"<div class='mt-muted'>{escape(x.parent_sku)}{' · ' + var if var else ''}"
                 f"{' · ' + escape(size) if size else ''}</div>"
                 f"<div>Qty <b>{fmt_num(x.qty)}</b> {escape(x.lot)} · Price {x.price:g}</div>",
@@ -211,11 +211,12 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
     s = st.session_state
     rev = s.get("it_rev", 0)
     base = pd.DataFrame([{
+        "#": i + 1,
         "!": attach.FLAG_LABEL.get(fl.get(x.customer_sku_name, {}).get("flag", ""), ""),
         "Parent SKU": x.parent_sku, "Customer SKU name": x.customer_sku_name,
         "Variety": x.variety or ("Choose" if m.needs_variety(x.parent_sku) else "—"), "Lot": x.lot, "Lot size": lot_size(x.customer_sku_name) or "",
         "Qty": float(x.qty), "Price": float(x.price), "Line total": round(float(x.amount), 2),
-        "Remove": False} for x in lines])
+        "Remove": False} for i, x in enumerate(lines)])
     varieties = sorted({v for x in lines for v in m.varieties_for(x.parent_sku)})
     cols = list(base.columns) if (has_variety or fl) else [c for c in base.columns if c != "Variety"]
     if not config.show_amounts():
@@ -235,6 +236,7 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
                 options=sku_opts, required=True, width="large",
                 help="Pick another name to move this line's qty to it (a saved name is kept at 0)"),
             "!": st.column_config.TextColumn("", width="small"),
+            "#": st.column_config.NumberColumn("#", width="small", format="%d"),
             "Variety": st.column_config.SelectboxColumn(options=["Choose", "—"] + varieties, width="small",
                                                         help="Apple only: double-click to choose"),
             "Qty": st.column_config.NumberColumn(min_value=0, step=1, format="%d"),
@@ -391,10 +393,10 @@ def _fmt_date(iso: str) -> str:
 
 
 def _lines_frame(lines: list[IndentLine]) -> pd.DataFrame:
-    df = pd.DataFrame([{"Parent SKU": x.parent_sku, "Customer SKU Name": x.customer_sku_name,
+    df = pd.DataFrame([{"#": i + 1, "Parent SKU": x.parent_sku, "Customer SKU Name": x.customer_sku_name,
                         "Variety": x.variety, "Lot": x.lot, "Lot Size": lot_size(x.customer_sku_name),
                         "Qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
-                        "Price": x.price} for x in lines])
+                        "Price": x.price} for i, x in enumerate(lines)])
     if not df.empty and not df["Variety"].astype(bool).any():
         df = df.drop(columns=["Variety"])
     return df
