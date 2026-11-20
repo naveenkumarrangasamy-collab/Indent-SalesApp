@@ -132,54 +132,54 @@ def make_ready_view(rows: pd.DataFrame, m: Masters | None) -> pd.DataFrame:
     return mr
 
 
+def by_customer_view(rows: pd.DataFrame, m: Masters | None) -> list[tuple[str, str, pd.DataFrame]]:
+    """Production by customer, every block with item numbers (21 Nov)."""
+    from core.production_calc import make_ready_by_customer, numbered
+    return [(h, sub, numbered(df)) for h, sub, df in make_ready_by_customer(rows, m)]
+
+
 def production_mail_files(rows: pd.DataFrame, m: Masters | None, day: str,
                           slot_label: str, scope: str = "everything", changes: pd.DataFrame | None = None,
                           po_diff: pd.DataFrame | None = None) -> list[tuple[str, bytes, str]]:
-    """The production e-mail attachments: both tables (make-ready list + by spec size) as PDF and Excel."""
-    p, mr = production_view(rows, m), make_ready_view(rows, m)
-    n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
-    sub = [f"Delivery {fmt_day(day)} - as of {slot_label} - {scope}", f"{n} indents - all customers together"]
+    """21 Nov (user): the hourly e-mail carries only Production by customer (one PDF,
+    one customer per page, item numbers). No make-ready / spec-size tables, no Excel."""
     stamp = str(day).replace("-", "")
     hh = slot_label.split(",")[0].replace(":", "").replace(" ", "")
-    secs = [("1) Make-ready list", "All customers and sizes together", mr),
-            ("2) By spec size", "All customers clubbed per spec size", p)]
-    sheets = {"Make-ready list": mr, "By spec size": p}
-    if changes is not None and not changes.empty:
-        secs.append(("3) SKU changes since the last mail", "Only items whose qty changed", changes))
-        sheets["SKU changes"] = changes
-    if po_diff is not None and not po_diff.empty:
-        secs.append(("4) Indent vs PO differences", "Only items that differ", po_diff))
-        sheets["Indent vs PO"] = po_diff
-    pdf = sections_pdf("Production sheet", sub, secs, footer=f"MT Indent - {slot_label}")
-    from core.production_calc import make_ready_by_customer
-    by_cust = sections_pdf("Production by customer", sub[:1], make_ready_by_customer(rows, m),
-                           footer=f"MT Indent - by customer - {slot_label}", page_each=True)
-    return [(f"Production_{stamp}_{hh}.pdf", pdf, "application/pdf"),
-            (f"Production_by_customer_{stamp}_{hh}.pdf", by_cust, "application/pdf"),
-            (f"Production_{stamp}_{hh}.xlsx", xlsx(sheets), XLSX)]
+    blocks = by_customer_view(rows, m)
+    if not blocks:
+        return []
+    pdf = sections_pdf("Production by customer", [f"Delivery {fmt_day(day)} - as of {slot_label} - {scope}"],
+                       blocks, footer=f"MT Indent - by customer - {slot_label}", page_each=True)
+    return [(f"Production_by_customer_{stamp}_{hh}.pdf", pdf, "application/pdf")]
 
 
 def production_mail_html(rows: pd.DataFrame, m: Masters | None, day: str,
                          slot_label: str, name: str = "", scope: str = "everything",
                          changes: pd.DataFrame | None = None, po_diff: pd.DataFrame | None = None,
                          since: str = "") -> str:
-    p, mr = production_view(rows, m), make_ready_view(rows, m)
     n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
     waiting = rows[rows["status"] != STATUS_FROZEN]["indent_id"].nunique() if n else 0
-    return "".join([
-        f"<p>Hello{(' ' + html.escape(name)) if name else ''},</p>",
-        f"<p>Production for delivery on <b>{fmt_day(day)}</b>, as of <b>{slot_label}</b> "
-        f"({html.escape(scope)}). {n} indent(s), {waiting} still waiting for a PO. "
-        "The same report is attached as PDF and Excel, plus a second PDF: production by customer "
-        "(one customer per page, every SKU with its own spec).</p>",
-        "<h3 style='color:#1c6b49'>1. Make-ready list</h3>",
-        _html_table(mr, {"Make ready"}),
-        "<h3 style='color:#1c6b49'>2. Production sheet by spec size</h3>",
-        _html_table(p, {"Total"}),
-        "<p style='color:#888;font-size:12px'>Sent by the MT Indent app.</p>"])
+    parts = [f"<p>Hello{(' ' + html.escape(name)) if name else ''},</p>",
+             f"<p>Production by customer for delivery on <b>{fmt_day(day)}</b>, as of <b>{slot_label}</b> "
+             f"({html.escape(scope)}). {n} indent(s), {waiting} still waiting for a PO. "
+             "The same is attached as PDF (one customer per page).</p>"]
+    blocks = by_customer_view(rows, m) if n else []
+    if not blocks:
+        parts.append("<p style='color:#666'>No indents.</p>")
+    for head, sub, df in blocks:
+        parts.append(f"<h3 style='color:#1c6b49;margin:14px 0 2px'>{html.escape(head)}</h3>"
+                     f"<p style='color:#666;font-size:12px;margin:0 0 4px'>{html.escape(sub)}</p>")
+        parts.append(_html_table(df, {"Total"}))
+    parts.append("<p style='color:#888;font-size:12px'>Sent by the MT Indent app.</p>")
+    return "".join(parts)
 
 
 # ------------------------------------------------------------------ SO / PO
+
+def _num(df: pd.DataFrame) -> pd.DataFrame:
+    from core.production_calc import numbered
+    return numbered(df)
+
 
 def so_df(cur, po_qty: dict | None = None) -> pd.DataFrame:
     """The SO items. With po_qty (this PO's qty per SKU), adds PO qty and the
@@ -189,7 +189,7 @@ def so_df(cur, po_qty: dict | None = None) -> pd.DataFrame:
                         "Qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
                         "Price": round(x.price, 2), "Amount": round(x.amount, 2)} for x in cur.lines])
     if po_qty is None:
-        return df
+        return _num(df)
     by = {str(k).strip().casefold(): (k, float(v)) for k, v in po_qty.items() if v is not None}
     po, diff = [], []
     for x in cur.lines:
@@ -202,7 +202,8 @@ def so_df(cur, po_qty: dict | None = None) -> pd.DataFrame:
     extra = [{"Parent SKU": "", "Customer SKU Name": k, "Variety": "", "Lot": "", "Lot Size": "", "Qty": 0,
               "Price": 0.0, "Amount": 0.0, "PO qty": fmt_num(v), "Diff": "+" + fmt_num(v) + " (not on indent)"}
              for k, v in by.values()]
-    return pd.concat([df, pd.DataFrame(extra)], ignore_index=True) if extra else df
+    df = pd.concat([df, pd.DataFrame(extra)], ignore_index=True) if extra else df
+    return _num(df)
 
 
 def so_info(cur, po_number: str, po_file: str, uploaded_by: str) -> list[tuple[str, str]]:

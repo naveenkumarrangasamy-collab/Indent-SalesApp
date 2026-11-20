@@ -282,6 +282,7 @@ def _diff_box() -> None:
             show = [r for r in show if not r["Change"].startswith("✓")]
         cols = ["In the file", "Our SKU name"] + (["Saved", "File"] if editing else ["File"]) + ["Change"]
         df = pd.DataFrame(show, columns=cols).rename(columns={} if editing else {"File": "Qty"})
+        df.insert(0, "#", range(1, len(df) + 1))
 
         def color(r):
             c = r["Change"]

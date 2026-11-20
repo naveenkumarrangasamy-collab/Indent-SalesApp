@@ -96,7 +96,7 @@ def _table(blocks: list[dict], labels: list[str], only_changed: bool) -> str:
             po = (f"<span class='{r['po_kind']}'>{escape(r['po'])}</span>" if r["po_kind"]
                   else f"<span class='m'>{escape(r['po'])}</span>")
             nm = (f"<span class='bad'>{escape(r['name'])}</span>" if r.get("po_only") else escape(r["name"]))
-            out.append(f"<tr><td class='l'>{no}. {nm}</td>{''.join(tds)}<td class='po'>{po}</td></tr>")
+            out.append(f"<tr><td class='l'><span style='color:#8a8f98;font-size:11px;margin-right:6px'>{no}</span>{nm}</td>{''.join(tds)}<td class='po'>{po}</td></tr>")
     out.append("</table></div>")
     return "".join(out)
 

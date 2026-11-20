@@ -55,10 +55,10 @@ def _clear_po_state(indent_id: str) -> None:
 
 def _diff_table(rows: list[dict]) -> None:
     st.dataframe(pd.DataFrame([{
-        "Customer SKU Name": r["customer_sku_name"], "Indent qty": fmt_q(r["indent_qty"]),
+        "#": i + 1, "Customer SKU Name": r["customer_sku_name"], "Indent qty": fmt_q(r["indent_qty"]),
         "PO qty": fmt_q(r["po_qty"]),
-        "Difference": ("+" if r["diff"] > 0 else "") + fmt_num(r["diff"])} for r in rows]),
-        hide_index=True, width="stretch")
+        "Difference": ("+" if r["diff"] > 0 else "") + fmt_num(r["diff"])} for i, r in enumerate(rows)]),
+        hide_index=True, width="stretch", column_config={"#": st.column_config.NumberColumn("#", width=40)})
 
 
 @st.dialog("Upload PO", dismissible=False, width="large")
@@ -271,13 +271,13 @@ def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[
     if store and store.strip().casefold() != h.store.strip().casefold():
         st.error(f"PO number {po_number} looks like **{store}**, but this indent is for **{h.store}**.")
     owner = bool(getattr(user, "is_owner", False))
-    base = pd.DataFrame([{"On the PO": x.name, "Code": x.code, "Qty": fmt_num(x.qty),
+    base = pd.DataFrame([{"#": i + 1, "On the PO": x.name, "Code": x.code, "Qty": fmt_num(x.qty),
                           "Our SKU": x.sku or None, "Match": HOW.get(x.how, "") + (" · ⚠ hard to read" if x.unsure else ""),
-                          **({"Approve": False} if owner else {})} for x in lines])
+                          **({"Approve": False} if owner else {})} for i, x in enumerate(lines)])
     ed = st.data_editor(base, key=f"po_read_{indent_id}_{hash(read.po_number)}_{len(lines)}",
                         hide_index=True, width="stretch",
-                        disabled=["On the PO", "Code", "Qty", "Match"],
-                        column_config={"Our SKU": st.column_config.SelectboxColumn(
+                        disabled=["#", "On the PO", "Code", "Qty", "Match"],
+                        column_config={"#": st.column_config.NumberColumn("#", width=40, format="%d"),"Our SKU": st.column_config.SelectboxColumn(
                             options=cands + [NOT_OURS], width="large"),
                             "Approve": st.column_config.CheckboxColumn(
                                 "Approve", help="Same item: remember this PO name for next time")})
@@ -306,15 +306,16 @@ def _manual_table(cur, pre: dict, indent_id: str, multi: bool, so_far: dict) -> 
         pre["init"] = dict(pre.get("po_qty", {}))
         st.session_state["po_ed_rev"] = pre["rev"] = st.session_state.get("po_ed_rev", 0) + 1
     saved = pre["init"]
-    base = pd.DataFrame([{"Customer SKU Name": x.customer_sku_name, "Lot": x.lot,
+    base = pd.DataFrame([{"#": i + 1, "Customer SKU Name": x.customer_sku_name, "Lot": x.lot,
                           "Indent qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
                           **({"Earlier POs": fmt_num(so_far.get(x.customer_sku_name.strip().casefold(), 0))}
                              if multi else {}),
-                          "PO qty": saved.get(x.customer_sku_name)} for x in cur.lines])
+                          "PO qty": saved.get(x.customer_sku_name)} for i, x in enumerate(cur.lines)])
     base["PO qty"] = pd.to_numeric(base["PO qty"], errors="coerce")
     ed = st.data_editor(base, key=f"po_ed_{indent_id}_{pre.get('rev', 0)}", hide_index=True, width="stretch",
                         disabled=[c_ for c_ in base.columns if c_ != "PO qty"],
-                        column_config={"PO qty": st.column_config.NumberColumn(min_value=0, step=1,
+                        column_config={"#": st.column_config.NumberColumn("#", width=40, format="%d"),
+                                       "PO qty": st.column_config.NumberColumn(min_value=0, step=1,
                                                                                format="%d")})
     po_qty = {r["Customer SKU Name"]: (None if pd.isna(r["PO qty"]) else float(r["PO qty"]))
               for r in ed.to_dict("records")}

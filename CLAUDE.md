@@ -260,8 +260,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   PO (status Frozen) on, plain. An item entered and changed in the same half hour is compared with what was first
   entered; an item added to an existing indent shows (+qty). PDF (one customer per page) + Excel downloads.
   Old tabs (By customer / By store / Indent vs PO) removed. **Not in the mail yet** (user will decide later).
-- **Production e-mail content (19 Nov)**: back to the first format: 1) Make-ready list, 2) By spec size (body +
-  PDF + Excel) + the **Production_by_customer PDF**. The SKU-changes / Indent-vs-PO sections were removed.
+- **Production e-mail content (21 Nov)**: **Production by customer only** (see 21 Nov night).
 - The City/SKU report was removed.
 
 ### Home page
@@ -428,8 +427,13 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Item numbers (#) everywhere items are listed** (user, 21 Nov 2:15 AM; `common.numbered` adds a "#" first
   column, 'Total' rows get none): Create indent item table + phone cards + review, All indents cards and the
   Open detail, Upload PO items, Production (By spec size, Make-ready, By customer, D+1 tables), Batching sheet,
-  Hourly tracker (per indent, also its Excel/PDF). Page downloads (CSV/PDF/Excel) include it. The **hourly
-  e-mail is unchanged** (format kept stable).
+  Hourly tracker (per indent, also its Excel/PDF), Upload PO dialogs (read-from-PDF and qty tables, differences),
+  Attach "File vs item list", SO/PO mail items (`reports.so_df`). Cards show a small muted number (`.mt-num`,
+  `common.num_label`); tables a narrow "#" column. Page downloads include it.
+- **Hourly production e-mail = Production by customer ONLY** (user, 21 Nov 2:18 AM; replaces the 19 Nov format):
+  body = one numbered table per customer (`reports.by_customer_view`), attachment = one PDF
+  `Production_by_customer_<date>_<hh>.pdf` (one customer per page). No make-ready / spec-size tables, no Excel.
+  Same hourly trigger and Mail_Log.
 - Not done yet: the visible refresh when switching pages (user item 5).
 
 ## 6. Code map (repo root)

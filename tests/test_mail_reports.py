@@ -62,11 +62,11 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
     by_to = {m["To"]: m for m in sent}
     z = by_to["z@x.com"]
     names = sorted(p.get_filename() for p in z.iter_attachments())
-    assert len(names) == 3 and names[0].startswith("Production_") and names[0].endswith(".pdf") \
-        and names[1].endswith(".xlsx") and names[2].startswith("Production_by_customer_")
+    # 21 Nov: only Production by customer (one PDF), item numbers, no other tables / Excel
+    assert len(names) == 1 and names[0].startswith("Production_by_customer_") and names[0].endswith(".pdf")
     body = z.get_body(("html",)).get_content()
-    assert "Production sheet" in body and "Make-ready list" in body and "Customer-level" not in body \
-        and "Chennai" not in body
+    assert "Production by customer" in body and "Make-ready list" not in body and "spec size" not in body \
+        and "<th style='padding:4px 6px;text-align:left'>#</th>" in body and "Chennai" not in body
     assert z["Subject"].startswith("Production ") and "2 indent" in z["Subject"]      # Bangalore only
     assert "3 indent" in by_to["all@x.com"]["Subject"] and "Chennai" in by_to["all@x.com"].get_body(("html",)).get_content()
     # same slot again (also at 8:50): nothing new; not a send hour: skipped
@@ -105,8 +105,8 @@ def test_reports_overall_clubs_customers_and_customer_level_keeps_stores(env):
     c = reports.customer_df(rows)
     assert list(c["Customer"].unique()) == ["Swiggy", "Zepto"] and set(c["Status"]) == {"Waiting for PO"}
     files = reports.production_mail_files(rows, _masters(), TODAY, "9:00 AM")
-    assert [d[:4] for _, d, _ in files] == [b"%PDF", b"%PDF", b"PK\x03\x04"]
-    assert "by_customer" in files[1][0]
+    assert [d[:4] for _, d, _ in files] == [b"%PDF"]
+    assert "by_customer" in files[0][0]
 
 
 def test_state_at_shows_each_hour(env):

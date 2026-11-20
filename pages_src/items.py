@@ -185,7 +185,7 @@ def _lines_phone(m: Masters, lines) -> None:
             var = x.variety or ("<span style='color:#b42318'>choose variety</span>" if needs else "")
             size = lot_size(x.customer_sku_name)
             st.markdown(
-                f"<div class='mt-card-head'><b>{i + 1}. {escape(x.customer_sku_name)}</b></div>"
+                f"<div class='mt-card-head'><span class='mt-num'>{i + 1}</span><b>{escape(x.customer_sku_name)}</b></div>"
                 f"<div class='mt-muted'>{escape(x.parent_sku)}{' · ' + var if var else ''}"
                 f"{' · ' + escape(size) if size else ''}</div>"
                 f"<div>Qty <b>{fmt_num(x.qty)}</b> {escape(x.lot)} · Price {x.price:g}</div>",
@@ -236,7 +236,7 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
                 options=sku_opts, required=True, width="large",
                 help="Pick another name to move this line's qty to it (a saved name is kept at 0)"),
             "!": st.column_config.TextColumn("", width="small"),
-            "#": st.column_config.NumberColumn("#", width="small", format="%d"),
+            "#": st.column_config.NumberColumn("#", width=40, format="%d"),
             "Variety": st.column_config.SelectboxColumn(options=["Choose", "—"] + varieties, width="small",
                                                         help="Apple only: double-click to choose"),
             "Qty": st.column_config.NumberColumn(min_value=0, step=1, format="%d"),

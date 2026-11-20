@@ -142,7 +142,7 @@ def _card(df: pd.DataFrame, indent_id: str, user: User) -> None:
                         f"{escape(h.expected_time)} · v{cur.version} · {len(live)} item(s) · "
                         f"{fmt_num(qty)} qty</div>", unsafe_allow_html=True)
         head = st.columns(_CW)
-        for col, label in zip(head, ["# · Parent SKU", "Customer SKU Name", "Lot size", "Qty", "Price", "", ""]):
+        for col, label in zip(head, ["Parent SKU", "Customer SKU Name", "Lot size", "Qty", "Price", "", ""]):
             col.markdown(f"<span class='mt-muted'>{label}</span>", unsafe_allow_html=True)
         n = 0
         for i, x in enumerate(cur.lines):
@@ -150,7 +150,7 @@ def _card(df: pd.DataFrame, indent_id: str, user: User) -> None:
                 continue
             n += 1
             c = st.columns(_CW, vertical_alignment="center")
-            c[0].write(f"{n}. {x.parent_sku}")
+            c[0].markdown(common.num_label(n, x.parent_sku), unsafe_allow_html=True)
             c[1].write(x.customer_sku_name + (f" · {x.variety}" if x.variety else ""))
             c[2].write(lot_size(x.customer_sku_name) or x.lot)
             c[3].markdown(f"<span class='num'>{fmt_q(x.qty)}</span>", unsafe_allow_html=True)
@@ -410,10 +410,10 @@ def _po(cur, user: User) -> None:
     bad = [r for r in rows if not r["ok"]]
     if bad:
         st.warning(f"{len(bad)} item(s) differ between the indent and the PO(s):")
-        st.dataframe(pd.DataFrame([{"Customer SKU Name": r["customer_sku_name"],
+        st.dataframe(pd.DataFrame([{"#": i + 1, "Customer SKU Name": r["customer_sku_name"],
                                     "Indent qty": fmt_q(r["indent_qty"]), "PO qty": fmt_q(r["po_qty"]),
                                     "Difference": ("+" if r["diff"] > 0 else "") + fmt_num(r["diff"])}
-                                   for r in bad]), hide_index=True, width="stretch")
+                                   for i, r in enumerate(bad)]), hide_index=True, width="stretch")
     elif rows:
         st.success("The PO(s) match the indent.")
     r = mine.iloc[-1]
@@ -472,13 +472,13 @@ def _line_rows(cur, user: User, editable: bool, why: str = "") -> None:
 def _line_table(cur, editable: bool, why: str) -> None:
     has_variety = any(x.variety for x in cur.lines)
     head = st.columns(_W)
-    labels = ["# · Parent SKU", "Customer SKU Name", "Variety" if has_variety else "", "Lot", "Lot Size",
+    labels = ["Parent SKU", "Customer SKU Name", "Variety" if has_variety else "", "Lot", "Lot Size",
               "Qty", "Price", "Amount", "", ""]   # last column: nothing (items are never removed)
     for col, label in zip(head, labels):
         col.markdown(f"<span class='mt-muted'>{label}</span>", unsafe_allow_html=True)
     for i, x in enumerate(cur.lines):
         c = st.columns(_W, vertical_alignment="center")
-        c[0].write(f"{i + 1}. {x.parent_sku}")
+        c[0].markdown(common.num_label(i + 1, x.parent_sku), unsafe_allow_html=True)
         c[1].write(x.customer_sku_name)
         c[2].write(x.variety if has_variety else "")
         c[3].write(x.lot)

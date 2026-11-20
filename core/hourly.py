@@ -117,7 +117,7 @@ def _send_one(to: list[str], scope: recipients.Recipient | None, lines, m, days,
     subject = (("[SAMPLE] " if sample else "") + f"Production {slot:%I:%M %p} - delivery {day_txt} - "
                f"{n} indent(s)").replace(" 0", " ", 1)
     text = (f"Production for delivery {day_txt} as of {label} ({scope_txt}). "
-            "Open the HTML version or the attached PDF / Excel.")
+            "Production by customer is in the e-mail and the attached PDF.")
     msg = mailer.build_message(to, subject, "<hr>".join(html_parts), text, files)
     ok, why = mailer.deliver(msg)
     return ok, why, n

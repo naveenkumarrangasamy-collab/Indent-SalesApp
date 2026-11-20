@@ -28,6 +28,7 @@ _CSS = f"""
   .mt-badge.frz {{ color:#8a5a00; }}
   .mt-badge.cnl {{ color:#b42318; }}
   .mt-muted {{ color: rgba(49,51,63,.6); font-size:.85rem; }}
+  .mt-num {{ color: rgba(49,51,63,.45); font-size:.72rem; margin-right:.45rem; font-variant-numeric: tabular-nums; }}
 
   /* ---- Pill buttons (customers, stores, cities): dark "hovering" boxes ----
      Streamlit marks them data-variant="pills"; the chosen one has aria-checked="true". */
@@ -168,22 +169,15 @@ def inject_css() -> None:
 
 
 def numbered(df):
-    """21 Nov: an item number (#) as the first column: 1, 2, 3 ... ('Total' rows get none)."""
-    import pandas as pd
-    if df is None or not isinstance(df, pd.DataFrame) or df.empty or "#" in df.columns:
-        return df
-    out = df.reset_index(drop=True).copy()
-    lead = out.iloc[:, : min(3, out.shape[1])].astype(str).apply(lambda r: r.str.strip().str.lower())
-    total = lead.eq("total").any(axis=1)
-    n, nums = 0, []
-    for t in total:
-        if t:
-            nums.append("")
-        else:
-            n += 1
-            nums.append(str(n))
-    out.insert(0, "#", nums)
-    return out
+    """An item number (#) as the first column (core.production_calc.numbered)."""
+    from core.production_calc import numbered as _n
+    return _n(df)
+
+
+def num_label(n: int, text: str) -> str:
+    """Small muted item number before a name: '1  Apple'."""
+    from html import escape
+    return f"<span class='mt-num'>{n}</span>{escape(str(text))}"
 
 
 def hide_nav_links(paths: list[str]) -> None:
