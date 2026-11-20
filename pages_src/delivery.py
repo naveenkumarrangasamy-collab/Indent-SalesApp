@@ -101,7 +101,7 @@ def _my_cities(m: Masters) -> list[str]:
     u = st.session_state.get("user") or {}
     cities = m.cities()
     allowed = {c.casefold() for c in (u.get("cities") or [])}
-    if u.get("role") not in ("owner", "owner_full") and allowed:
+    if u.get("role") != "owner_full" and allowed:     # Creator: all; Owner / sales: their cities
         cities = [c for c in cities if c.casefold() in allowed]
     return cities
 

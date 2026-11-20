@@ -31,7 +31,8 @@ TABS: dict[str, list[str]] = {
     STORE_MAP: ["City", "Customer", "Store Name"],
     VARIETIES: ["Parent SKU", "Variety"],
     # Access is edited from the app's Access page (owner only).
-    ACCESS: ["Email", "Name", "Role", "Status", "PIN_Hash", "Updated_At", "Updated_By", "City", "Stores"],
+    ACCESS: ["Email", "Name", "Role", "Status", "PIN_Hash", "Updated_At", "Updated_By", "City", "Stores",
+             "Admin_Page"],
     # Output tabs (written by the app, append-only).
     INDENT_LINES: ["indent_id", "version", "status", "submitted_at", "submitted_by",
                    "delivery_date", "city", "customer", "store", "expected_time",
@@ -69,10 +70,11 @@ WAITING_FOR_PO = (STATUS_SUBMITTED, STATUS_LOCKED)
 PO_KIND = "po"                   # PO_Freeze.kind: one uploaded PO
 PO_END = "end"                   # PO_Freeze.kind: "End of POs" pressed (multi-PO customers)
 
-ROLE_OWNER = "owner"               # limited owner: everything except the full-owner tools
-ROLE_OWNER_FULL = "owner_full"     # full owner: also Import indents and Start fresh
+ROLE_OWNER = "owner"               # Owner: his cities (empty = all); Access page only if Admin_Page = yes
+ROLE_OWNER_FULL = "owner_full"     # Creator: everything (sheet value kept as owner_full)
 OWNER_ROLES = (ROLE_OWNER, ROLE_OWNER_FULL)
-ROLE_NAMES = {ROLE_OWNER: "Owner L", ROLE_OWNER_FULL: "Owner"}   # shown on screen
+ROLE_NAMES = {ROLE_OWNER: "Owner", ROLE_OWNER_FULL: "Creator", "sales": "Sales",
+              "warehouse": "Warehouse"}   # shown on screen (21 Nov)
 
 
 def role_name(role: str) -> str:
@@ -80,7 +82,7 @@ def role_name(role: str) -> str:
     return ROLE_NAMES.get(r, r)
 ROLE_SALES = "sales"
 ROLE_WAREHOUSE = "warehouse"   # production / batching only, no indents
-ROLES = [ROLE_SALES, ROLE_WAREHOUSE, ROLE_OWNER, ROLE_OWNER_FULL]
+ROLES = [ROLE_WAREHOUSE, ROLE_SALES, ROLE_OWNER, ROLE_OWNER_FULL]   # order in the pickers
 ACCESS_ACTIVE = "active"
 ACCESS_REVOKED = "revoked"
 

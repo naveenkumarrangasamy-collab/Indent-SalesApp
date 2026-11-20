@@ -1,6 +1,6 @@
 # CLAUDE.md: MT Indent app (project context for Claude sessions)
 
-Last updated: 19 Nov 2026. Owner of this work: MT Direct Sales team, Ninjacart (PTP Bangalore).
+Last updated: 21 Nov 2026. Owner of this work: MT Direct Sales team, Ninjacart (PTP Bangalore).
 
 Read automatically by Claude Code. Keep it current when rules change.
 The live user list and e-mail lists are NOT kept here (this repo is public); see the app's Access tab.
@@ -71,14 +71,18 @@ Sign-in is **e-mail + PIN** (4–6 digits, hashed with `pin_pepper`). A sign-in 
 
 | Role (sheet value → shown as) | Can do |
 |---|---|
-| `sales` → sales | Create/edit indents and upload POs, limited to their **cities** (empty = only their own indents). **No** production, batching or tracker pages. |
-| `warehouse` → warehouse | Production sheet, Batching sheet and Hourly tracker only (for their cities; empty = all). Cannot make indents. |
-| `owner` → **Owner L** (limited owner) | Everything **except** Import indents and Start fresh. Cannot grant the Owner role. |
-| `owner_full` → **Owner** (full owner) | Everything. Only an Owner can grant or change the Owner role. Any owner could do this only until the first Owner existed. |
+Shown in this order in the pickers (21 Nov): **Warehouse, Sales, Owner, Creator** (sheet values unchanged).
 
-- Owners always see all cities.
+| Role (sheet value → shown as) | Can do |
+|---|---|
+| `warehouse` → Warehouse | Production sheet, Batching sheet and Hourly tracker only (for their cities; empty = all). Cannot make indents. |
+| `sales` → Sales | Create/edit indents and upload POs, limited to their **cities** (empty = only their own indents). **No** production, batching or tracker pages. |
+| `owner` → **Owner** | Everything **except** Import indents, Start fresh and the E-mails tab, **only in his cities** (City column; empty / "All cities" = all). The **Access page only if Admin_Page = yes** (Access tab column; set by the Creator, default no). On Access he sees/adds/edits only Warehouse and Sales users in his cities and can never give Owner or Creator. |
+| `owner_full` → **Creator** | Everything, all cities. Only the Creator gives Owner/Creator, sets an Owner's cities and Access page, and sees the **E-mails** tab. The `owner_email` in secrets is always the Creator. |
+
+- City picker on Access: an **All cities** tick + the city list (Owner: empty = all; Sales/Warehouse: every city listed).
 - A user mapped to one city has no City filter on production.
-- The `owner_email` in secrets can always sign in.
+- The `owner_email` in secrets can always sign in (as Creator).
 
 ## 4. Google Sheet: tabs and columns (the "database")
 
@@ -97,7 +101,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - Stores include Zepto - Yalachanayakanapura, Swiggy WH1, Swiggy WH2, Flipkart, FIRST CLUB PTP BLR, More_BLR EKRAJPURA, and Namdhari (store not given). The last was added 16 Nov; rename it when the real store is known.
 - **Apple Varity / Apple Variety** tab (optional): the list of Apple varieties. The default list is used when there is none.
 - **SKU_Map / Store_Map / Varieties**: legacy fallbacks, used only when All Cux City / Customer List are absent.
-- **Access**: columns Email, Name, Role, Status (active/revoked), PIN_Hash, Updated_At, Updated_By, City (comma list), Stores (unused). It is edited only from the app.
+- **Access**: columns Email, Name, Role, Status (active/revoked), PIN_Hash, Updated_At, Updated_By, City (comma list), Stores (unused), Admin_Page (yes/no, Owners only; added 21 Nov). It is edited only from the app.
 
 ### Output tabs (written by the app, append-only)
 
@@ -124,7 +128,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - An expected delivery time is required: a 30-minute slot from 10 AM to 8 PM, or typed in.
 - **Lot** is detected from the SKU name: Kg; gm/g/pack → Pack; pc/pcs → Pcs; box → Box; tray → Tray. A Lot/UOM column in the master overrides it.
 - Qty must be a whole number. The price must be above 0.
-- **Apple needs a variety.** It is taken from the name (Royal Gala → Gala, Granny → Granny Smith, Red Delicious → RD) or picked by the user.
+- **Apple needs a variety.** 21 Nov: **the name wins** when it names one (Royal Gala → Gala, Granny / **Green** → Granny Smith, Queen → Queen, Red Delicious → RD; `masters.name_variety`), else the New tab, else All Cux City, else the user picks. The list = the sheet's Apple Varity list **plus** the full built-in list (the sheet had only Gala, Envy, so Granny Smith / Queen could not be found).
 - **Attach the order (18 Nov)** — pictures switched OFF for now (secret `read_pictures`, default false; Excel
   and PDF only) — on Create / edit indent (above the unchanged Add item form; `pages_src/attach.py`,
   `core/order_reader.py`): a **picture** (free OCR: Tesseract, `packages.txt` tesseract-ocr; weak on angled phone
@@ -305,7 +309,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   reference's New row; other origins → extra New rows. Editable preview, then "Write".
 - **Add a store** (Access → Add SKUs, expander): City + Customer + Store → Customer List (how a new city starts).
   18 Nov: PTP Hyderabad and PTP Mumbai added with Swiggy, Zepto, Zomato (placeholder stores "<Customer> - <City>").
-- **Import indents** (Access tab; **Owner only**, not Owner L):
+- **Import indents** (Access tab; **Creator only**):
   - Input is an Excel upload or rows pasted as text (tab, `|` or comma separated, header first).
   - Columns: Delivery date, City, Customer, Store, Parent SKU, Item / Customer SKU Name, Qty, and optional Price/Rate.
   - Options: one city for all rows, one price for all rows (default **1**) or the file's price, and the expected time.
@@ -403,6 +407,23 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   several names with the same words (e.g. 1Pack ×3 / 2PC - Kiwi Sungold / 2PC - Sungold Kiwi).
 - Not done (waiting on user's yes): IN-023 data fix (Kiwi Sungold 2PC → 1Pack; Apple varieties Gala → Granny Smith / Queen).
 
+### 21 Nov night (user-approved)
+
+- **Create indent starts from the store's last order** (`items._prefill`, `indents.last_order`): picking the
+  store of a new indent loads the items of that store's latest indent before the delivery date (current version,
+  qty > 0, exact names) at **qty 0, price 1** (variety from the name). Lines left at 0 are **not saved**
+  (`items.to_save`); all zero → "Enter a quantity for at least one item." Lines can be removed / added. No
+  indent number shown. Only when the list is empty (or only zeros). Price stays a plain number, default 1:
+  **no ₹ and no amounts/totals** anywhere on Create indent (add form, phone cards, edit dialog, review).
+- **Roles** renamed / Owner city-scoped / Access page flag / E-mails Creator only (section 3).
+- **Access → Duplicate names → Apple variety vs name** (`core/variety_fix.py`): lists New / All Cux City /
+  Mapping Whole Apple rows whose variety column disagrees with the name; "Fix n row(s)" writes the name's variety.
+- **No "Page not found"**: Streamlit serves the default page only at "/", so `/signin` was unknown. The sign-in
+  gate's default is `login`, and `signin` + every old/role-missing address (GATE_PATHS) is its own page; signed
+  in, those addresses are hidden menu pages that `st.switch_page` to Home (Production for warehouse)
+  (`common.hide_nav_links`, `st.navigation(expanded=True)`).
+- Not done yet: the visible refresh when switching pages (user item 5).
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.
@@ -430,7 +451,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **189 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **196 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl, pdfplumber; packages.txt: tesseract-ocr.
 
@@ -475,7 +496,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 - Keep replies short: what changed and what the user must do. The user finds long, back-and-forth messages heavy.
 
 - Short, plain-language replies. Do the work end to end (including in Chrome when asked). Ask only when the choice really matters.
-- On-screen labels stay short, with no explanations inside dropdowns (e.g. roles show as "Owner", "Owner L").
+- On-screen labels stay short, with no explanations inside dropdowns (e.g. roles show as "Warehouse", "Sales", "Owner", "Creator").
 - Keep the e-mail formats stable once agreed.
 - Test before pushing: run pytest and pyflakes; check the live app after the redeploy.
 

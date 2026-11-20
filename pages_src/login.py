@@ -4,7 +4,7 @@ from __future__ import annotations
 import streamlit as st
 
 from core import auth, masters
-from core.schema import ACCESS_ACTIVE, ROLE_OWNER
+from core.schema import ACCESS_ACTIVE, ROLE_OWNER_FULL
 from core.sheets import SheetError
 from pages_src import common, state
 
@@ -50,7 +50,7 @@ def _do_login(email: str, pin: str) -> None:
     if res.used_initial_pin:
         # First owner sign-in: record the owner in the Access tab with this PIN.
         try:
-            auth.upsert_access(user.email, by=user.email, role=ROLE_OWNER,
+            auth.upsert_access(user.email, by=user.email, role=ROLE_OWNER_FULL,
                                status=ACCESS_ACTIVE, pin=pin)
             masters.clear_cache()
         except SheetError:

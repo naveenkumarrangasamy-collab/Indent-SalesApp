@@ -149,7 +149,7 @@ def test_masters_built_live_and_lot_is_fixed():
     assert m.lot_for("Bangalore", "Zepto", "200gm - Litchi Imported (Longan)") == "Pack"
     assert m.lot_for("Bangalore", "Zepto", "1PC - Hass Avocado Imported") == "Pcs"
     assert m.lot_for("Bangalore", "Zepto", "Apple Royal Gala - PTP STD Lot") == ""  # no unit, no Lot column
-    assert m.varieties_for("Apple") == ["Gala", "Fuji"]
+    assert m.varieties_for("Apple")[:2] == ["Gala", "Fuji"] and "Granny Smith" in m.varieties_for("Apple")
 
 
 def test_sku_map_tab_used_without_legacy_tabs():
@@ -216,7 +216,7 @@ def test_variety_tab_and_sheet_only_customers():
           ["PTP Bangalore", "Zomato", "ZOMATO HYPERPURE PVT Ltd"]]
     raw = {"All Cux City": ac, "Customer List": cl, "Apple Varity": [["Gala"], ["Queen"]]}
     m = masters_from_frames(*frames_from_values(raw))
-    assert m.varieties_for("Apple") == ["Gala", "Queen"] and m.needs_variety("Apple")
+    assert m.varieties_for("Apple")[:2] == ["Gala", "Queen"] and m.needs_variety("Apple")
     assert m.cities() == ["PTP Bangalore"]
     assert m.customers("PTP Bangalore") == ["Zepto", "Zomato", "Swiggy"]  # sheet only, sheet order
     assert m.customers("Nowhere") == ["Swiggy", "Zomato", "Zepto", "Firstclub", "Namdhari"]

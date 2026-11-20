@@ -29,7 +29,7 @@ def render(user: User) -> None:
     except SheetError as e:
         common.sheet_error(e, "Could not load the stores.")
         return
-    cities = m.cities()
+    cities = [c for c in m.cities() if user.sees_all_cities or user.in_my_cities(c)]
     if not cities:
         st.info("No stores in the Customer List yet.")
         return

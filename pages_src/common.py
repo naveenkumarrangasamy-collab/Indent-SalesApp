@@ -167,6 +167,14 @@ def inject_css() -> None:
     st.markdown(_CSS, unsafe_allow_html=True)
 
 
+def hide_nav_links(paths: list[str]) -> None:
+    """Hide the sidebar entries of the redirect-only pages (old addresses, /signin)."""
+    if not paths:
+        return
+    sel = ", ".join(f'[data-testid="stSidebarNav"] li:has(a[href$="/{p}"])' for p in paths)
+    st.html(f"<style>{sel} {{display: none !important;}}</style>")
+
+
 def connection_banner() -> None:
     """Loud warning on every page when the app is not using the Google Sheet."""
     if get_backend().mode == "gsheets":

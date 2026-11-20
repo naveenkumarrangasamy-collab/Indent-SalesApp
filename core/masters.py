@@ -171,24 +171,22 @@ class Masters:
         return next((x for x in self.varieties_for(parent) if _key(x) == _key(v)), "") if v else ""
 
     def default_variety(self, city: str, customer: str, sku_name: str) -> str:
-        """New tab first (20 Nov: it is the production master), then the name, then All Cux City."""
+        """21 Nov: the name wins when it names a variety (Apple Queen -> Queen, Apple Green ->
+        Granny Smith); else the New tab; else All Cux City. '' = the user picks."""
         parent = self.parent_of(city, customer, sku_name)
         if not self.varieties_for(parent):
             return ""
-        nt = self.new_tab_variety(city, customer, sku_name)
-        if nt:
-            return nt
         fixed = self.variety_from_name(parent, sku_name)
         if fixed:
             return fixed
+        nt = self.new_tab_variety(city, customer, sku_name)
+        if nt:
+            return nt
         df = self._sku_for(city, customer)
         df = df[df["Customer SKU Name"].map(_key) == _key(sku_name)]
         vals = [v for v in df.get("Variety", pd.Series(dtype=str)) if v]
-        if vals:
-            return vals[0]
-        info = self.prod_info(city, customer, sku_name)            # the New tab's variety column
-        v = str((info or {}).get("Variety", "") or "").strip()
-        return v if v in self.varieties_for(parent) else ""
+        known = {_key(x): x for x in self.varieties_for(parent)}
+        return next((known[_key(v)] for v in vals if _key(v) in known), "")
 
     def lot_for(self, city: str, customer: str, sku_name: str) -> str:
         """The fixed lot for a SKU name: the Lot/UOM column of the mapping if
@@ -210,29 +208,16 @@ class Masters:
         df = self.varieties
         df = df[df["Parent SKU"].map(_key) == _key(parent)]
         found = _unique_in_order(df["Variety"])
-        if not found and _key(parent) == "apple":
-            found = list(config.DEFAULT_APPLE_VARIETIES)
+        if _key(parent) == "apple":       # 21 Nov: the sheet's list plus the full built-in list
+            have = {_key(v) for v in found}
+            found = found + [v for v in config.DEFAULT_APPLE_VARIETIES if _key(v) not in have]
         return found
 
     def variety_from_name(self, parent: str, sku_name: str) -> str:
-        """The variety written in an Apple SKU name ('Royal Gala' -> Gala,
-        'Red Delicious' -> RD, 'Green Imported (Granny Smith)' -> Granny Smith).
-        '' when the name does not say (Apple Snacky, Daily Apple) -> user picks."""
-        varieties = self.varieties_for(parent)
-        if not varieties or not sku_name:
-            return ""
-        import re as _re
-        text = " ".join(str(sku_name).split()).casefold()
-        aliases = {"royal gala": "Gala", "red delicious": "RD", "granny": "Granny Smith"}
-        candidates = [(v.casefold(), v) for v in varieties]
-        candidates += [(a, v) for a, v in aliases.items()
-                       if v in varieties and a not in {c for c, _ in candidates}]
-        best = None
-        for phrase, variety in candidates:
-            m = _re.search(r"(?<![a-z0-9])" + _re.escape(phrase) + r"(?![a-z0-9])", text)
-            if m and (best is None or (m.start(), -len(phrase)) < (best[0], -best[1])):
-                best = (m.start(), len(phrase), variety)
-        return best[2] if best else ""
+        """The variety written in an Apple SKU name ('Royal Gala' -> Gala, 'Red Delicious' -> RD,
+        'Apple Green Imported (Granny Smith)' / 'Green apple' -> Granny Smith, 'Apple Queen' -> Queen).
+        '' when the name does not say (Apple Snacky, Daily Apple) -> New tab / user picks."""
+        return name_variety(self.varieties_for(parent), sku_name)
 
     def needs_variety(self, parent: str) -> bool:
         return bool(self.varieties_for(parent))
@@ -249,6 +234,28 @@ class Masters:
         # A single row with nothing marked Active is fine (nothing to choose).
         bad = g[(g["Active rows"] > 1) | ((g["Active rows"] == 0) & (g["Rows"] > 1))]
         return bad.sort_values(["City", "Customer", "Customer SKU Name"]).reset_index(drop=True)
+
+
+VARIETY_ALIASES = {"royal gala": "Gala", "red delicious": "RD", "granny": "Granny Smith",
+                   "green": "Granny Smith"}
+
+
+def name_variety(varieties: list[str], sku_name: str) -> str:
+    """The first variety (or alias) written in the name; a longer phrase wins at the same place."""
+    import re as _re
+    if not varieties or not sku_name:
+        return ""
+    text = " ".join(str(sku_name).split()).casefold()
+    by_key = {v.casefold(): v for v in varieties}
+    candidates = [(v.casefold(), v) for v in varieties]
+    candidates += [(a, by_key[v.casefold()]) for a, v in VARIETY_ALIASES.items()
+                   if v.casefold() in by_key and a not in by_key]
+    best = None
+    for phrase, variety in candidates:
+        m = _re.search(r"(?<![a-z0-9])" + _re.escape(phrase) + r"(?![a-z0-9])", text)
+        if m and (best is None or (m.start(), -len(phrase)) < (best[0], -best[1])):
+            best = (m.start(), len(phrase), variety)
+    return best[2] if best else ""
 
 
 def _is_yes(v) -> bool:

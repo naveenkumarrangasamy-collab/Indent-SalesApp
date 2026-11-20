@@ -36,6 +36,7 @@ class User:
     role: str
     cities: list[str] = field(default_factory=list)
     stores: list[str] = field(default_factory=list)   # empty = every store of the cities
+    admin_page: bool = False   # Owner: may open the Access page (Creator always)
 
     @property
     def is_owner(self) -> bool:
@@ -45,6 +46,16 @@ class User:
     def is_full_owner(self) -> bool:
         """Full owner: also bulk Import indents and Start fresh."""
         return self.role == ROLE_OWNER_FULL
+
+    @property
+    def sees_all_cities(self) -> bool:
+        """Creator, or an Owner with no cities set (= all cities)."""
+        return self.is_full_owner or (self.is_owner and not self.cities)
+
+    @property
+    def opens_access(self) -> bool:
+        """The Access page: Creator always; an Owner only when given it."""
+        return self.is_full_owner or (self.is_owner and self.admin_page)
 
     @property
     def is_warehouse(self) -> bool:
@@ -61,8 +72,8 @@ class User:
 
     @property
     def city_scoped(self) -> bool:
-        """A sales user with cities set works on every indent in those cities."""
-        return not self.is_owner and bool(self.cities)
+        """A user (sales, warehouse or Owner) with cities set works on every indent in those cities."""
+        return not self.sees_all_cities and bool(self.cities)
 
     def in_my_cities(self, city: str) -> bool:
         return " ".join(str(city or "").split()).casefold() in {c.casefold() for c in self.cities}
@@ -79,12 +90,13 @@ class User:
 
     def to_dict(self) -> dict:
         return {"email": self.email, "name": self.name, "role": self.role, "cities": list(self.cities),
-                "stores": list(self.stores)}
+                "stores": list(self.stores), "admin_page": bool(self.admin_page)}
 
     @classmethod
     def from_dict(cls, d: dict) -> "User":
         return cls(email=d.get("email", ""), name=d.get("name", ""), role=d.get("role", ""),
-                   cities=list(d.get("cities") or []), stores=list(d.get("stores") or []))
+                   cities=list(d.get("cities") or []), stores=list(d.get("stores") or []),
+                   admin_page=bool(d.get("admin_page")))
 
 
 def parse_cities(value, seps: str = r"[,;\n]") -> list[str]:
@@ -194,15 +206,19 @@ def resolve_user(access: pd.DataFrame, email: str) -> User | None:
     row = access_row(access, email)
     if email and email == config.owner_email():
         name = row.get("Name", "") if row is not None else ""
-        role = str(row.get("Role", "")).strip().lower() if row is not None else ""
-        return User(email=email, name=name, role=role if role in OWNER_ROLES else ROLE_OWNER)
+        return User(email=email, name=name, role=ROLE_OWNER_FULL)   # the secrets' email is always the Creator
     if row is None or str(row.get("Status", "")).strip().lower() != ACCESS_ACTIVE:
         return None
     role = str(row.get("Role", "")).strip().lower()
     role = role if role in OWNER_ROLES + (ROLE_WAREHOUSE,) else ROLE_SALES
     return User(email=email, name=row.get("Name", ""), role=role,
-                cities=parse_cities(row.get("City", "")) if role not in OWNER_ROLES else [],
-                stores=[])   # store-level access is no longer used: cities only
+                cities=parse_cities(row.get("City", "")) if role != ROLE_OWNER_FULL else [],
+                stores=[],   # store-level access is no longer used: cities only
+                admin_page=role == ROLE_OWNER and is_yes(row.get("Admin_Page", "")))
+
+
+def is_yes(v) -> bool:
+    return str(v or "").strip().lower() in {"y", "yes", "true", "1"}
 
 
 @dataclass
@@ -290,7 +306,8 @@ def user_from_session_token(access: pd.DataFrame, token: str) -> User | None:
 
 def upsert_access(email: str, *, by: str, name: str | None = None, role: str | None = None,
                   status: str | None = None, pin: str | None = None,
-                  cities: list[str] | None = None, stores: list[str] | None = None) -> None:
+                  cities: list[str] | None = None, stores: list[str] | None = None,
+                  admin_page: bool | None = None) -> None:
     """Add or update one row of the Access tab (reads it fresh first)."""
     from core.sheets import get_backend
 
@@ -311,6 +328,8 @@ def upsert_access(email: str, *, by: str, name: str | None = None, role: str | N
         values["City"] = ", ".join(cities)
     if stores is not None:
         values["Stores"] = "; ".join(stores)
+    if admin_page is not None:
+        values["Admin_Page"] = "yes" if admin_page else "no"
     if row is None:
         values.setdefault("Name", "")
         values.setdefault("Role", ROLE_SALES)

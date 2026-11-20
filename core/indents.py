@@ -210,6 +210,30 @@ def current_rows(df: pd.DataFrame, include_cancelled: bool = False) -> pd.DataFr
     return cur
 
 
+def last_order(df: pd.DataFrame, city: str, customer: str, store: str, before: str) -> list[dict]:
+    """21 Nov: the items (qty > 0, in order) of this store's latest indent delivered
+    before `before` (ISO date), current version, not cancelled. [] if none."""
+    if df is None or df.empty:
+        return []
+    k = lambda v: " ".join(str(v or "").split()).casefold()   # noqa: E731
+    cur = current_rows(df)
+    cur = cur[(cur["city"].map(k) == k(city)) & (cur["customer"].map(k) == k(customer))
+              & (cur["store"].map(k) == k(store)) & (cur["delivery_date"].astype(str) < str(before))]
+    if cur.empty:
+        return []
+    last = cur.sort_values(["delivery_date", "_row"]).iloc[-1]
+    rows = cur[cur["indent_id"] == last["indent_id"]].sort_values("_row")
+    out, seen = [], set()
+    for r in rows.itertuples():
+        name = str(r.customer_sku_name)
+        if to_number(r.qty) <= 0 or k(name) in seen:
+            continue
+        seen.add(k(name))
+        out.append({"parent_sku": str(r.parent_sku), "customer_sku_name": name,
+                    "variety": str(r.variety or ""), "lot": str(r.lot or "")})
+    return out
+
+
 def summary(df: pd.DataFrame) -> pd.DataFrame:
     """One row per indent (current version) for the My indents table."""
     cols = ["indent_id", "version", "status", "delivery_date", "city", "customer", "store",
@@ -256,7 +280,7 @@ def open_first(df: pd.DataFrame, then: list[str] | None = None,
 def visible_to(summ: pd.DataFrame, user) -> pd.DataFrame:
     """Indents this user may see and work on: owner all; a sales user with
     cities every indent in those cities; otherwise the ones they created."""
-    if summ is None or summ.empty or user.is_owner:
+    if summ is None or summ.empty or getattr(user, "sees_all_cities", user.is_owner):
         return summ
     if user.cities:
         norm = lambda col: summ[col].astype(str).map(lambda v: " ".join(v.split()).casefold())  # noqa: E731
@@ -270,7 +294,7 @@ def visible_to(summ: pd.DataFrame, user) -> pd.DataFrame:
 
 
 def scope_text(user) -> str:
-    if user.is_owner or (getattr(user, "is_warehouse", False) and not user.cities):
+    if getattr(user, "sees_all_cities", user.is_owner) or (getattr(user, "is_warehouse", False) and not user.cities):
         return "all indents"
     if user.cities:
         return ("indents of " + ", ".join(user.stores) if user.stores

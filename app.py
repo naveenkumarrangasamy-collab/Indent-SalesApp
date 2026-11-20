@@ -81,6 +81,10 @@ def _views_once() -> bool:
 
 
 _views_once()
+# every address the app has ever had: signed out they show the sign-in form, signed in an
+# address this user has no page for goes to his first page (no "Page not found", 21 Nov)
+GATE_PATHS = ("home", "indent", "bulk-indents", "delivery-times", "upload-po", "tracker", "indents", "production",
+              "batching", "city-sku-report", "access")
 user = common.current_user()
 common.flush_cookie()
 
@@ -88,9 +92,8 @@ if user is None:
     common.restore_login_script()
     # every page address shows the sign-in form (no "Page not found" after a refresh),
     # and once signed in the user lands on the page they were on
-    gate = [st.Page(login.render, title="Sign in", icon="🔐", url_path="signin", default=True)]
-    for path in ("home", "indent", "bulk-indents", "delivery-times", "upload-po", "tracker", "indents", "production", "batching",
-                 "city-sku-report", "access"):
+    gate = [st.Page(login.render, title="Sign in", icon="🔐", url_path="login", default=True)]
+    for path in ("signin",) + GATE_PATHS:   # the default page only answers "/", so /signin needs its own
         gate.append(st.Page(lambda: login.render(), title="Sign in", icon="🔐", url_path=path))
     st.navigation(gate, position="hidden").run()
     st.stop()
@@ -114,8 +117,9 @@ pages = {
     "batching": st.Page(lambda: production.render_batching(user), title="Batching sheet", icon="📦",
                         url_path="batching"),
 }
-if user.is_owner:
+if user.opens_access:
     pages["access"] = st.Page(lambda: access.render(user), title="Access", icon="🔑", url_path="access")
+if user.is_owner:
     pages["times"] = st.Page(lambda: delivery_times.render(user), title="Delivery times", icon="🕒",
                              url_path="delivery-times")
 common.PAGES.clear()
@@ -128,7 +132,17 @@ if makes_indents:
 if sees_production:   # owner and warehouse; sales do not get production or the hourly tracker
     sections["Production"] = [pages["production"], pages["batching"], pages["tracker"]]
 if user.is_owner:
-    sections["Admin"] = [pages["access"], pages["times"]]
-nav = st.navigation(sections)
+    sections["Admin"] = ([pages["access"]] if "access" in pages else []) + [pages["times"]]
+landing = pages["home"] if makes_indents else pages["production"]
+URLS = {"home": "home", "indent": "indent", "my_indents": "indents", "po": "upload-po", "bulk": "bulk-indents",
+        "tracker": "tracker", "production": "production", "batching": "batching", "access": "access",
+        "times": "delivery-times"}
+shown = {URLS[k] for k in pages}    # every page made above reserves its address, menu or not
+_away = [x for x in ("signin", "login") + GATE_PATHS if x not in shown]
+last = list(sections)[-1]
+sections[last] = sections[last] + [st.Page(lambda: st.switch_page(landing), title=f"go {x}", url_path=x)
+                                   for x in _away]
+common.hide_nav_links(_away)
+nav = st.navigation(sections, expanded=True)
 common.sidebar(user)
 nav.run()

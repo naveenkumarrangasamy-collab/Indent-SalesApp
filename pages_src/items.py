@@ -130,8 +130,7 @@ def _add_form(m: Masters) -> None:
                         help="Pack size written in the customer SKU name")
         c[5].number_input("Qty", min_value=0, value=None, step=1, format="%d", key=_ak("qty"),
                           placeholder="0", help="Whole numbers only")
-        c[6].number_input("Price / lot", min_value=0.0, value=None, step=1.0, key=_ak("price"),
-                          placeholder="0.00")
+        c[6].number_input("Price", min_value=0.0, value=1.0, step=1.0, key=_ak("price"))
 
         if sku:
             if config.show_spec():
@@ -145,8 +144,8 @@ def _add_form(m: Masters) -> None:
         b1, b2 = st.columns([1, 4])
         b1.button("＋ Add item", on_click=_add_line, args=(m,), type="secondary",
                   width="stretch", disabled=bool(sku) and not lot_now)
-        if qty > 0 and price > 0:
-            b2.caption(f"Amount: ₹ {qty * price:,.2f}")
+        if qty > 0 and price > 0 and config.show_amounts():
+            b2.caption(f"Amount: {qty * price:,.2f}")
         for e in s.pop("add_errors", []):
             st.error(e)
     if s.pop("_item_added", False):
@@ -167,8 +166,11 @@ def _lines_table(m: Masters) -> None:
     total = sum(x.amount for x in lines)
     value = (f" · order value <span style='color:#1c6b49'><b>₹{total:,.2f}</b></span>"
              if config.show_amounts() else "")
+    filled = sum(to_number(x.qty) > 0 for x in lines)
+    zeros = (f" · {filled} of {len(lines)} filled · lines left at 0 are not saved"
+             if state.get()["mode"] == "new" and filled < len(lines) else "")
     st.markdown(f"**Items in this indent**{value} <span class='mt-muted'>· {len(lines)} items · qty "
-                f"{fmt_num(sum(to_number(x.qty) for x in lines))}</span>", unsafe_allow_html=True)
+                f"{fmt_num(sum(to_number(x.qty) for x in lines))}{zeros}</span>", unsafe_allow_html=True)
     has_variety = any(m.needs_variety(x.parent_sku) or x.variety for x in lines)
     with st.container(key="mtdesk_items"):
         _lines_desktop(m, lines, has_variety)
@@ -186,8 +188,8 @@ def _lines_phone(m: Masters, lines) -> None:
                 f"<div class='mt-card-head'><b>{escape(x.customer_sku_name)}</b></div>"
                 f"<div class='mt-muted'>{escape(x.parent_sku)}{' · ' + var if var else ''}"
                 f"{' · ' + escape(size) if size else ''}</div>"
-                f"<div>Qty <b>{fmt_num(x.qty)}</b> {escape(x.lot)} × ₹{x.price:,.2f} = "
-                f"<b>₹{x.amount:,.2f}</b></div>", unsafe_allow_html=True)
+                f"<div>Qty <b>{fmt_num(x.qty)}</b> {escape(x.lot)} · Price {x.price:g}</div>",
+                unsafe_allow_html=True)
             c = st.columns(2)
             if c[0].button("Edit", icon=":material/edit:", key=f"it_me_{i}_{x.customer_sku_name}",
                            width="stretch"):
@@ -338,11 +340,10 @@ def _edit_item(m: Masters) -> None:
                             value=max(low, int(line.qty)) if float(line.qty).is_integer() else low,
                             help="Set 0 when there is no indent for this item (saved items stay on the indent)"
                             if saved else "Whole numbers only")
-    price = c[1].number_input("Price / lot", min_value=0.01, step=1.0,
+    price = c[1].number_input("Price", min_value=0.01, step=1.0,
                               value=float(line.price) if line.price > 0 else 1.0)
     new = IndentLine(parent_sku=line.parent_sku, customer_sku_name=name, variety=variety or "",
                      lot=line.lot, qty=float(qty), price=float(price))
-    st.markdown(f"Amount: **₹ {new.amount:,.2f}**")
     b = st.columns(2)
     if b[0].button("Save", icon=":material/check:", type="primary", width="stretch",
                    disabled=bool(varieties) and not variety):
@@ -393,7 +394,7 @@ def _lines_frame(lines: list[IndentLine]) -> pd.DataFrame:
     df = pd.DataFrame([{"Parent SKU": x.parent_sku, "Customer SKU Name": x.customer_sku_name,
                         "Variety": x.variety, "Lot": x.lot, "Lot Size": lot_size(x.customer_sku_name),
                         "Qty": int(x.qty) if float(x.qty).is_integer() else x.qty,
-                        "Price": x.price, "Amount": x.amount} for x in lines])
+                        "Price": x.price} for x in lines])
     if not df.empty and not df["Variety"].astype(bool).any():
         df = df.drop(columns=["Variety"])
     return df
@@ -442,7 +443,7 @@ def _confirm_action() -> None:
 @st.dialog("Review and confirm", width="large", dismissible=False)
 def _review(m: Masters, user: User) -> None:
     ind = state.get()
-    hdr, lines = state.header(), state.lines()
+    hdr, lines = state.header(), to_save(state.lines())
     edit = ind["mode"] == "edit"
     from pages_src.delivery import fmt_slot
     st.markdown(f"**{'Update ' + ind['indent_id'] if edit else 'New indent'}** — please check before "
@@ -455,10 +456,9 @@ def _review(m: Masters, user: User) -> None:
         f"<span><b>Store</b>{hdr.store}</span></div>", unsafe_allow_html=True)
     st.dataframe(_lines_frame(lines), hide_index=True, width="stretch",
                  column_config={"Qty": st.column_config.NumberColumn(format="%d"),
-                                "Price": st.column_config.NumberColumn(format="%.2f"),
-                                "Amount": st.column_config.NumberColumn(format="%.2f")})
-    total = sum(x.amount for x in lines)
-    st.markdown(f"**{len(lines)} item(s) · Total ₹ {total:,.2f}**")
+                                "Price": st.column_config.NumberColumn(format="%g")})
+    st.markdown(f"**{len(lines)} item(s) · qty {fmt_num(sum(to_number(x.qty) for x in lines))}**"
+                + (" · lines at 0 are not saved" if state.get()["mode"] == "new" else ""))
     if edit:
         base = state.base_snapshot()
         if base:
@@ -554,20 +554,57 @@ def _before_check(m: Masters) -> Masters:
     return m
 
 
+def _prefill(m: Masters) -> None:
+    """21 Nov: a new indent starts from this store's last order: the same item names,
+    qty 0, price 1. Lines left at 0 are not saved. Only when the list is empty (or
+    holds nothing but zeros from another store's prefill)."""
+    ind, hdr = state.get(), state.header()
+    if ind["mode"] != "new" or ind.get("po_fix") or not (hdr.city and hdr.customer and hdr.store):
+        return
+    key = "|".join([hdr.city, hdr.customer, hdr.store, hdr.delivery_date])
+    if ind.get("prefill") == key:
+        return
+    if any(to_number(x.qty) > 0 for x in state.lines()):
+        ind["prefill"] = key
+        return
+    try:
+        rows = indents.last_order(indents.read_lines(), hdr.city, hdr.customer, hdr.store, hdr.delivery_date)
+    except SheetError:
+        return
+    ind["prefill"] = key
+    lines = []
+    for r in rows:
+        parent, name = r["parent_sku"], r["customer_sku_name"]
+        variety = (m.default_variety(hdr.city, hdr.customer, name) or r["variety"]) if m.needs_variety(parent) else ""
+        lines.append(IndentLine(parent_sku=parent, customer_sku_name=name, variety=variety,
+                                lot=m.lot_for(hdr.city, hdr.customer, name) or r["lot"], qty=0.0, price=1.0))
+    state.set_lines(lines, structural=True)
+
+
+def to_save(lines: list[IndentLine]) -> list[IndentLine]:
+    """New indent: lines left at qty 0 are not saved (21 Nov)."""
+    if state.get()["mode"] != "new":
+        return lines
+    return [x for x in lines if to_number(x.qty) > 0]
+
+
 def _check(m: Masters) -> list[str]:
     _fill_fixed_varieties(m)
-    errors = indents.validate(state.header(), state.lines(), m, check_date=not state.po_fix(),
+    lines = to_save(state.lines())
+    if state.get()["mode"] == "new" and state.lines() and not lines:
+        return ["Enter a quantity for at least one item."]
+    errors = indents.validate(state.header(), lines, m, check_date=not state.po_fix(),
                               keep_date=state.keep_date(), zero_ok=state.saved_names())
     u = st.session_state.get("user") or {}
     city = state.header().city
-    if u.get("role") not in ("owner", "owner_full") and u.get("cities") and \
+    if u.get("role") != "owner_full" and u.get("cities") and \
             city.casefold() not in {c.casefold() for c in u["cities"]}:
         errors.append(f"You can place indents only in {', '.join(u['cities'])}, not {city}.")
     return errors
 
 
 def _submit(m: Masters, user: User) -> None:
-    hdr, lines = state.header(), state.lines()
+    hdr, lines = state.header(), to_save(state.lines())
     errors = _check(m)
     if errors:
         for e in errors:
@@ -635,6 +672,7 @@ def render(m: Masters, user: User) -> None:
     st.caption(f"{_fmt_date(hdr.delivery_date)} · {hdr.customer} · {hdr.city}"
                + (f" · {fmt_slot(hdr.expected_time)}" if hdr.expected_time else " · choose the delivery time above"))
 
+    _prefill(m)
     from pages_src import attach
     if not m.has_sku_mapping(hdr.city, hdr.customer):
         st.info(f"No SKU names yet for {hdr.customer} in {hdr.city}. Attach their order (Excel or PDF): "

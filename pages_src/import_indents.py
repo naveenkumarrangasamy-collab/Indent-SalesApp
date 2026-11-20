@@ -15,7 +15,7 @@ _AS_FILE = "City as in the file"
 
 def render(m: masters.Masters | None, me: User) -> None:
     if not me.is_full_owner:
-        st.error("Only a full owner can import indents.")
+        st.error("Only the Creator can import indents.")
         return
     st.markdown(
         "Upload an Excel with one row per item: **Delivery date, City, Customer, Store, Parent SKU, "

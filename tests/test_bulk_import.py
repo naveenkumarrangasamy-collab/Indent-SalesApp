@@ -158,4 +158,5 @@ def test_full_and_limited_owner_roles():
                         {"Email": "b@x.com", "Name": "", "Role": "owner", "Status": "active", "City": "X"}])
     a, b = auth.resolve_user(acc, "a@x.com"), auth.resolve_user(acc, "b@x.com")
     assert a.is_owner and a.is_full_owner and a.sees_production and not a.cities
-    assert b.is_owner and not b.is_full_owner and not b.cities
+    assert b.is_owner and not b.is_full_owner and b.cities == ["X"]   # 21 Nov: Owner has cities
+    assert a.sees_all_cities and not b.sees_all_cities and b.city_scoped

@@ -55,7 +55,7 @@ def render(user: User) -> None:
     except SheetError as e:
         common.sheet_error(e, "The master could not be loaded.")
         return
-    cities = [x for x in m.cities() if user.is_owner or not user.cities or user.in_my_cities(x)]
+    cities = [x for x in m.cities() if user.sees_all_cities or not user.cities or user.in_my_cities(x)]
     if not cities:
         st.info("No cities for you yet.")
         return

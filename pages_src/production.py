@@ -39,7 +39,7 @@ def _filtered(user: User, prefix: str):
         return None
     summ = indents.summary(df)
     current = indents.current_rows(df)
-    if not user.is_owner:
+    if not user.sees_all_cities:
         summ = indents.visible_to(summ, user)
         current = current[current["indent_id"].isin(set(summ["indent_id"]))]
     if current.empty:
@@ -58,7 +58,7 @@ def _filtered(user: User, prefix: str):
                        format_func=lambda x: _fmt_date(x) + (f"  ({counts.get(x, 0)} indents)"
                                                              if x in counts else ""))
     cities = sorted(current["city"].unique())
-    if not user.is_owner and len(user.cities) == 1:
+    if not user.sees_all_cities and len(user.cities) == 1:
         city = user.cities[0]               # mapped to one city: no city filter
         c[1].markdown(f"<span class='mt-muted'>City</span><br><b>{city}</b>", unsafe_allow_html=True)
     else:
