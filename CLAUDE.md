@@ -361,13 +361,6 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **No-PO customers** (secret `no_po_customers`, default ["More"]): Upload PO takes a **screenshot** (PNG/JPG/WEBP)
   or PDF; PO number optional; PO qty starts from the indent qty. SO/PO mail attaches the screenshot as is
   (`mailer.file_mime`). To be refined as we go.
-- **Picture reading with Gemini** (`core/ai_reader.py`; user chose Gemini over Mistral / Cloud Vision): secret
-  `gemini_api_key` (user adds it; pictures switch on when it is set; `read_pictures` overrides), `gemini_model`
-  (default gemini-3.8-flash; when busy (429/5xx, retried once) or not offered it tries gemini-2.5-flash, gemini-3.5-flash-lite, gemini-2.5-flash-lite; a failed read shows "Read again" instead of calling on every rerun). JSON answer: customer, store, total, lines
-  (name, pack, qty, sure). Used by Attach the order (photo shown next to the list for comparison; unsure lines =
-  🟡 check) and by Upload PO screenshots of no-PO customers (lines → the same "Our SKU" table; "⚠ hard to read";
-  total vs lines checked). Without a key: Tesseract fallback (pictures off by default). Free-tier data may be used
-  by Google; a paid key avoids that. Not tested against the live API from the Claude cloud (network blocked).
 
 - **New customers without SKU names (19 Nov, user: "collect data and start things")**: Create indent no longer
   stops at "Mapping pending": Attach the order still shows; every line becomes a 🆕 new item (Parent SKU guessed
@@ -381,20 +374,34 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   name row is the total.
 - 19 Nov: PTP Hyderabad · Bigbasket added with placeholder store "Bigbasket - PTP Hyderabad" (rename later).
 
-- **Read order picture page** (19 Nov night; `pages_src/read_picture.py`, menu Indents → "Read order picture",
-  url `read-picture`; sales + owners): delivery day (today/tomorrow), city (own cities), customer, time → one
-  picture/screenshot → **table: items × one qty column per store** (`core/picture_table.py`) → each column mapped
-  to a store (`guess_store`: WH1 ← WH1/FNV1/MBF, WH2 ← WH2/FNV2/BLR, else words; pick once) → editable table
-  (Our SKU: PO_Item_Map link → exact our-style name → 🆕 new SKU; 🔴 new fruit = pick) → per store "new indent" or
-  "update IN-0xx" with changes vs saved → **Create / update indents** (new SKUs → master + links; update =
-  picture qty replaces saved qty; saved items not in the picture kept unless "set to 0" ticked). Customer check
-  as on attach. Swiggy WH1 + WH2 in one picture → both indents.
-- **Free reader chain** (`picture_table.read`): Gemini free key (table prompt, `ai_reader._call(prompt, schema)`)
-  → **OCR.space** (secret `ocrspace_api_key`, free 25k/month, 1 MB → `_small_jpeg`, isTable, Engine 2) →
-  Tesseract; text parsed by `parse_lines` (code = leading 6+ digits, trailing numbers = qty columns, header line
-  = store names, date/PO lines skipped, no-name row = totals). Also used by Attach the order pictures
-  (`order_reader.from_table` picks the indent's store column) and More screenshot POs. User registered OCR.space
-  with the office e-mail (captcha + key paste by the user).
+
+### 20 Nov morning (user-approved)
+
+- **Pictures removed** (user: "we don't want pictures"): no Gemini / OCR.space / Read order picture page;
+  `read_pictures` off. More's screenshot can still be attached as its PO (not read). The secrets
+  `gemini_api_key` / `ocrspace_api_key` are unused now.
+- **Bulk indents page** (Indents → Bulk indents, `pages_src/bulk_indents.py`, `core/bulk_tabs.py`; sales in
+  their cities + owners): one Excel per city, **one tab per store** (tab name = store; Template button), columns
+  Customer SKU name | UOM | Qty. Tab → store: remembered tab name (Store_Aliases) → exact store name → customer
+  with one store → one close name → else type customer + store (new ones are created). Per tab: 🆕 new indent /
+  🟡 update IN-0xx (only if a qty changed or an item is new; saved items not in the tab stay) / ✓ same, skipped /
+  🔴 needs you (no time, new fruit, PO done/locked). Same SKU twice in a tab is added up. On save: new stores →
+  Customer List, new SKUs → All Cux City + New (yellow), name links → PO_Item_Map, times → Delivery_Times,
+  tab names → Store_Aliases.
+- **Delivery times page** (Admin → Delivery times, `pages_src/delivery_times.py`, tab **Delivery_Times**: City,
+  Customer, Store, Time): the usual time per store; Create indent and Bulk indents start from it; a new store's
+  time is typed once and saved.
+- **Create indent**: the "Mapping pending" stop is gone (a customer without SKUs can attach its order);
+  **＋ New customer / store** (popover; added to the Customer List + its time to Delivery_Times on Submit);
+  **Customer SKU name is a dropdown on every line** (rename = qty moves to the new name; a saved name stays at 0);
+  **↻ Refresh SKUs** next to "Items for …".
+- Attach: the same SKU twice in one file is **added up** ("➕ combined 370 + 49"), no longer red.
+- Names: Zepto UOM "1 Pack" → **"1Pack - …"** (was 1PC), matching the master.
+- Apple variety: the **New tab variety wins** (`Masters.new_tab_variety`, `default_variety`), and it is fixed on
+  the line when set.
+- **Access → Duplicate names** (`bulk_tabs.duplicate_names`): per city + customer, one name on several rows or
+  several names with the same words (e.g. 1Pack ×3 / 2PC - Kiwi Sungold / 2PC - Sungold Kiwi).
+- Not done (waiting on user's yes): IN-023 data fix (Kiwi Sungold 2PC → 1Pack; Apple varieties Gala → Granny Smith / Queen).
 
 ## 6. Code map (repo root)
 
@@ -423,7 +430,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   - `access` (with `mail_admin`, `import_indents`), `bulk_download`
   - `login`, `common` (CSS, sidebar, session).
 - `scripts/wake_and_send.py`: the hourly trigger. `scripts/hourly_mail.py` is the manual run for a machine that has secrets.
-- `tests/`: pytest, **191 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
+- `tests/`: pytest, **189 tests passing**. Run `python -m pytest -q` and `python -m pyflakes core pages_src app.py`.
 - `MT_INDENT_BUILD_SPEC.md` is the original build spec. `README.md` is the setup guide.
 - Requirements: streamlit>=1.67, gspread, google-auth, pandas, tzdata, fpdf2, openpyxl, pdfplumber; packages.txt: tesseract-ocr.
 

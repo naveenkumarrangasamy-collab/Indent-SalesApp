@@ -210,12 +210,9 @@ def show_amounts() -> bool:
 
 
 def read_pictures() -> bool:
-    """Attach on Create indent also takes pictures. On when a Gemini key is set
-    (19 Nov, core.ai_reader); secret `read_pictures` = true/false overrides."""
-    v = get("read_pictures", None)
-    if v is None or str(v).strip() == "":
-        return bool(str(get("gemini_api_key", "") or "").strip())
-    return str(v).strip().lower() in ("1", "true", "yes", "y")
+    """Attach on Create indent also takes pictures (built-in OCR). Off: the user dropped
+    picture reading on 20 Nov (Excel / PDF / Bulk indents instead). Secret `read_pictures`."""
+    return str(get("read_pictures", "false")).strip().lower() in ("1", "true", "yes", "y")
 
 
 def tray_parents() -> list[str]:

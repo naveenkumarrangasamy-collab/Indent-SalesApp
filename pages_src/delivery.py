@@ -117,10 +117,10 @@ def _drop_stale(m: Masters) -> None:
     if h.get("city") and h["city"] not in _my_cities(m):
         dropped.append(h["city"])
         h.update(city="", customer="", store="")
-    if h.get("customer") and h["customer"] not in m.customers(h.get("city", "")):
+    if h.get("customer") and h["customer"] not in _my_customers(m, h.get("city", "")):
         dropped.append(h["customer"])
         h.update(customer="", store="")
-    if h.get("store") and h["store"] not in m.stores_for(h.get("city", ""), h.get("customer", "")):
+    if h.get("store") and h["store"] not in _my_stores(m, h.get("city", ""), h.get("customer", "")):
         dropped.append(h["store"])
         h["store"] = ""
     start, end = config.delivery_window()
@@ -176,7 +176,24 @@ def _my_stores(m: Masters, city: str, customer: str) -> list[str]:
     allowed = {x.casefold() for x in (u.get("stores") or [])}
     if u.get("role") not in ("owner", "owner_full") and allowed:
         stores = [x for x in stores if " ".join(x.split()).casefold() in allowed]
+    new = new_party()
+    if new and _same(new["city"], city) and _same(new["customer"], customer) and \
+            not any(_same(x, new["store"]) for x in stores):
+        stores = stores + [new["store"]]
     return stores
+
+
+NEW_PARTY = "mt_new_party"
+
+
+def _same(a, b) -> bool:
+    return " ".join(str(a or "").split()).casefold() == " ".join(str(b or "").split()).casefold()
+
+
+def new_party() -> dict | None:
+    """A customer / store typed on Create indent (20 Nov), not in the sheet yet: it is
+    added to the Customer List when the indent is submitted."""
+    return st.session_state.get(NEW_PARTY)
 
 
 def _my_customers(m: Masters, city: str) -> list[str]:
@@ -185,7 +202,24 @@ def _my_customers(m: Masters, city: str) -> list[str]:
     u = st.session_state.get("user") or {}
     if u.get("role") not in ("owner", "owner_full") and u.get("stores"):
         customers = [c for c in customers if _my_stores(m, city, c)]
+    new = new_party()
+    if new and _same(new["city"], city) and not any(_same(c, new["customer"]) for c in customers):
+        customers = customers + [new["customer"]]
     return customers
+
+
+def _new_party_box(hdr) -> None:
+    """＋ New customer / store: typed names; the store is added to the Customer List on Submit."""
+    with st.popover("＋ New customer / store"):
+        cust = st.text_input("Customer", value=hdr.customer or "", key=_k("new_cust"))
+        store = st.text_input("Store", key=_k("new_store"), placeholder="e.g. Bigbasket - PTP Hyderabad")
+        if st.button("Use", type="primary", key=_k("new_use"), disabled=not (cust.strip() and store.strip())):
+            st.session_state[NEW_PARTY] = {"city": hdr.city, "customer": " ".join(cust.split()),
+                                           "store": " ".join(store.split())}
+            state.set_header_field("customer", " ".join(cust.split()))
+            state.set_header_field("store", " ".join(store.split()))
+            _bump()
+            st.rerun()
 
 
 def _date_options() -> list[str]:
@@ -311,6 +345,8 @@ def render(m: Masters) -> bool:
             k = _k("customer")
             st.pills("Customer", customers, default=hdr.customer or None, key=k, on_change=_on_pick,
                      args=(k, "customer"), disabled=not hdr.city)
+            if hdr.city and ind["mode"] != "edit":
+                _new_party_box(hdr)
 
             # 4. Store (shows which ones already have an indent that day)
             if hdr.customer:
@@ -331,9 +367,15 @@ def render(m: Masters) -> bool:
                     st.pills("Store", stores, default=hdr.store or None, key=k, format_func=store_label,
                              on_change=_on_pick, args=(k, "store"))
                 else:
-                    st.info(f"No stores mapped for {hdr.customer} in {hdr.city} (Customer List tab).")
+                    st.info(f"No stores for {hdr.customer} in {hdr.city} yet: use ＋ New customer / store.")
 
-        # 5. Expected delivery time
+        # 5. Expected delivery time: the store's usual time (Delivery times page) when none is set yet
+        if hdr.store and not hdr.expected_time and ind["mode"] != "edit":
+            from core import store_settings
+            usual = store_settings.time_for(None, hdr.city, hdr.customer, hdr.store)
+            if usual:
+                state.set_header_field("expected_time", usual)
+                hdr = state.header()
         c5, c6 = st.columns([1, 2])
         k = _k("time")
         slots = TIME_SLOTS if hdr.expected_time in TIME_SLOTS or not hdr.expected_time \
@@ -349,9 +391,6 @@ def render(m: Masters) -> bool:
             c6.caption(f"Edits allowed until **{indents.deadline_text(hdr.delivery_date, hdr.customer)}**.")
 
     hdr = state.header()
-    if hdr.city and hdr.customer and not m.has_sku_mapping(hdr.city, hdr.customer):
-        st.info(f"Mapping pending for {hdr.customer} in {hdr.city}: no SKU names in 'All Cux City' yet.")
-        return False
     if not (hdr.delivery_date and hdr.city and hdr.customer and hdr.store):
         return False
     if _duplicate_notice(hdr):

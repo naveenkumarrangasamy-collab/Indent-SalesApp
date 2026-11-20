@@ -113,12 +113,6 @@ def _po_dialog(indent_id: str, user: User) -> None:
     is_pdf = bool(file_name) and file_name.casefold().endswith(".pdf")
     read = _read(file_bytes) if file_bytes and is_pdf else None
     if file_bytes and not is_pdf:
-        from core import ai_reader, picture_table
-        if picture_table.readers():
-            try:
-                read = _read_image(file_bytes, file_name, cur.header.store)
-            except ai_reader.AIReadError as e:
-                st.warning(f"The screenshot could not be read ({e}). Type the quantities.")
         with st.expander("The screenshot", expanded=False):
             st.image(file_bytes, width=360)
     no_key = f"po_no_{indent_id}"
@@ -212,25 +206,6 @@ NOT_OURS = "— not in our list"
 @st.cache_data(show_spinner="Reading the PO…", max_entries=20)
 def _read(data: bytes):
     return po_reader.read_pdf(data)
-
-
-@st.cache_data(show_spinner="Reading the screenshot…", max_entries=20)
-def _read_image(data: bytes, name: str, store: str = ""):
-    """A screenshot PO (no-PO customers, e.g. More on WhatsApp) read by the free readers
-    (Gemini, OCR.space, Tesseract) into PO lines, shown in the same 'Our SKU' table as a PDF PO."""
-    from core import order_reader, picture_table
-    try:
-        r = order_reader.from_table(picture_table.read(data, name), store)
-    except picture_table.TableReadError as e:
-        from core import ai_reader
-        raise ai_reader.AIReadError(str(e)) from e
-    res = po_reader.POReadResult(lines=r.lines, total=None, has_text=bool(r.lines))
-    if r.total is not None and abs(r.total - res.total_qty) >= 0.5:
-        res.checks.append(f"The screenshot says total {fmt_num(r.total)} but the lines add up to "
-                          f"{fmt_num(res.total_qty)}: a line may be missing or misread.")
-    if any(x.unsure for x in r.lines):
-        res.checks.append("Some lines were hard to read (? best guess): compare with the screenshot.")
-    return res
 
 
 def _candidates(cur) -> list[str]:

@@ -123,11 +123,19 @@ def _apply(m: Masters, read: order_reader.OrderRead, price: float) -> None:
                 same.append({"text": x.name, "new": sku, "sku": sug})
             new[sku] = {"Parent SKU": parent, "Customer SKU Name": sku, "Variety": variety, "Lot": lot,
                         "needs_variety": m.needs_variety(parent)}
-        if sku.casefold() in taken:              # two lines of the file on one SKU: never overwrite
-            why = f"same SKU as '{taken[sku.casefold()]}' ({sku}): pick the right one"
-            red.append({"text": x.name, "qty": x.qty, "why": why})
-            diff.append({"In the file": x.name, "Our SKU name": sku, "Saved": None, "File": x.qty,
-                         "Change": "🔴 " + why})
+        if sku.casefold() in taken:              # 20 Nov: the same SKU twice in one file -> add the qty up
+            prev = current[sku.casefold()]
+            current[sku.casefold()] = IndentLine(**{**prev.to_dict(), "qty": float(prev.qty) + float(x.qty)})
+            d = next((d for d in diff if d.get("Our SKU name", "").casefold() == sku.casefold()
+                      and not d["Change"].startswith("🔴")), None)
+            if d is not None:
+                parts = d.setdefault("_parts", [d["File"]])
+                parts.append(x.qty)
+                d["File"] = sum(parts)
+                d["In the file"] = f"{d['In the file']} + {x.name}" if x.name != d["In the file"] else x.name
+                was = saved_q.get(sku.strip().casefold()) if saved_q is not None else None
+                d["Change"] = _change(flag, was, float(d["File"]), saved_q is not None) + \
+                    f" · ➕ combined {' + '.join(fmt_num(q) for q in parts)}"
             continue
         was = saved_q.get(sku.strip().casefold()) if saved_q is not None else None
         diff.append({"In the file": x.name, "Our SKU name": sku, "Saved": was, "File": x.qty,
@@ -244,9 +252,6 @@ def render(m: Masters, user=None) -> None:
         if s.get(SUMMARY):
             msg, warn = s[SUMMARY]
             (st.warning if warn else st.success)(msg)
-        if up is not None and up.name.rsplit(".", 1)[-1].casefold() in order_reader.PICTURE_TYPES:
-            with st.expander("The picture (compare with the list below)"):
-                st.image(up.getvalue(), width=420)
         _diff_box()
     _same_box(m, user)
     _pending_box(m)

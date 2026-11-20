@@ -26,7 +26,7 @@ def render(user: User) -> None:
 
     from pages_src import mail_admin
     names = ["Users & PINs", "E-mails", "Add SKUs"] + (["Import indents"] if user.is_full_owner else []) \
-        + ["Sheet setup & checks"]
+        + ["Duplicate names", "Sheet setup & checks"]
     tabs = dict(zip(names, st.tabs(names)))
     t_users, t_mail, t_setup = tabs["Users & PINs"], tabs["E-mails"], tabs["Sheet setup & checks"]
     with t_users:
@@ -42,8 +42,25 @@ def render(user: User) -> None:
         with tabs["Import indents"]:
             from pages_src import import_indents
             import_indents.render(m, user)
+    with tabs["Duplicate names"]:
+        _duplicates(m)
     with t_setup:
         _setup(m, user)
+
+
+def _duplicates(m) -> None:
+    """The same fruit under several SKU names (or the same name on several rows) per
+    customer, to clean up once in All Cux City / New (20 Nov)."""
+    from core import bulk_tabs
+    if m is None:
+        return
+    rows = bulk_tabs.duplicate_names(m.sku)
+    if not rows:
+        st.success("No duplicate SKU names.")
+        return
+    st.caption(f"{len(rows)} group(s): the same item under several names, or one name on several rows. "
+               "Keep one name (the one mapped in the New tab), fix the others in All Cux City.")
+    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
 
 
 # ------------------------------------------------------------------ users

@@ -63,6 +63,10 @@ def new_sku_name(read_name: str) -> str:
         unit = ("gm" if u.startswith("g") else "Kg" if u.startswith("k")
                 else "Pack" if u.startswith("pack") else "PC")
         return f"{n}{unit} - {' '.join(tail.group(1).split())}"
+    if len(parts) == 2:                        # Zepto UOM '1 Pack' -> '1Pack - …' (20 Nov; the master's style)
+        pk = re.fullmatch(r"([\d.]+)\s*packs?\.?", re.sub(r"\([^)]*\)", "", parts[1]).strip(), flags=re.I)
+        if pk:
+            return f"{fmt_num(float(pk.group(1)))}Pack - {core}"
     _, pack = po_key(read_name)
     m = re.fullmatch(r"([\d.]+)(pc|g|kg)", pack or "")
     if not m:

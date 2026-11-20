@@ -43,42 +43,6 @@ def test_screenshot_po():
     assert file_mime("IN-021 - wa.jpg") == "image/jpeg" and file_mime("po.pdf") == "application/pdf"
 
 
-def test_gemini_answer_is_parsed():
-    from core import ai_reader
-    r = ai_reader.parse({"customer": "More Retail", "store": "Ekrajpura", "total": 117, "notes": "",
-                         "lines": [{"name": "Avocado Hass", "pack": "1 pc", "qty": 100, "sure": True},
-                                   {"name": "Blueberry", "pack": "125 g", "qty": 17, "sure": False},
-                                   {"name": "Kiwi", "pack": "", "qty": 0, "sure": False}]})
-    assert [(x.name, x.qty, x.unsure) for x in r.lines] == [("Avocado Hass - 1 pc", 100, False),
-                                                           ("Blueberry - 125 g", 17, True)]
-    assert r.total == 117 and "More Retail" in r.text
-    assert order_reader.whose(r.text, AL) == {"More"}
-
-
-def test_pictures_follow_the_key(monkeypatch):
-    vals = {}
-    monkeypatch.setattr(config, "get", lambda k, d=None: vals.get(k, d))
-    assert not config.read_pictures()
-    vals["gemini_api_key"] = "x"
-    assert config.read_pictures()
-    vals["read_pictures"] = "false"
-    assert not config.read_pictures()
-
-
-def test_picture_in_order_reader(monkeypatch):
-    from core import picture_table as pt
-    monkeypatch.setattr(pt, "readers", lambda: ["gemini"])
-    monkeypatch.setattr(pt, "read", lambda data, name: pt.parse_gemini(
-        {"customer": "Swiggy", "stores": ["WH1", "WH2"], "totals": [600, 40],
-         "lines": [{"name": "Apple Snacky 2 pcs", "qtys": [600, 0], "sure": True},
-                   {"name": "Kiwi 3 pcs", "qtys": [0, 40], "sure": False}]}))
-    r = order_reader.read("wa.jpg", b"img", "Swiggy WH2")
-    assert r.kind == "picture" and [(x.name, x.qty, x.unsure) for x in r.lines] == [("Kiwi 3 pcs", 40, True)]
-    assert r.total == 40 and "Swiggy" in r.text
-    r = order_reader.read("wa.jpg", b"img", "Swiggy WH1")
-    assert [x.qty for x in r.lines] == [600]
-
-
 def test_bigbasket_names_in_our_style():
     from core import master_add as ma
     assert ma.new_sku_name("Fresho Kiwi - Green 3 pcs  ( 240 Gms *)") == "3PC - Fresho Kiwi - Green (240 Gms)"
@@ -97,23 +61,3 @@ def test_links_for_new_items(monkeypatch):
         {"Customer SKU Name": "1Pc - Hass", "From file": "1pc - hass"}])
     assert [(r["PO Item Name"], r["Customer SKU Name"]) for r in rows] == [("Fresho Blueberry 125 g",
                                                                           "125gm - Fresho Blueberry")]
-
-
-def test_gemini_busy_falls_back(monkeypatch):
-    from core import ai_reader
-    monkeypatch.setattr(ai_reader, "api_key", lambda: "k")
-    calls = []
-
-    def fake(model, img, mime, key):
-        calls.append(model)
-        if model == ai_reader.DEFAULT_MODEL:
-            raise ai_reader.Busy("busy (503)")
-        return {"lines": [{"name": "Kiwi", "qty": 5, "sure": True}]}
-    monkeypatch.setattr(ai_reader, "_call", fake)
-    r = ai_reader.read(b"x")
-    assert calls == [ai_reader.DEFAULT_MODEL, "gemini-2.5-flash"] and r.model == "gemini-2.5-flash"
-
-    monkeypatch.setattr(ai_reader, "_call", lambda *a: (_ for _ in ()).throw(ai_reader.Busy("busy (503)")))
-    import pytest
-    with pytest.raises(ai_reader.AIReadError, match="Read again"):
-        ai_reader.read(b"x")

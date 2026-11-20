@@ -74,39 +74,64 @@ def _excel(data: bytes, store: str) -> OrderRead:
         str(x) for raw in sheets.values() for row in raw.values.tolist()[:400] for x in row
         if isinstance(x, str))
     for raw in sheets.values():
-        values = raw.values.tolist()
-        for h in range(min(15, len(values))):
-            head = [_norm(x) for x in values[h]]
-            ni = next((head.index(n) for n in _NAME_HEADS if n in head), None)
-            qi = next((head.index(n) for n in _QTY_HEADS if n in head), None)
-            if ni is not None and qi is None:
-                qi = _number_column(values[h + 1:], ni)      # qty under a store name (Bigbasket)
-            if ni is None or qi is None:
-                continue
-            ci = next((head.index(n) for n in _CODE_HEADS if n in head and head.index(n) != ni), None)
-            ui = next((head.index(n) for n in ("uom", "unit") if n in head), None)
-            pi = next((head.index(n) for n in ("packsize", "pack", "packqty") if n in head), None)
-            out = OrderRead(kind="excel", text=alltext)
-            for row in values[h + 1:]:
-                get = lambda i: row[i] if i is not None and i < len(row) else None  # noqa: E731
-                name, q = _s(get(ni)), _num(get(qi))
-                if name and not re.search(r"[A-Za-z]", name):
-                    name = ""                          # '-' in the total row
-                if not name and q is not None and q > 0:
-                    out.total = q                      # an unlabelled total row under the qty column
-                    continue
-                if not name or q is None or q <= 0:
-                    continue
-                if name.casefold().startswith("total"):
-                    out.total = q
-                    continue
-                uom, size = _s(get(ui)), _num(get(pi))
-                if size and uom and not re.match(r"\d", uom):
-                    uom = f"{size:g} {uom}"           # packsize 2 + PIECE -> '2 PIECE', 250 + GRAM -> '250 GRAM'
-                code = _s(get(ci)) if ci is not None else ""
-                out.lines.append(POLine(name=f"{name} - {uom}" if uom else name, qty=q, code=code))
-            return out
+        got = sheet_lines(raw.values.tolist())
+        if got is not None:
+            got.text = alltext
+            return got
     raise ImportFileError("No sheet has an item column and a qty column.")
+
+
+def sheet_lines(values: list) -> OrderRead | None:
+    """The order lines of one sheet (header row with an item column and a qty column,
+    or a mostly-numeric column right of the items); None when the sheet has none."""
+    for h in range(min(15, len(values))):
+        head = [_norm(x) for x in values[h]]
+        ni = next((head.index(n) for n in _NAME_HEADS if n in head), None)
+        qi = next((head.index(n) for n in _QTY_HEADS if n in head), None)
+        if ni is not None and qi is None:
+            qi = _number_column(values[h + 1:], ni)      # qty under a store name (Bigbasket)
+        if ni is None or qi is None:
+            continue
+        ci = next((head.index(n) for n in _CODE_HEADS if n in head and head.index(n) != ni), None)
+        ui = next((head.index(n) for n in ("uom", "unit") if n in head), None)
+        pi = next((head.index(n) for n in ("packsize", "pack", "packqty") if n in head), None)
+        out = OrderRead(kind="excel")
+        for row in values[h + 1:]:
+            get = lambda i: row[i] if i is not None and i < len(row) else None  # noqa: E731
+            name, q = _s(get(ni)), _num(get(qi))
+            if name and not re.search(r"[A-Za-z]", name):
+                name = ""                          # '-' in the total row
+            if not name and q is not None and q > 0:
+                out.total = q                      # an unlabelled total row under the qty column
+                continue
+            if not name or q is None or q <= 0:
+                continue
+            if name.casefold().startswith("total"):
+                out.total = q
+                continue
+            uom, size = _s(get(ui)), _num(get(pi))
+            if size and uom and not re.match(r"\d", uom):
+                uom = f"{size:g} {uom}"           # packsize 2 + PIECE -> '2 PIECE', 250 + GRAM -> '250 GRAM'
+            code = _s(get(ci)) if ci is not None else ""
+            out.lines.append(POLine(name=f"{name} - {uom}" if uom else name, qty=q, code=code))
+        return out
+    return None
+
+
+def read_tabs(data: bytes) -> list[tuple[str, OrderRead]]:
+    """Bulk indents (20 Nov): every sheet tab of the workbook with its order lines."""
+    try:
+        sheets = pd.read_excel(io.BytesIO(data), sheet_name=None, header=None, dtype=object)
+    except Exception as e:  # noqa: BLE001 - any unreadable file
+        raise ImportFileError(f"Could not read the Excel file ({e}).") from e
+    out = []
+    for name, raw in sheets.items():
+        got = sheet_lines(raw.values.tolist())
+        if got is not None and got.lines:
+            out.append((str(name).strip(), got))
+    if not out:
+        raise ImportFileError("No tab has an item column (Customer SKU name) and a Qty column.")
+    return out
 
 
 def _number_column(rows: list, after: int) -> int | None:
@@ -204,25 +229,6 @@ def wrong_customer(chosen: str, found: set[str]) -> str:
     return ", ".join(sorted(f.values()))
 
 
-def from_table(t, store: str = "") -> OrderRead:
-    """A picture table -> the lines for one store: its own column (header like the
-    store, WH1/FNV1...), the only column, else the first column with a note."""
-    from core import picture_table
-    col = picture_table.pick_column(t, store) if len(t.stores) > 1 else 0
-    note = f"read by {t.source}"
-    if col is None:
-        col = 0
-        note += (f" · the picture has {len(t.stores)} store columns ({', '.join(h or '?' for h in t.stores)});"
-                 " the first was used. Use Read order picture to fill every store at once")
-    out = OrderRead(kind="picture", text=t.text, note=note,
-                    total=t.totals[col] if col < len(t.totals) else None)
-    for r in t.rows:
-        q = r.qtys[col] if col < len(r.qtys) else 0
-        if q > 0:
-            out.lines.append(POLine(name=r.name, qty=q, code=r.code, unsure=r.unsure))
-    return out
-
-
 def read(file_name: str, data: bytes, store: str = "") -> OrderRead:
     ext = file_name.rsplit(".", 1)[-1].casefold() if "." in file_name else ""
     if ext in ("xlsx", "xls"):
@@ -231,12 +237,5 @@ def read(file_name: str, data: bytes, store: str = "") -> OrderRead:
         r = po_reader.read_pdf(data)
         return OrderRead(lines=r.lines, total=None, kind="pdf", note=" ".join(r.checks), text=r.text)
     if ext in PICTURE_TYPES:
-        from core import picture_table
-        if not picture_table.readers():
-            return _picture(data)
-        try:
-            t = picture_table.read(data, file_name)
-        except picture_table.TableReadError as e:
-            raise ImportFileError(str(e)) from e
-        return from_table(t, store)
+        return _picture(data)
     raise ImportFileError("Attach a picture (PNG/JPG), an Excel or a PDF file.")

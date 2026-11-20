@@ -220,10 +220,18 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
         cols = [c for c in cols if c != "Line total"]    # prices are 1 for now (18 Nov); add back later
     if not fl:
         cols = [c for c in cols if c != "!"]
+    hdr = state.header()
+    sku_opts = []
+    for p in m.parents(hdr.city, hdr.customer):
+        sku_opts += m.sku_names(hdr.city, hdr.customer, p)
+    sku_opts = list(dict.fromkeys(sku_opts + [x.customer_sku_name for x in lines]))
     ed = st.data_editor(
         base[cols], key=f"it_ed_{rev}", hide_index=True, width="stretch",
-        disabled=[c for c in cols if c not in ("Variety", "Qty", "Price", "Remove")],
+        disabled=[c for c in cols if c not in ("Customer SKU name", "Variety", "Qty", "Price", "Remove")],
         column_config={
+            "Customer SKU name": st.column_config.SelectboxColumn(
+                options=sku_opts, required=True, width="large",
+                help="Pick another name to move this line's qty to it (a saved name is kept at 0)"),
             "!": st.column_config.TextColumn("", width="small"),
             "Variety": st.column_config.SelectboxColumn(options=["Choose", "—"] + varieties, width="small",
                                                         help="Apple only: double-click to choose"),
@@ -232,7 +240,7 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
             "Line total": st.column_config.NumberColumn(format="₹%.2f"),
             "Remove": st.column_config.CheckboxColumn("🗑", help="Remove this line (not for saved items)",
                                                       width="small")})
-    new_lines, errors, changed = [], [], False
+    new_lines, errors, changed, renamed = [], [], False, []
     for x, r in zip(lines, ed.to_dict("records")):
         if r.get("Remove"):
             if state.is_saved_line(x.customer_sku_name):
@@ -247,13 +255,35 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
         price = float(x.price) if price is None or price != price or price <= 0 else float(price)
         variety = x.variety
         if "Variety" in r and m.needs_variety(x.parent_sku):
-            fixed = m.variety_from_name(x.parent_sku, x.customer_sku_name)
+            fixed = m.new_tab_variety(hdr.city, hdr.customer, x.customer_sku_name) or \
+                m.variety_from_name(x.parent_sku, x.customer_sku_name)
             picked = r.get("Variety") or ""
             variety = fixed or ("" if picked in ("Choose", "—") else picked)
         if qty != float(x.qty) or price != float(x.price) or variety != x.variety:
             changed = True
+        to = r.get("Customer SKU name") or x.customer_sku_name
+        if to.strip().casefold() != x.customer_sku_name.strip().casefold():
+            # 20 Nov: rename a line -> the qty moves to the new name; a saved name stays at 0 (history)
+            changed = True
+            parent = m.parent_of(hdr.city, hdr.customer, to) or x.parent_sku
+            moved = IndentLine(parent_sku=parent, customer_sku_name=to,
+                               variety=(m.default_variety(hdr.city, hdr.customer, to) if m.needs_variety(parent)
+                                        else ""),
+                               lot=m.lot_for(hdr.city, hdr.customer, to) or x.lot, qty=qty, price=price)
+            renamed.append(moved)
+            if state.is_saved_line(x.customer_sku_name):
+                new_lines.append(IndentLine(parent_sku=x.parent_sku, customer_sku_name=x.customer_sku_name,
+                                            variety=x.variety, lot=x.lot, qty=0.0, price=x.price))
+            continue
         new_lines.append(IndentLine(parent_sku=x.parent_sku, customer_sku_name=x.customer_sku_name,
                                     variety=variety, lot=x.lot, qty=qty, price=price))
+    for mv in renamed:                       # onto a name already on the list: that line takes the qty
+        hit = next((y for y in new_lines if y.customer_sku_name.strip().casefold() ==
+                    mv.customer_sku_name.strip().casefold()), None)
+        if hit is not None:
+            hit.qty = mv.qty
+        else:
+            new_lines.append(mv)
     for e in errors:
         st.warning(e)
     missing = [x.customer_sku_name for x in lines if m.needs_variety(x.parent_sku) and not x.variety
@@ -466,6 +496,33 @@ def _fill_fixed_varieties(m: Masters) -> None:
         state.set_lines(lines, structural=False)
 
 
+def _add_new_party() -> bool:
+    """A customer / store typed on Create indent: add it to the Customer List (and its
+    delivery time to Delivery_Times) before the indent is saved."""
+    from core import bulk_import, masters, store_settings
+    from core.sheets import get_backend
+    from pages_src import delivery
+    new = delivery.new_party()
+    hdr = state.header()
+    if not new or not (delivery._same(new["customer"], hdr.customer) and delivery._same(new["store"], hdr.store)):
+        return False
+    try:
+        m = masters.load_masters()
+        if not any(delivery._same(x, hdr.store) for x in m.stores_for(hdr.city, hdr.customer)):
+            bulk_import.add_to_master(get_backend(), [], [{"City": hdr.city, "Customer": hdr.customer,
+                                                          "Store Name": hdr.store}])
+        if hdr.expected_time:
+            store_settings.save_times(get_backend(), [{"City": hdr.city, "Customer": hdr.customer,
+                                                      "Store": hdr.store, "Time": hdr.expected_time}],
+                                      (st.session_state.get("user") or {}).get("email", ""))
+    except SheetError as e:
+        st.error(f"The new store could not be added: {e}")
+        st.stop()
+    st.session_state.pop(delivery.NEW_PARTY, None)
+    masters.clear_cache()
+    return True
+
+
 def _before_check(m: Masters) -> Masters:
     """Lines read from a file: red ones must be handled first; new items (existing
     Parent SKU) are added to All Cux City + the New tab so the indent can be saved."""
@@ -476,6 +533,8 @@ def _before_check(m: Masters) -> Masters:
         st.error(f"{len(attach.pending())} red line(s) from the attached order still need a SKU, "
                  "or remove them.")
         st.stop()
+    if _add_new_party():
+        m = masters.load_masters()
     new = attach.new_items_to_add()
     if new:
         hdr = state.header()
@@ -566,13 +625,19 @@ def render(m: Masters, user: User) -> None:
     hdr = state.header()
     ind = state.get()
     s = st.session_state
-    st.markdown(f"#### Items for {hdr.store}")
+    tc = st.columns([4, 1], vertical_alignment="bottom")
+    tc[0].markdown(f"#### Items for {hdr.store}")
+    if tc[1].button("↻ Refresh SKUs", key="it_refresh", width="stretch",
+                    help="Read the SKU names again from the sheet (new names show at once)"):
+        from core import masters
+        masters.clear_cache()
+        st.rerun()
     st.caption(f"{_fmt_date(hdr.delivery_date)} · {hdr.customer} · {hdr.city}"
                + (f" · {fmt_slot(hdr.expected_time)}" if hdr.expected_time else " · choose the delivery time above"))
 
     from pages_src import attach
     if not m.has_sku_mapping(hdr.city, hdr.customer):
-        st.info(f"No SKU names yet for {hdr.customer} in {hdr.city}. Attach their order (Excel, PDF or photo): "
+        st.info(f"No SKU names yet for {hdr.customer} in {hdr.city}. Attach their order (Excel or PDF): "
                 "its items are added to All Cux City and the New tab when you submit.")
         attach.render(m, user)
     else:

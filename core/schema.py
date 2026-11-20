@@ -19,6 +19,8 @@ DRAFTS = "Drafts"
 MAIL_RECIPIENTS = "Mail_Recipients"
 PO_ITEM_MAP = "PO_Item_Map"
 MAIL_LOG = "Mail_Log"
+DELIVERY_TIMES = "Delivery_Times"   # usual delivery time per store (20 Nov)
+STORE_ALIASES = "Store_Aliases"     # Bulk indents: Excel tab name -> customer + store (20 Nov)
 
 TABS: dict[str, list[str]] = {
     # Input tabs (maintained by the team). Only used when the sheet has no
@@ -49,6 +51,8 @@ TABS: dict[str, list[str]] = {
     # Customer PO item (code or name) -> our Customer SKU Name, for reading PO PDFs.
     # Filled by the app when someone picks a SKU for a PO line; can be edited by hand.
     PO_ITEM_MAP: ["Customer", "PO Item Code", "PO Item Name", "Customer SKU Name", "Updated_At"],
+    DELIVERY_TIMES: ["City", "Customer", "Store", "Time", "Updated_At", "Updated_By"],
+    STORE_ALIASES: ["City", "Tab Name", "Customer", "Store", "Updated_At", "Updated_By"],
 }
 
 MASTER_TABS = [SKU_MAP, STORE_MAP, VARIETIES, ACCESS]

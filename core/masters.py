@@ -163,10 +163,21 @@ class Masters:
         v = str((info or {}).get("Variety", "") or "").strip()
         return v if v in self.varieties_for(parent) else ""
 
+    def new_tab_variety(self, city: str, customer: str, sku_name: str) -> str:
+        """The variety written in the New tab for this SKU (when it is a known variety)."""
+        parent = self.parent_of(city, customer, sku_name)
+        info = self.prod_info(city, customer, sku_name)
+        v = str((info or {}).get("Variety", "") or "").strip()
+        return next((x for x in self.varieties_for(parent) if _key(x) == _key(v)), "") if v else ""
+
     def default_variety(self, city: str, customer: str, sku_name: str) -> str:
+        """New tab first (20 Nov: it is the production master), then the name, then All Cux City."""
         parent = self.parent_of(city, customer, sku_name)
         if not self.varieties_for(parent):
             return ""
+        nt = self.new_tab_variety(city, customer, sku_name)
+        if nt:
+            return nt
         fixed = self.variety_from_name(parent, sku_name)
         if fixed:
             return fixed
