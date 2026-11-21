@@ -434,6 +434,12 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   body = one numbered table per customer (`reports.by_customer_view`), attachment = one PDF
   `Production_by_customer_<date>_<hh>.pdf` (one customer per page). No make-ready / spec-size tables, no Excel.
   Same hourly trigger and Mail_Log.
+  **Look (user, 21 Nov 8 AM):** centred; ONE very light blue (#E4F0FB) only for the header band and table
+  headers, everything else white, **all text black**, thin grey-blue lines, bold Total row (no fills, no amber,
+  no green). Palette in `reports.MAIL` / `pdf_report.PDFC`. PDF = `pdf_report.customers_pdf`: customers one
+  after another, as many per page as fit; a customer that does not fit the space left starts on a fresh page;
+  one longer than a page continues with "(continued)" + column header, numbers carrying on; never a page with
+  only the Total row.
 - Not done yet: the visible refresh when switching pages (user item 5).
 
 ## 6. Code map (repo root)

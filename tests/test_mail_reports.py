@@ -66,7 +66,7 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
     assert len(names) == 1 and names[0].startswith("Production_by_customer_") and names[0].endswith(".pdf")
     body = z.get_body(("html",)).get_content()
     assert "Production by customer" in body and "Make-ready list" not in body and "spec size" not in body \
-        and "<th style='padding:4px 6px;text-align:left'>#</th>" in body and "Chennai" not in body
+        and ">#</th>" in body and "#1c6b49" not in body and "Chennai" not in body
     assert z["Subject"].startswith("Production ") and "2 indent" in z["Subject"]      # Bangalore only
     assert "3 indent" in by_to["all@x.com"]["Subject"] and "Chennai" in by_to["all@x.com"].get_body(("html",)).get_content()
     # same slot again (also at 8:50): nothing new; not a send hour: skipped

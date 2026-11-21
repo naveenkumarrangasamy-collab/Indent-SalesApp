@@ -20,7 +20,7 @@ from core import config, indents, production_calc
 from core.lots import lot_size
 from core.masters import Masters
 from core.models import fmt_num
-from core.pdf_report import sections_pdf, table_pdf
+from core.pdf_report import customers_pdf, table_pdf
 from core.schema import STATUS_CANCELLED, STATUS_FROZEN
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -148,30 +148,78 @@ def production_mail_files(rows: pd.DataFrame, m: Masters | None, day: str,
     blocks = by_customer_view(rows, m)
     if not blocks:
         return []
-    pdf = sections_pdf("Production by customer", [f"Delivery {fmt_day(day)} - as of {slot_label} - {scope}"],
-                       blocks, footer=f"MT Indent - by customer - {slot_label}", page_each=True)
+    pdf = customers_pdf("Production by customer", [f"Delivery {fmt_day(day)} - as of {slot_label} - {scope}"],
+                        blocks, footer=f"MT Indent - by customer - {slot_label}")
     return [(f"Production_by_customer_{stamp}_{hh}.pdf", pdf, "application/pdf")]
+
+
+# 21 Nov: hourly mail palette (one place to change it)
+MAIL = {"head": "#e4f0fb", "band": "#e4f0fb", "title": "#000000", "bg": "#ffffff", "zebra": "#ffffff",
+        "total": "#ffffff", "line": "#d9e2ea", "text": "#000000"}   # 21 Nov: one very light blue, black text
+
+
+def _mail_table(df: pd.DataFrame) -> str:
+    """Centred, roomy table for the hourly mail: names left, everything else centred,
+    a bold Total row, 'to fill' / 'not in New tab' in amber."""
+    left = {"Customer SKU Name"}
+    th = "".join(
+        f"<th style='padding:9px 10px;font-size:13px;font-weight:600;color:{MAIL['text']};background:{MAIL['head']};"
+        f"text-align:{'left' if c in left else 'center'};white-space:nowrap'>{html.escape(str(c))}</th>"
+        for c in df.columns)
+    body = []
+    for i, rec in enumerate(df.itertuples(index=False)):
+        vals = list(rec)
+        total = any(str(v).strip().casefold() == "total" for v in vals[:3])
+        bg = MAIL["total"] if total else (MAIL["zebra"] if i % 2 else "#ffffff")
+        tds = []
+        for c, v in zip(df.columns, vals):
+            txt = fmt_num(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else str(v)
+            color = MAIL["text"]
+            tds.append(f"<td style='padding:8px 10px;font-size:14px;border-bottom:1px solid #e3e8e5;"
+                       f"text-align:{'left' if c in left else 'center'};color:{color};"
+                       f"{'font-weight:700;border-top:1px solid #b8c7d6;' if total else ''}'>{html.escape(txt)}</td>")
+        body.append(f"<tr style='background:{bg}'>{''.join(tds)}</tr>")
+    return ("<table role='presentation' cellspacing='0' cellpadding='0' align='center' "
+            f"width='100%' style='border-collapse:collapse;width:100%;margin:0 auto;border:1px solid {MAIL['line']};border-radius:6px;"
+            f"font-family:Arial,Helvetica,sans-serif'><tr>{th}</tr>{''.join(body)}</table>")
 
 
 def production_mail_html(rows: pd.DataFrame, m: Masters | None, day: str,
                          slot_label: str, name: str = "", scope: str = "everything",
                          changes: pd.DataFrame | None = None, po_diff: pd.DataFrame | None = None,
                          since: str = "") -> str:
+    """21 Nov: Production by customer only, centred and easy to read on phone and laptop."""
     n = rows["indent_id"].nunique() if rows is not None and not rows.empty else 0
     waiting = rows[rows["status"] != STATUS_FROZEN]["indent_id"].nunique() if n else 0
-    parts = [f"<p>Hello{(' ' + html.escape(name)) if name else ''},</p>",
-             f"<p>Production by customer for delivery on <b>{fmt_day(day)}</b>, as of <b>{slot_label}</b> "
-             f"({html.escape(scope)}). {n} indent(s), {waiting} still waiting for a PO. "
-             "The same is attached as PDF (one customer per page).</p>"]
     blocks = by_customer_view(rows, m) if n else []
+    items = sum(int((df["#"] != "").sum()) for _, _, df in blocks)
+    font = "font-family:Arial,Helvetica,sans-serif"
+    tiles = "".join(
+        f"<td align='center' style='padding:10px 18px'><div style='font-size:24px;font-weight:700;color:{MAIL['title']}'>"
+        f"{v}</div><div style='font-size:12px;color:#000;text-transform:uppercase;letter-spacing:.04em'>{k}</div></td>"
+        for k, v in (("Indents", n), ("Customers", len(blocks)), ("Items", items), ("Waiting for PO", waiting)))
+    out = [f"<div style='background:{MAIL['bg']};padding:24px 8px;{font}'>",
+           "<table role='presentation' align='center' cellspacing='0' cellpadding='0' "
+           "style='max-width:1000px;width:100%;margin:0 auto;background:#ffffff;border-radius:10px;"
+           f"border:1px solid {MAIL['line']}'>",
+           f"<tr><td align='center' style='background:{MAIL['band']};color:{MAIL['text']};padding:18px 16px;border-radius:10px 10px 0 0'>"
+           "<div style='font-size:22px;font-weight:700'>Production by customer</div>"
+           f"<div style='font-size:15px;margin-top:4px'>Delivery {fmt_day(day)} &nbsp;·&nbsp; as of {slot_label}</div>"
+           "</td></tr>",
+           f"<tr><td align='center' style='padding:14px 16px 4px;font-size:14px;color:#000'>"
+           f"Hello{(' ' + html.escape(name)) if name else ''}, here is the production by customer "
+           f"({html.escape(scope)}). The same is attached as PDF.</td></tr>",
+           f"<tr><td align='center'><table role='presentation' align='center'><tr>{tiles}</tr></table></td></tr>"]
     if not blocks:
-        parts.append("<p style='color:#666'>No indents.</p>")
+        out.append("<tr><td align='center' style='padding:20px;color:#000'>No indents.</td></tr>")
     for head, sub, df in blocks:
-        parts.append(f"<h3 style='color:#1c6b49;margin:14px 0 2px'>{html.escape(head)}</h3>"
-                     f"<p style='color:#666;font-size:12px;margin:0 0 4px'>{html.escape(sub)}</p>")
-        parts.append(_html_table(df, {"Total"}))
-    parts.append("<p style='color:#888;font-size:12px'>Sent by the MT Indent app.</p>")
-    return "".join(parts)
+        out.append(f"<tr><td align='center' style='padding:22px 12px 6px'>"
+                   f"<div style='font-size:19px;font-weight:700;color:{MAIL['title']}'>{html.escape(head)}</div>"
+                   f"<div style='font-size:13px;color:#000;margin:3px 0 10px'>{html.escape(sub)}</div>"
+                   f"{_mail_table(df)}</td></tr>")
+    out.append("<tr><td align='center' style='padding:22px 12px;font-size:12px;color:#000'>"
+               "Sent by the MT Indent app.</td></tr></table></div>")
+    return "".join(out)
 
 
 # ------------------------------------------------------------------ SO / PO
