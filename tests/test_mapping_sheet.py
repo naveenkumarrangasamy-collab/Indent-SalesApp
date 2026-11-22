@@ -35,7 +35,8 @@ ROWS = [
     ["Bangalore", "Zepto (KWPL)", "3", "Kiwi", "Kiwi Sungold - 2 pcs", "2 pcs", "Kiwi", "", "Chile", "Chile",
      "Gold", "27mm, 30mm", "10 kg", ""],
 ]
-PARENT = ms.parent_from(pd.DataFrame([["Avocado", "Hass", "Kenya", "18, 20", "4 kg"],
+PARENT = ms.parent_from(pd.DataFrame([["Blueberry", "Blueberry", "Peru", "14mm", "12 pcs tray"],
+                                      ["Avocado", "Hass", "Kenya", "18, 20", "4 kg"],
                                       ["Avocado", "Hass", "Tanzania", "20, 22", "4 kg"]],
                                      columns=["Parent SKU", "Variety", "Origin", "Spec", "Origin Lot"]))
 
@@ -60,3 +61,8 @@ def test_close_name_same_pack_and_parent_fallback():
     a = ms.options(c, PARENT, "PTP Bangalore", "Zepto", "1PC - Hass Avocado", "Avocado", "", "Tray")
     assert list(a) == ["Kenya · Hass", "Tanzania · Hass"] and a["Kenya · Hass"]["unit"] == "Tray"
     assert a["Kenya · Hass"]["source"].startswith("Parent tab")
+
+
+def test_lot_in_pieces_is_not_a_box_weight():
+    b = ms.options(_combos([]), PARENT, "PTP Bangalore", "Zepto", "125GM - Blueberry", "Blueberry")
+    assert list(b) == ["Peru"] and b["Peru"]["box_kg"] is None and b["Peru"]["spec"] == ["14mm"]

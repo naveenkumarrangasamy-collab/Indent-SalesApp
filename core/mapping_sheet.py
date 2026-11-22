@@ -249,6 +249,8 @@ def options(combos: pd.DataFrame, parent_df: pd.DataFrame, city: str, customer: 
             label += f" · {_c(r['lot'])}"
         if label in out:
             continue
-        out[label] = {"spec": parse_spec(r["spec"]), "unit": unit_default, "box_kg": r["box_kg"],
+        kg = r["box_kg"]
+        kg = float(kg) if kg is not None and not pd.isna(kg) and float(kg) > 0 else None
+        out[label] = {"spec": parse_spec(r["spec"]), "unit": unit_default, "box_kg": kg,
                       "source": source, "country": _c(r["country"]), "grade": grade, "lot": _c(r["lot"])}
     return out
