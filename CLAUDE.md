@@ -461,6 +461,18 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   `Batching_Plan`. Country master: **`Batching_Master`** (City, Customer, Customer SKU Name, Parent SKU,
   Country, Spec "90, 100, 110", Unit Box/Tray, Box Kg) — the user will fill it; until a SKU is there the New
   tab (Spec-Origin + Spec-Size) and then Mapping Whole (Spec-Origin, Spec-Size, Box Kgs) are used.
+- **New Mapping sheet** (22 Nov evening; `core/mapping_sheet.py`, secret `mapping_sheet_id`, default
+  `1A2zerkNL46XIlJwaBH2kL5TcaT04b_nfk4TVKG54-nM`; service account has **Viewer**): the team's master.
+  Tabs: Parent (Parent SKU, Variety/grade, Origin, Spec, Origin Lot = box kg, built from the fruit tabs),
+  Customer (City "PTP …", warehouse-style customer, SKU Code, Parent SKU, customer SKU Name, Packaging),
+  Combination (customer variety / spec / country, as typed), **Combination 1** (one row per SKU × country ×
+  grade: Country, Variety (Parent tab), Country Spec, Origin Lot, Note; unmatched rows light red), Review.
+  **Pre-production pages read Combination 1 first**: match only inside the same city + customer
+  ("Zepto (KWPL)" = Zepto, Hyperpure = Zomato, Swiggy - X = Swiggy, Metro = Metro), by our-style name
+  (`our_name`: '2PC - …', '200GM - …', '1KG - …', case ignored) or one clear close name with the same pack;
+  else the Parent tab for the parent (+ variety); else the old masters. Option label "Country · Grade"
+  (+ "· lot" when the same grade has two box weights); the page shows "From: …". Production / Batching
+  sheet still use the old sheet. Old sheet's Customer List got 29 yellow rows (new cities / FCs) on 22 Nov.
 
 ## 6. Code map (repo root)
 

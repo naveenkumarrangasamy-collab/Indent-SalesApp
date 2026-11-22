@@ -32,6 +32,8 @@ def _context(user: User, prefix: str):
     try:
         m = masters.load_masters()
         data = preprod.read_all()
+        from core import mapping_sheet
+        data["_mapping"] = mapping_sheet.load()
     except SheetError as e:
         common.sheet_error(e)
         return None
@@ -55,8 +57,16 @@ def _unit_word(unit: str) -> str:
 
 
 def _opts(m, data, r) -> dict:
-    o = preprod.country_options(m, data[preprod.BATCHING_MASTER], r["city"], r["customer"],
-                                r["customer_sku_name"], r["parent_sku"])
+    """Countries for one SKU: the New Mapping sheet first (Combination 1, then its Parent tab),
+    else the old masters (Batching_Master / New tab / Mapping Whole)."""
+    from core import config, mapping_sheet
+    unit = "Tray" if str(r["parent_sku"]).casefold() in {p.casefold() for p in config.tray_parents()} else "Box"
+    combos, parent = data.get("_mapping", (None, None))
+    o = mapping_sheet.options(combos, parent, r["city"], r["customer"], r["customer_sku_name"], r["parent_sku"],
+                              r.get("variety", ""), unit)
+    if not o:
+        o = preprod.country_options(m, data[preprod.BATCHING_MASTER], r["city"], r["customer"],
+                                    r["customer_sku_name"], r["parent_sku"])
     return o or {preprod.ANY: {"spec": [], "unit": "Box", "box_kg": None, "source": "none"}}
 
 
@@ -139,6 +149,8 @@ def _actual_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame,
             opt = opts.get(country, {"spec": [], "unit": "Box", "box_kg": None})
             kg = f" · {fmt_num(opt['box_kg'])} kg {opt['unit'].lower()}" if opt.get("box_kg") else ""
             c[1].caption(f"Suggested: {preprod.suggestion(r['need'], unit, opt)}{kg}")
+            if opt.get("source"):
+                c[1].caption(f"From: {opt['source']}")
             specs = list(opt["spec"]) + [s for s in t["boxes"] if s not in opt["spec"]]
             if not specs:
                 c[2].warning("No counts for this SKU in the master yet (Batching_Master / New / Mapping Whole).")
