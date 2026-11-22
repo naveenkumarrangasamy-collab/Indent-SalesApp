@@ -491,7 +491,9 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   each country's own spec is shown.
 - **Production sheet → "Estimate (new sheet)" tab (owners only)**: per customer: Need (pcs / kg, firm),
   Countries, Counts allowed, Box kg, **≈ Boxes** = range over every allowed country + count
-  (`preprod.box_range`, `estimate_rows`); Blueberry punnets ÷ 12. Exact boxes on Pre-production actual.
+  (`preprod.box_range`, `estimate_rows`). **Every Blueberry is a punnet** (user 23 Nov; `need_unit` → "punnets",
+  whatever the name says): 12 punnets a tray at any size, also on Pre-production actual / Batching plan.
+  Exact boxes on Pre-production actual.
   The other production tabs, mails and Batching sheet are unchanged (old sheet).
 
 ## 6. Code map (repo root)

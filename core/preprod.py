@@ -84,10 +84,18 @@ def _box_kg(v) -> float | None:
     return n or None
 
 
-def need_unit(sku_name: str, lot: str) -> tuple[str, float]:
-    """What the indent qty is counted in for batching: ('pcs', pieces per pack), ('kg', kg per
-    pack) or ('packs', 1) when neither is known (gram packs, boxes)."""
+def _per_tray() -> float:
+    """Punnets in one tray (Blueberry 12, secret `punnets_per_tray`)."""
+    return float(next(iter(config.punnets_per_tray().values()), 12))
+
+
+def need_unit(sku_name: str, lot: str, parent: str = "") -> tuple[str, float]:
+    """What the indent qty is counted in for batching: ('punnets', 1) for punnet fruit (every Blueberry,
+    whatever the name says, 12 a tray), ('pcs', pieces per pack), ('kg', kg per pack) or ('packs', 1)
+    when neither is known (gram packs, boxes)."""
     from core.production_calc import _kg_per_lot, _pcs_per_lot
+    if _c(parent).casefold() in config.punnets_per_tray():
+        return "punnets", 1.0
     size = lot_size(sku_name) or _c(lot)
     pcs = _pcs_per_lot(size)
     if pcs:
@@ -106,6 +114,8 @@ def per_box(spec_item: str, unit: str, box_kg: float | None) -> float | None:
         return float(spec_item) if is_count(spec_item) else None
     if unit == "kg":
         return box_kg
+    if unit == "punnets":
+        return _per_tray()            # any size: 12 punnets a tray
     return None
 
 
@@ -130,7 +140,7 @@ def demand(lines: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for (city, group, _), g in df.groupby(["city", "group", "_key"], sort=False):
         first = g.iloc[0]
-        unit, per = need_unit(first["_name"], first.get("lot", ""))
+        unit, per = need_unit(first["_name"], first.get("lot", ""), first.get("parent_sku", ""))
         qty = float(g["qty"].sum())
         rows.append({"city": _c(city), "group": group, "customer": _c(first["customer"]),
                      "customer_sku_name": first["_name"], "parent_sku": _c(first.get("parent_sku")),
@@ -206,7 +216,7 @@ def suggestion(need: float, unit: str, opt: dict) -> str:
     if unit == "kg" and opt.get("box_kg"):
         return f"{math.ceil(need / opt['box_kg'] - 1e-9)} {word} of {fmt_num(opt['box_kg'])} kg"
     parts = [f"{spec_label(s)}: {math.ceil(need / float(s) - 1e-9)} {word}"
-             for s in opt.get("spec", []) if unit == "pcs" and is_count(s)]
+             for s in opt.get("spec", []) if (unit == "pcs" and is_count(s)) or unit == "punnets"]
     return " | ".join(parts) or ", ".join(spec_label(s) for s in opt.get("spec", [])) or "-"
 
 
@@ -360,9 +370,8 @@ def _clear() -> None:
 def box_range(need: float, unit: str, opts: dict[str, dict], parent: str = "") -> str:
     """Rough boxes over every allowed country / count: '≈ 14–17 Box', '≈ 10 Tray', '-' when not known.
     Blueberry-style punnets: punnets ÷ punnets per tray."""
-    ppt = config.punnets_per_tray().get(_c(parent).casefold())
-    if unit == "packs" and ppt:
-        return f"≈ {math.ceil(need / ppt - 1e-9)} Tray"
+    if unit == "punnets":
+        return f"≈ {math.ceil(need / _per_tray() - 1e-9)} Tray"
     vals, word = [], "Box"
     for o in opts.values():
         word = o.get("unit") or word

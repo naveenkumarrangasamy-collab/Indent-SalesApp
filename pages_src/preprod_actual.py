@@ -53,7 +53,7 @@ def _label(city: str, group: str, many_cities: bool, state: str) -> str:
 
 
 def _unit_word(unit: str) -> str:
-    return {"pcs": "pcs", "kg": "kg"}.get(unit, "packs")
+    return {"pcs": "pcs", "kg": "kg", "punnets": "punnets"}.get(unit, "packs")
 
 
 def _opts(m, data, r) -> dict:
