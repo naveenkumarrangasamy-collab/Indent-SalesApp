@@ -29,6 +29,7 @@ from core.models import fmt_num, to_number
 from core.schema import BATCHING_MASTER, BATCHING_PLAN, PREPROD_ACTUAL, PREPROD_FREEZE
 
 ANY = "Any"
+ANY_SIZE = "Any size"     # Blueberry: one tray box, no per-mm split
 REASONS = ["First take-out", "More for grading loss", "Short in first take-out", "Other"]
 FROZEN, OPEN, NOT_STARTED = "Frozen", "Open", "Not started"
 
@@ -217,7 +218,7 @@ def suggestion(need: float, unit: str, opt: dict) -> str:
         return f"{math.ceil(need / opt['box_kg'] - 1e-9)} {word} of {fmt_num(opt['box_kg'])} kg"
     if unit == "punnets":             # any size: 12 punnets a tray
         trays = f"{math.ceil(need / _per_tray() - 1e-9)} {word}"
-        sizes = ", ".join(spec_label(s) for s in opt.get("spec", []))
+        sizes = ", ".join(spec_label(s) for s in opt.get("spec", []) if s != ANY_SIZE)
         return f"{trays} ({sizes})" if sizes else trays
     parts = [f"{spec_label(s)}: {math.ceil(need / float(s) - 1e-9)} {word}"
              for s in opt.get("spec", []) if unit == "pcs" and is_count(s)]
