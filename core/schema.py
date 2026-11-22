@@ -21,6 +21,11 @@ PO_ITEM_MAP = "PO_Item_Map"
 MAIL_LOG = "Mail_Log"
 DELIVERY_TIMES = "Delivery_Times"   # usual delivery time per store (20 Nov)
 STORE_ALIASES = "Store_Aliases"     # Bulk indents: Excel tab name -> customer + store (20 Nov)
+# Pre-production (22 Nov, owners only for now; core/preprod.py)
+BATCHING_MASTER = "Batching_Master"  # filled by the team: country -> spec (counts) + box kg per SKU
+PREPROD_ACTUAL = "Preprod_Actual"    # boxes taken out of storage, one row per SKU + spec per take-out round
+PREPROD_FREEZE = "Preprod_Freeze"    # customer frozen / unfrozen for a day (last row wins)
+BATCHING_PLAN = "Batching_Plan"      # pieces (kg) used from those boxes (last row per SKU + spec wins)
 
 TABS: dict[str, list[str]] = {
     # Input tabs (maintained by the team). Only used when the sheet has no
@@ -54,6 +59,12 @@ TABS: dict[str, list[str]] = {
     PO_ITEM_MAP: ["Customer", "PO Item Code", "PO Item Name", "Customer SKU Name", "Updated_At"],
     DELIVERY_TIMES: ["City", "Customer", "Store", "Time", "Updated_At", "Updated_By"],
     STORE_ALIASES: ["City", "Tab Name", "Customer", "Store", "Updated_At", "Updated_By"],
+    BATCHING_MASTER: ["City", "Customer", "Customer SKU Name", "Parent SKU", "Country", "Spec", "Unit", "Box Kg"],
+    PREPROD_ACTUAL: ["round_id", "saved_at", "saved_by", "delivery_date", "city", "group", "customer_sku_name",
+                     "parent_sku", "country", "spec", "boxes", "reason"],
+    PREPROD_FREEZE: ["delivery_date", "city", "group", "action", "at", "by"],
+    BATCHING_PLAN: ["saved_at", "saved_by", "delivery_date", "city", "group", "customer_sku_name", "country",
+                    "spec", "boxes", "used", "unit"],
 }
 
 MASTER_TABS = [SKU_MAP, STORE_MAP, VARIETIES, ACCESS]

@@ -442,6 +442,26 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   only the Total row.
 - Not done yet: the visible refresh when switching pages (user item 5).
 
+### 22 Nov (user-approved; OWNERS ONLY while being tried — nothing changes for sales / warehouse)
+
+- New menu section **"Pre-production (owners, trial)"** with two pages (`pages_src/preprod_actual.py`,
+  logic `core/preprod.py`, tests `tests/test_preprod.py`). Production sheet / Batching sheet are unchanged
+  (the user will merge later; the Production sheet is to be called "Pre-production estimate" then).
+- **Pre-production actual** (`/preprod-actual`): per delivery date + city + customer (stores clubbed, cold
+  rooms apart, like By customer). Per SKU: need (qty × pieces per pack, or kg), **Country** (gives the counts /
+  sizes and box kg; fixed after the first take-out), suggested boxes, then **boxes taken out at each count**.
+  **Save take-out · round n** records one trip (reason: First take-out / More for grading loss / Short in
+  first take-out / Other); trips add up; history table. Status 🟢 Enough / 🟡 Not enough / 🔴 Not started.
+  **Freeze** (lock, last step, needs no unsaved boxes) closes the customer; owner can Unfreeze.
+- **Batching plan** (`/batching-plan`): frozen customers only. One row per SKU + count with the boxes taken
+  (read only) and **Used** (good pcs / kg) to enter; per item: needed, max (+`batching_extra_pct`, default
+  10 %), used, extra/short, **left in boxes** (auto), status Covered / Short / Pending / Over limit. Saving is
+  blocked when over the limit or when used > what the boxes hold.
+- Tabs (created on first save, append-only, last row wins): `Preprod_Actual`, `Preprod_Freeze`,
+  `Batching_Plan`. Country master: **`Batching_Master`** (City, Customer, Customer SKU Name, Parent SKU,
+  Country, Spec "90, 100, 110", Unit Box/Tray, Box Kg) — the user will fill it; until a SKU is there the New
+  tab (Spec-Origin + Spec-Size) and then Mapping Whole (Spec-Origin, Spec-Size, Box Kgs) are used.
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.
