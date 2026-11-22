@@ -488,7 +488,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   `masters._new_mapping_sku`). No country / box asked at indent time. Stores still from the old Customer List.
 - **Counts allowed = customer spec ∩ country spec** (`mapping_sheet.allowed`, Combination 1 "Customer Spec"):
   Flipkart Avocado 18/20/22 → Tanzania 18C–22C, Kenya not offered if it has none of them; if no country fits,
-  each country's own spec is shown.
+  each country's own spec is shown. **Mandarin always shows the country's full spec** (user 23 Nov; secret
+  `full_spec_parents`, default ["Mandarin"]).
 - **Production sheet → "Estimate (new sheet)" tab (owners only)**: per customer: Need (pcs / kg, firm),
   Countries, Counts allowed, Box kg, **≈ Boxes** = range over every allowed country + count
   (`preprod.box_range`, `estimate_rows`). **Every Blueberry is a punnet on the estimate** (12 a tray, any size;

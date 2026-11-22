@@ -94,7 +94,9 @@ def test_counts_are_customer_spec_and_country_spec():
     assert list(fk) == ["Tanzania · Hass"] and fk["Tanzania · Hass"]["spec"] == ["18", "20", "22"]   # Kenya has none of them
     mo = ms.options(c, None, "PTP Bangalore", "Zepto", "250GM - Mini Orange", "Mandarin")
     specs = {v["country"]: v["spec"] for v in mo.values()}
-    assert specs == {"Australia": ["100", "113"], "China": ["50mm"]}
+    assert specs == {"Australia": ["88", "100", "113"], "China": ["50mm", "55mm"]}   # Mandarin: full spec
+    mo = ms.options(c, None, "PTP Bangalore", "Zepto", "250GM - Mini Orange", "Orange")
+    assert {v["country"]: v["spec"] for v in mo.values()} == {"Australia": ["100", "113"], "China": ["50mm"]}
     assert ms.allowed(["20", "22"], []) == ["20", "22"] and ms.allowed([], ["18"]) == ["18"]
 
 
