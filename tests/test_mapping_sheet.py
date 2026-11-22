@@ -95,7 +95,8 @@ def test_counts_are_customer_spec_and_country_spec():
     mo = ms.options(c, None, "PTP Bangalore", "Zepto", "250GM - Mini Orange", "Mandarin")
     specs = {v["country"]: v["spec"] for v in mo.values()}
     assert specs == {"Australia": ["100", "113"], "China": ["50mm"]}
-    assert ms.allowed(["12mm", "14mm", "16mm", "20mm"], ["14mm+", "16mm+", "18mm+"]) == ["14mm+", "16mm+"]
+    assert ms.allowed(["12mm", "14mm", "16mm", "20mm"], ["14mm+", "16mm+", "18mm+"]) == ["14mm", "16mm"]
+    assert ms.allowed(["27mm", "30mm", "33mm"], ["27", "30"]) == ["27mm", "30mm"]
     assert ms.allowed(["20", "22"], []) == ["20", "22"] and ms.allowed([], ["18"]) == ["18"]
 
 

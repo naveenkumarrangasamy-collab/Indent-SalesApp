@@ -323,9 +323,9 @@ def options(combos: pd.DataFrame, parent_df: pd.DataFrame, city: str, customer: 
 
 
 def _sk(v: str) -> str:
-    """Spec key: '22C' = '22' = '22 c', '14mm+' = '14mm' (case/spaces ignored)."""
+    """Spec key: '22C' = '22' = '22 c', '14mm+' = '14mm', and a plain '27' = '27mm' (case/spaces ignored)."""
     t = re.sub(r"\s+", "", _c(v)).casefold().rstrip("+")
-    return t[:-1] if re.fullmatch(r"\d+c", t) else t
+    return re.sub(r"^(\d+(?:\.\d+)?)(c|mm)$", r"\1", t)
 
 
 def allowed(country_spec: list[str], customer_spec: list[str]) -> list[str] | None:
@@ -336,6 +336,6 @@ def allowed(country_spec: list[str], customer_spec: list[str]) -> list[str] | No
         return country_spec
     if not country_spec:
         return customer_spec
-    mine = {_sk(x) for x in country_spec}
-    both = [x for x in customer_spec if _sk(x) in mine]
+    mine = {_sk(x): x for x in country_spec}
+    both = list(dict.fromkeys(mine[_sk(x)] for x in customer_spec if _sk(x) in mine))   # country's own label
     return both or None
