@@ -215,8 +215,12 @@ def suggestion(need: float, unit: str, opt: dict) -> str:
     word = opt.get("unit") or "Box"
     if unit == "kg" and opt.get("box_kg"):
         return f"{math.ceil(need / opt['box_kg'] - 1e-9)} {word} of {fmt_num(opt['box_kg'])} kg"
+    if unit == "punnets":             # any size: 12 punnets a tray
+        trays = f"{math.ceil(need / _per_tray() - 1e-9)} {word}"
+        sizes = ", ".join(spec_label(s) for s in opt.get("spec", []))
+        return f"{trays} ({sizes})" if sizes else trays
     parts = [f"{spec_label(s)}: {math.ceil(need / float(s) - 1e-9)} {word}"
-             for s in opt.get("spec", []) if (unit == "pcs" and is_count(s)) or unit == "punnets"]
+             for s in opt.get("spec", []) if unit == "pcs" and is_count(s)]
     return " | ".join(parts) or ", ".join(spec_label(s) for s in opt.get("spec", [])) or "-"
 
 

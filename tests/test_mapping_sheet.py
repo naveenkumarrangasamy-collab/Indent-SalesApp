@@ -118,4 +118,5 @@ def test_box_range():
     assert preprod.box_range(119, "punnets", {}, "Blueberry") == "≈ 10 Tray"
     assert preprod.need_unit("1Pc - Blueberry - FK", "Pcs", "Blueberry") == ("punnets", 1.0)
     assert preprod.per_box("16mm", "punnets", None) == 12
+    assert preprod.suggestion(210, "punnets", {"spec": ["14mm", "16mm"], "unit": "Tray"}) == "18 Tray (14mm, 16mm)"
     assert preprod.box_range(10, "packs", o) == "-"
