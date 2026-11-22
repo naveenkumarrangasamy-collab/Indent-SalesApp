@@ -217,8 +217,8 @@ def clear_cache() -> None:
 
 def full_spec_parents() -> list[str]:
     """Parents that always show the country's full spec (no customer-spec filter).
-    Secret `full_spec_parents`, default ["Mandarin"]."""
-    v = config.get("full_spec_parents", ["Mandarin"])
+    Secret `full_spec_parents`, default [] (every fruit uses the customer spec)."""
+    v = config.get("full_spec_parents", [])
     return [str(x) for x in ([v] if isinstance(v, str) else (v or []))]
 
 
@@ -300,7 +300,7 @@ def options(combos: pd.DataFrame, parent_df: pd.DataFrame, city: str, customer: 
     seen = rows.drop_duplicates(subset=["country", "grade", "spec", "lot"])
     cust = parse_spec(seen["cust_spec"].iloc[0]) if "cust_spec" in seen.columns and len(seen) else []
     if _k(parent) in {_k(p) for p in full_spec_parents()}:
-        cust = []                         # e.g. Mandarin: every size of the country, as before (user 23 Nov)
+        cust = []                         # fruits listed in the secret: every size of the country
     if cust and all(allowed(parse_spec(x), cust) is None for x in seen["spec"]):
         cust = []                         # no country fits the customer's counts: show each country's own
     multi = seen.groupby([seen["country"].map(_k), seen["grade"].map(_k)]).size()
@@ -323,8 +323,9 @@ def options(combos: pd.DataFrame, parent_df: pd.DataFrame, city: str, customer: 
 
 
 def _sk(v: str) -> str:
-    return re.sub(r"\s+", "", _c(v)).casefold().removesuffix("c") if re.fullmatch(r"\d+\s*[cC]?", _c(v)) \
-        else re.sub(r"\s+", "", _c(v)).casefold()
+    """Spec key: '22C' = '22' = '22 c', '14mm+' = '14mm' (case/spaces ignored)."""
+    t = re.sub(r"\s+", "", _c(v)).casefold().rstrip("+")
+    return t[:-1] if re.fullmatch(r"\d+c", t) else t
 
 
 def allowed(country_spec: list[str], customer_spec: list[str]) -> list[str] | None:
