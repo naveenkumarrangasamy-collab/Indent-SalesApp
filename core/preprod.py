@@ -91,12 +91,10 @@ def _per_tray() -> float:
 
 
 def need_unit(sku_name: str, lot: str, parent: str = "") -> tuple[str, float]:
-    """What the indent qty is counted in for batching: ('punnets', 1) for punnet fruit (every Blueberry,
-    whatever the name says, 12 a tray), ('pcs', pieces per pack), ('kg', kg per pack) or ('packs', 1)
-    when neither is known (gram packs, boxes)."""
+    """What the indent qty is counted in for batching: ('pcs', pieces per pack), ('kg', kg per pack) or
+    ('packs', 1) when neither is known (gram packs, boxes). Blueberry stays in pieces here (user 23 Nov);
+    only the estimate turns it into trays (12 punnets a tray)."""
     from core.production_calc import _kg_per_lot, _pcs_per_lot
-    if _c(parent).casefold() in config.punnets_per_tray():
-        return "punnets", 1.0
     size = lot_size(sku_name) or _c(lot)
     pcs = _pcs_per_lot(size)
     if pcs:
@@ -375,8 +373,8 @@ def _clear() -> None:
 def box_range(need: float, unit: str, opts: dict[str, dict], parent: str = "") -> str:
     """Rough boxes over every allowed country / count: '≈ 14–17 Box', '≈ 10 Tray', '-' when not known.
     Blueberry-style punnets: punnets ÷ punnets per tray."""
-    if unit == "punnets":
-        return f"≈ {math.ceil(need / _per_tray() - 1e-9)} Tray"
+    if unit == "punnets" or (_c(parent).casefold() in config.punnets_per_tray() and unit != "kg"):
+        return f"≈ {math.ceil(need / _per_tray() - 1e-9)} Tray"     # every Blueberry punnet, 12 a tray
     vals, word = [], "Box"
     for o in opts.values():
         word = o.get("unit") or word
