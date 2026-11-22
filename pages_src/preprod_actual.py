@@ -67,10 +67,7 @@ def _opts(m, data, r) -> dict:
     if not o:
         o = preprod.country_options(m, data[preprod.BATCHING_MASTER], r["city"], r["customer"],
                                     r["customer_sku_name"], r["parent_sku"])
-    o = o or {preprod.ANY: {"spec": [], "unit": "Box", "box_kg": None, "source": "none"}}
-    if str(r["parent_sku"]).casefold() in config.punnets_per_tray():
-        o = {k: {**v, "spec": [preprod.ANY_SIZE], "unit": "Tray"} for k, v in o.items()}   # Blueberry: trays, any size
-    return o
+    return o or {preprod.ANY: {"spec": [], "unit": "Box", "box_kg": None, "source": "none"}}
 
 
 def _hold(boxes: dict, unit: str, opt: dict) -> float | None:

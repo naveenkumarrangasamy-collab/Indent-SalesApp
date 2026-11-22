@@ -492,8 +492,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Production sheet → "Estimate (new sheet)" tab (owners only)**: per customer: Need (pcs / kg, firm),
   Countries, Counts allowed, Box kg, **≈ Boxes** = range over every allowed country + count
   (`preprod.box_range`, `estimate_rows`). **Every Blueberry is a punnet** (user 23 Nov; `need_unit` → "punnets",
-  whatever the name says): 12 punnets a tray at any size, also on Pre-production actual / Batching plan, where
-  Blueberry has ONE "Any size" tray box (no per-mm split, `preprod.ANY_SIZE`); country starts on the first listed.
+  whatever the name says): 12 punnets a tray at any size, also on Pre-production actual / Batching plan (boxes
+  entered per size again — user 23 Nov 00:37 undid the one "Any size" box).
   Exact boxes on Pre-production actual.
   The other production tabs, mails and Batching sheet are unchanged (old sheet).
 
