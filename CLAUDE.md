@@ -473,6 +473,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   else the Parent tab for the parent (+ variety); else the old masters. Option label "Country · Grade"
   (+ "· lot" when the same grade has two box weights); the page shows "From: …". Production / Batching
   sheet still use the old sheet. Old sheet's Customer List got 29 yellow rows (new cities / FCs) on 22 Nov.
+  22 Nov night: Customer + Combination tabs got a **Customer SKU Name** column (col F, our style; the old
+  sheet's exact name when the same city + customer has it) and 120 old-sheet-only SKUs appended (yellow;
+  Combination rows with no spec/country light red). Combination 1 rebuilt (4,862 rows, cols A–O, Note in O:
+  red = not in Parent tab, yellow = from old sheet). The app matches on that column first.
 
 ## 6. Code map (repo root)
 

@@ -170,7 +170,8 @@ def combos_from(df: pd.DataFrame) -> pd.DataFrame:
         "grade": _col(df, "Variety (Parent tab)"), "spec": _col(df, "Country Spec"), "lot": _col(df, "Origin Lot"),
     })
     out = out[(out["sku"] != "") & (out["country"] != "")]
-    out["our"] = [our_name(s, p) for s, p in zip(out["sku"], out["packaging"])]
+    given = _col(df, "Customer SKU Name")        # our-style name filled in the sheet (22 Nov) wins
+    out["our"] = [g or our_name(s, p) for g, s, p in zip(given.loc[out.index], out["sku"], out["packaging"])]
     out["box_kg"] = out["lot"].map(_box_kg)
     return out[cols].reset_index(drop=True)
 

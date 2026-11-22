@@ -66,3 +66,13 @@ def test_close_name_same_pack_and_parent_fallback():
 def test_lot_in_pieces_is_not_a_box_weight():
     b = ms.options(_combos([]), PARENT, "PTP Bangalore", "Zepto", "125GM - Blueberry", "Blueberry")
     assert list(b) == ["Peru"] and b["Peru"]["box_kg"] is None and b["Peru"]["spec"] == ["14mm"]
+
+
+def test_customer_sku_name_column_wins():
+    cols = COMBO_COLS[:5] + ["Customer SKU Name"] + COMBO_COLS[5:]
+    row = ["Bangalore", "Flipkart Brigade_Cheemasandra", "1", "Blueberry", "Blueberry (125 gm Pack) (PCS) - FK",
+           "1PC - Blueberry - FK", "125 g", "Blueberry", "", "Peru", "Peru", "Blueberry", "14mm", "12 pcs tray", ""]
+    c = ms.combos_from(pd.DataFrame([row], columns=cols))
+    assert list(c["our"]) == ["1PC - Blueberry - FK"]
+    o = ms.options(c, PARENT, "PTP Bangalore", "Flipkart", "1Pc - Blueberry - FK", "Blueberry")
+    assert list(o) == ["Peru"] and "same name" in o["Peru"]["source"]
