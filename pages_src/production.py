@@ -144,7 +144,10 @@ def render(user: User) -> None:
     if d1.any():
         st.caption(f"{' / '.join(config.next_day_customers())} orders are not in these tables: "
                    "see their own section at the bottom.")
-    v1, v2, v3 = st.tabs(["By spec size", "Make-ready list", "By customer"])
+    names = ["By spec size", "Make-ready list", "By customer"]
+    if user.is_owner:
+        names.append("Estimate (new sheet)")
+    v1, v2, v3, *v4 = st.tabs(names)
     with v1:
         show = common.numbered(prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"]))
         st.dataframe(show, hide_index=True, width="stretch",
@@ -171,6 +174,9 @@ def render(user: User) -> None:
         _downloads("Make-ready list", mr, f"make_ready_{label}", "mr", lines)
     with v3:
         _by_customer(all_lines, m, label)
+    if v4:
+        with v4[0]:
+            _estimate_new(all_lines, m, label)
     _next_day(m)
     gaps = not_in_base(all_lines, m)
     if not gaps.empty:
@@ -182,6 +188,38 @@ def render(user: User) -> None:
             st.dataframe(gaps, hide_index=True, width="stretch")
     if user.is_owner:
         _publish("Production sheet", PRODUCTION_TAB, show, lines, user, "ps")
+
+
+def _estimate_new(lines: pd.DataFrame, m, label: str) -> None:
+    """Owners' trial (23 Nov): the estimate from the New Mapping sheet (Combination 1). Need in pcs / kg
+    (firm) and a rough box range over the counts each country may be used at (customer spec ∩
+    country spec). Exact boxes come on Pre-production actual once a country is picked."""
+    from core import mapping_sheet, preprod
+    from pages_src.preprod_actual import _opts
+    if st.session_state.get("ps_ctx", (None, ALL_DATES))[1] == ALL_DATES:
+        st.info("Pick one delivery date.")
+        return
+    try:
+        data = preprod.read_all()
+        data["_mapping"] = mapping_sheet.load()
+    except SheetError as e:
+        common.sheet_error(e)
+        return
+    dem = preprod.demand(lines)
+    if dem.empty:
+        st.info("No items with a quantity for this date.")
+        return
+    blocks = [(h, common.numbered(df)) for h, df in preprod.estimate_rows(dem, lambda r: _opts(m, data, r))]
+    st.caption("Trial, owners only. **Need** is firm (from the indents). **≈ Boxes** is a rough range over "
+               "the countries and counts allowed (customer spec ∩ country spec); the exact boxes come on "
+               "**Pre-production actual** once the country is picked.")
+    st.download_button("Excel", lambda: reports.xlsx({f"{i + 1} {h.split(' · ')[0]}"[:31]: df
+                                                      for i, (h, df) in enumerate(blocks)}),
+                       file_name=f"estimate_new_{label}.xlsx", mime=reports.XLSX, icon=":material/download:",
+                       key="est_xlsx", on_click="ignore")
+    for head, df in blocks:
+        st.markdown(f"**{head}**")
+        st.dataframe(df, hide_index=True, width="stretch")
 
 
 def _by_customer(lines: pd.DataFrame, m, label: str) -> None:

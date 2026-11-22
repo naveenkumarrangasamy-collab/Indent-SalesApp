@@ -61,7 +61,7 @@ def _opts(m, data, r) -> dict:
     else the old masters (Batching_Master / New tab / Mapping Whole)."""
     from core import config, mapping_sheet
     unit = "Tray" if str(r["parent_sku"]).casefold() in {p.casefold() for p in config.tray_parents()} else "Box"
-    combos, parent = data.get("_mapping", (None, None))
+    combos, parent = data.get("_mapping", (None, None)) if mapping_sheet.use_new() else (None, None)
     o = mapping_sheet.options(combos, parent, r["city"], r["customer"], r["customer_sku_name"], r["parent_sku"],
                               r.get("variety", ""), unit)
     if not o:

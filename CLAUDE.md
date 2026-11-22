@@ -478,6 +478,22 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   Combination rows with no spec/country light red). Combination 1 rebuilt (4,862 rows, cols A–O, Note in O:
   red = not in Parent tab, yellow = from old sheet). The app matches on that column first.
 
+### 23 Nov (user-approved; trial — "go back to old format" = secret `master_source = "old"`)
+
+- **Master switch** `mapping_sheet.use_new()` (secret `master_source`, default "new"). "old" puts Create indent
+  and the pre-production countries back exactly as before 23 Nov. The old sheet is never changed by the app for
+  this; its yellow rows (All Cux City 201–501, New 99–538, added 22 Nov) stay.
+- **Create indent SKU list**: old SKU map + every Combination 1 Customer SKU Name it lacks (same city + customer;
+  only cities that already have stores/SKUs in the old sheet), each name once (`mapping_sheet.sku_rows`,
+  `masters._new_mapping_sku`). No country / box asked at indent time. Stores still from the old Customer List.
+- **Counts allowed = customer spec ∩ country spec** (`mapping_sheet.allowed`, Combination 1 "Customer Spec"):
+  Flipkart Avocado 18/20/22 → Tanzania 18C–22C, Kenya not offered if it has none of them; if no country fits,
+  each country's own spec is shown.
+- **Production sheet → "Estimate (new sheet)" tab (owners only)**: per customer: Need (pcs / kg, firm),
+  Countries, Counts allowed, Box kg, **≈ Boxes** = range over every allowed country + count
+  (`preprod.box_range`, `estimate_rows`); Blueberry punnets ÷ 12. Exact boxes on Pre-production actual.
+  The other production tabs, mails and Batching sheet are unchanged (old sheet).
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.

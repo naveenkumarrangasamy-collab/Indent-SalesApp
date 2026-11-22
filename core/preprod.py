@@ -353,3 +353,49 @@ def _clear() -> None:
         indents.clear_cache()
     except Exception:  # noqa: BLE001
         pass
+
+
+# ------------------------------------------------------------------ estimate (new sheet)
+
+def box_range(need: float, unit: str, opts: dict[str, dict], parent: str = "") -> str:
+    """Rough boxes over every allowed country / count: '≈ 14–17 Box', '≈ 10 Tray', '-' when not known.
+    Blueberry-style punnets: punnets ÷ punnets per tray."""
+    ppt = config.punnets_per_tray().get(_c(parent).casefold())
+    if unit == "packs" and ppt:
+        return f"≈ {math.ceil(need / ppt - 1e-9)} Tray"
+    vals, word = [], "Box"
+    for o in opts.values():
+        word = o.get("unit") or word
+        if unit == "kg":
+            if o.get("box_kg"):
+                vals.append(math.ceil(need / o["box_kg"] - 1e-9))
+            continue
+        for s in o.get("spec", []):
+            pb = per_box(s, unit, o.get("box_kg"))
+            if pb:
+                vals.append(math.ceil(need / pb - 1e-9))
+    if not vals:
+        return "-"
+    lo, hi = min(vals), max(vals)
+    return f"≈ {lo} {word}" if lo == hi else f"≈ {lo}–{hi} {word}"
+
+
+def estimate_rows(dem: pd.DataFrame, opts_for) -> list[tuple[str, pd.DataFrame]]:
+    """One table per city + customer group: Parent SKU, Customer SKU Name, Need, Countries,
+    Counts allowed, Box kg, ≈ Boxes. `opts_for(row)` gives that SKU's country options."""
+    out = []
+    for (city, group), g in dem.groupby(["city", "group"], sort=False):
+        rows = []
+        for r in g.to_dict("records"):
+            o = opts_for(r)
+            specs = list(dict.fromkeys(spec_label(s) for v in o.values() for s in v.get("spec", [])))
+            kgs = sorted({v["box_kg"] for v in o.values() if v.get("box_kg")})
+            rows.append({"Parent SKU": r["parent_sku"], "Customer SKU Name": r["customer_sku_name"],
+                         "Need": f"{fmt_num(r['need'])} {r['unit']}",
+                         "Countries": ", ".join(dict.fromkeys(v.get("country") or k for k, v in o.items()
+                                                              if k != ANY)) or "-",
+                         "Counts allowed": ", ".join(specs) or "-",
+                         "Box kg": ", ".join(fmt_num(k) for k in kgs) or "-",
+                         "≈ Boxes": box_range(r["need"], r["unit"], o, r["parent_sku"])})
+        out.append((f"{group} · {city}", pd.DataFrame(rows)))
+    return out

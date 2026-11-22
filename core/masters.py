@@ -347,10 +347,34 @@ def _load_frames() -> tuple[dict[str, pd.DataFrame], str]:
     return frames_from_values(backend.read_values_many(tabs))
 
 
+@st.cache_data(ttl=config.master_cache_seconds(), show_spinner=False)
+def _new_mapping_sku() -> pd.DataFrame | None:
+    """Old SKU map + Combination 1 names (New Mapping sheet), or None when it cannot be read."""
+    from core import mapping_sheet
+    try:
+        combos, _ = mapping_sheet.load()
+    except Exception:  # noqa: BLE001 - the old sheet keeps working when the new one cannot be read
+        return None
+    frames, _ = _load_frames()
+    old = _clean(frames[SKU_MAP])
+    cities = {mapping_sheet._k(c) for c in list(old["City"]) + list(_clean(frames[STORE_MAP])["City"]) if str(c).strip()}
+    return mapping_sheet.sku_rows(combos, old, cities)
+
+
 def load_masters() -> Masters:
+    from core import mapping_sheet
     frames, source = _load_frames()
-    return masters_from_frames(frames, source)
+    m = masters_from_frames(frames, source)
+    if mapping_sheet.use_new():
+        sku = _new_mapping_sku()
+        if sku is not None:
+            m.sku = sku
+            m.sku_source = f"{source} + New Mapping (Combination 1)"
+    return m
 
 
 def clear_cache() -> None:
+    from core import mapping_sheet
     _load_frames.clear()
+    _new_mapping_sku.clear()
+    mapping_sheet.clear_cache()

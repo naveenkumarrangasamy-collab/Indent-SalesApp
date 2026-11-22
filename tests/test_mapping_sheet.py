@@ -76,3 +76,44 @@ def test_customer_sku_name_column_wins():
     assert list(c["our"]) == ["1PC - Blueberry - FK"]
     o = ms.options(c, PARENT, "PTP Bangalore", "Flipkart", "1Pc - Blueberry - FK", "Blueberry")
     assert list(o) == ["Peru"] and "same name" in o["Peru"]["source"]
+
+
+def test_counts_are_customer_spec_and_country_spec():
+    rows = [
+        ["Bangalore", "Flipkart X", "9", "Avocado", "Avocado - FK", "1 pc", "Hass", "18, 20, 22", "Tanzania, Kenya",
+         "Tanzania", "Hass", "12C, 14C, 16C, 18C, 20C, 22C, 24C", "4 kg", ""],
+        ["Bangalore", "Flipkart X", "9", "Avocado", "Avocado - FK", "1 pc", "Hass", "18, 20, 22", "Tanzania, Kenya",
+         "Kenya", "Fuerte", "26C, 28C", "4 kg", ""],
+        ["Bangalore", "Zepto (KWPL)", "8", "Mandarin", "Mini Orange - 200-250 g", "200-250 g", "", "3C, 50mm, 100C, 113C",
+         "", "Australia", "Afourer", "88C, 100C, 113C", "9 kg", ""],
+        ["Bangalore", "Zepto (KWPL)", "8", "Mandarin", "Mini Orange - 200-250 g", "200-250 g", "", "3C, 50mm, 100C, 113C",
+         "", "China", "Mandarin", "50mm, 55mm", "10 kg", ""],
+    ]
+    c = _combos(rows)
+    fk = ms.options(c, None, "PTP Bangalore", "Flipkart", "1PC - Avocado - FK", "Avocado")
+    assert list(fk) == ["Tanzania · Hass"] and fk["Tanzania · Hass"]["spec"] == ["18", "20", "22"]   # Kenya has none of them
+    mo = ms.options(c, None, "PTP Bangalore", "Zepto", "250GM - Mini Orange", "Mandarin")
+    specs = {v["country"]: v["spec"] for v in mo.values()}
+    assert specs == {"Australia": ["100", "113"], "China": ["50mm"]}
+    assert ms.allowed(["20", "22"], []) == ["20", "22"] and ms.allowed([], ["18"]) == ["18"]
+
+
+def test_sku_rows_add_each_new_name_once():
+    old = pd.DataFrame([{"City": "PTP Bangalore", "Customer": "Zepto", "Parent SKU": "Kiwi",
+                         "Customer SKU Name": "2PC - Kiwi Sungold", "Spec-Origin": "Chile", "Spec-Size": "",
+                         "Active": "Y", "Variety": "", "Lot": "", "_row": 2}])
+    c = _combos(ROWS)
+    out = ms.sku_rows(c, old)
+    z = out[(out["Customer"] == "Zepto")]
+    assert sorted(z["Customer SKU Name"]) == ["2PC - Apple Royal Gala Imported", "2PC - Kiwi Sungold"]
+    assert len(out) == 3 and list(out.columns) == list(old.columns)      # Swiggy's Gala added too
+    assert ms.sku_rows(c.iloc[0:0], old) is old
+
+
+def test_box_range():
+    from core import preprod
+    o = {"T": {"spec": ["18", "20", "22"], "unit": "Tray", "box_kg": 4.0}}
+    assert preprod.box_range(300, "pcs", o) == "≈ 14–17 Tray"
+    assert preprod.box_range(40, "kg", o) == "≈ 10 Tray"
+    assert preprod.box_range(119, "packs", {}, "Blueberry") == "≈ 10 Tray"
+    assert preprod.box_range(10, "packs", o) == "-"

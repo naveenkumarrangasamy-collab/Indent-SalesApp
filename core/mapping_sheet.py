@@ -160,13 +160,14 @@ def _box_kg(lot: str) -> float | None:
 
 def combos_from(df: pd.DataFrame) -> pd.DataFrame:
     """Combination 1 rows -> city, customer (app), sku, our, parent, cust_variety, country, grade, spec, box_kg, lot."""
-    cols = ["city", "customer", "sku", "our", "parent", "cust_variety", "country", "grade", "spec", "box_kg", "lot"]
+    cols = ["city", "customer", "sku", "our", "parent", "cust_variety", "cust_spec", "country", "grade", "spec",
+            "box_kg", "lot"]
     if df is None or df.empty:
         return pd.DataFrame(columns=cols)
     out = pd.DataFrame({
         "city": _col(df, "City").map(ptp_city), "customer": _col(df, "Customer").map(app_customer),
         "sku": _col(df, "SKU Name"), "packaging": _col(df, "Packaging"), "parent": _col(df, "Parent SKU"),
-        "cust_variety": _col(df, "Customer Variety"), "country": _col(df, "Country"),
+        "cust_variety": _col(df, "Customer Variety"), "cust_spec": _col(df, "Customer Spec"), "country": _col(df, "Country"),
         "grade": _col(df, "Variety (Parent tab)"), "spec": _col(df, "Country Spec"), "lot": _col(df, "Origin Lot"),
     })
     out = out[(out["sku"] != "") & (out["country"] != "")]
@@ -187,14 +188,63 @@ def parent_from(df: pd.DataFrame) -> pd.DataFrame:
     return out[cols].reset_index(drop=True)
 
 
+def _loader():
+    global _CACHED
+    if _CACHED is None:
+        import streamlit as st
+
+        @st.cache_data(ttl=config.master_cache_seconds(), show_spinner=False)
+        def _load(sid: str):
+            return combos_from(_read(COMBO_TAB)), parent_from(_read(PARENT_TAB))
+        _CACHED = _load
+    return _CACHED
+
+
+_CACHED = None
+
+
 def load() -> tuple[pd.DataFrame, pd.DataFrame]:
     """(combos, parent), cached like the other masters."""
-    import streamlit as st
+    return _loader()(sheet_id())
 
-    @st.cache_data(ttl=int(config.get("master_refresh_minutes", 5) or 5) * 60, show_spinner=False)
-    def _load(sid: str):
-        return combos_from(_read(COMBO_TAB)), parent_from(_read(PARENT_TAB))
-    return _load(sheet_id())
+
+def clear_cache() -> None:
+    try:
+        _loader().clear()
+    except Exception:  # noqa: BLE001 - a cache that cannot be cleared just expires
+        pass
+
+
+def use_new() -> bool:
+    """Masters from the New Mapping sheet (secret `master_source`, default "new"); "old" = the
+    old sheet exactly as before 23 Nov (Create indent SKU list, pre-production countries)."""
+    return str(config.get("master_source", "new") or "new").strip().casefold() != "old"
+
+
+def sku_rows(combos: pd.DataFrame, old: pd.DataFrame, cities: set[str] | None = None) -> pd.DataFrame:
+    """SKU map for Create indent: the old rows plus one row per Combination 1 Customer SKU Name
+    the old map does not have (same city + customer, case/spaces ignored), only for `cities` (the
+    cities that have stores / SKUs in the old sheet) when given. The pickers list each
+    name once, so a name is never repeated whatever its countries / grades."""
+    if combos is None or combos.empty:
+        return old
+    have = {(_k(c), _k(u), _k(n)) for c, u, n in zip(old["City"], old["Customer"], old["Customer SKU Name"])}
+    rows, seen = [], set(have)
+    for r in combos.to_dict("records"):
+        key = (_k(r["city"]), _k(r["customer"]), _k(r["our"]))
+        if key in seen or not r["our"] or not r["parent"] or (cities is not None and key[0] not in cities):
+            continue
+        seen.add(key)
+        rows.append({"City": r["city"], "Customer": r["customer"], "Parent SKU": r["parent"],
+                     "Customer SKU Name": r["our"], "Spec-Origin": "", "Spec-Size": "", "Active": "Y",
+                     "Variety": "", "Lot": ""})
+    if not rows:
+        return old
+    add = pd.DataFrame(rows)
+    for c in old.columns:
+        if c not in add.columns:
+            add[c] = 0 if c == "_row" else ""
+    return pd.concat([old, add[old.columns]], ignore_index=True)
 
 
 # ------------------------------------------------------------------ matching
@@ -241,6 +291,9 @@ def options(combos: pd.DataFrame, parent_df: pd.DataFrame, city: str, customer: 
     if rows is None or rows.empty:
         return out
     seen = rows.drop_duplicates(subset=["country", "grade", "spec", "lot"])
+    cust = parse_spec(seen["cust_spec"].iloc[0]) if "cust_spec" in seen.columns and len(seen) else []
+    if cust and all(allowed(parse_spec(x), cust) is None for x in seen["spec"]):
+        cust = []                         # no country fits the customer's counts: show each country's own
     multi = seen.groupby([seen["country"].map(_k), seen["grade"].map(_k)]).size()
     for r in seen.to_dict("records"):
         grade = _c(r["grade"])
@@ -252,6 +305,27 @@ def options(combos: pd.DataFrame, parent_df: pd.DataFrame, city: str, customer: 
             continue
         kg = r["box_kg"]
         kg = float(kg) if kg is not None and not pd.isna(kg) and float(kg) > 0 else None
-        out[label] = {"spec": parse_spec(r["spec"]), "unit": unit_default, "box_kg": kg,
+        spec = allowed(parse_spec(r["spec"]), cust)
+        if spec is None:
+            continue                      # this country/grade has none of the counts the customer wants
+        out[label] = {"spec": spec, "unit": unit_default, "box_kg": kg,
                       "source": source, "country": _c(r["country"]), "grade": grade, "lot": _c(r["lot"])}
     return out
+
+
+def _sk(v: str) -> str:
+    return re.sub(r"\s+", "", _c(v)).casefold().removesuffix("c") if re.fullmatch(r"\d+\s*[cC]?", _c(v)) \
+        else re.sub(r"\s+", "", _c(v)).casefold()
+
+
+def allowed(country_spec: list[str], customer_spec: list[str]) -> list[str] | None:
+    """Counts / sizes a country may be used at = its own spec ∩ the customer's spec (customer
+    order kept). No customer spec -> the country's spec. Nothing in common -> None (not offered).
+    A country with no spec -> the customer's spec."""
+    if not customer_spec:
+        return country_spec
+    if not country_spec:
+        return customer_spec
+    mine = {_sk(x) for x in country_spec}
+    both = [x for x in customer_spec if _sk(x) in mine]
+    return both or None
