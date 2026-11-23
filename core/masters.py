@@ -6,6 +6,7 @@ pure functions over the DataFrames so they are easy to test.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import pandas as pd
@@ -38,6 +39,7 @@ class Masters:
     access: pd.DataFrame
     sku_source: str = "SKU_Map tab"
     prod_base: pd.DataFrame | None = None   # the 'New' tab (production base)
+    combo_variety: dict | None = None       # 24 Nov: New Mapping Combination customer variety, one per SKU
 
     def prod_info(self, city: str, customer: str, sku_name: str) -> dict | None:
         """The 'New' tab row for this SKU name (city + customer + name), else None.
@@ -151,7 +153,8 @@ class Masters:
         """Variety written in the mapping (Classification different from the
         parent, e.g. Hass for Avocado), or taken from the name for apples."""
         parent = self.parent_of(city, customer, sku_name)
-        fixed = self.variety_from_name(parent, sku_name) if parent else ""
+        fixed = (self.variety_from_name(parent, sku_name) or self.combo_variety_for(city, customer, sku_name)) \
+            if parent else ""
         if fixed:
             return fixed
         df = self._sku_for(city, customer)
@@ -162,6 +165,16 @@ class Masters:
         info = self.prod_info(city, customer, sku_name)            # the New tab's variety column
         v = str((info or {}).get("Variety", "") or "").strip()
         return v if v in self.varieties_for(parent) else ""
+
+    def combo_variety_for(self, city: str, customer: str, sku_name: str) -> str:
+        """24 Nov: the one variety the New Mapping Combination tab gives this SKU ('' when it lists
+        none or several, e.g. Snacky / Daily Apple = all varieties -> the user picks)."""
+        if not self.combo_variety:
+            return ""
+        from core.mapping_sheet import _k as mk
+        parent = self.parent_of(city, customer, sku_name)
+        v = self.combo_variety.get((mk(city), mk(customer), mk(sku_name)), "")
+        return next((x for x in self.varieties_for(parent) if _key(x) == _key(v)), "") if v else ""
 
     def new_tab_variety(self, city: str, customer: str, sku_name: str) -> str:
         """The variety written in the New tab for this SKU (when it is a known variety)."""
@@ -176,7 +189,7 @@ class Masters:
         parent = self.parent_of(city, customer, sku_name)
         if not self.varieties_for(parent):
             return ""
-        fixed = self.variety_from_name(parent, sku_name)
+        fixed = self.variety_from_name(parent, sku_name) or self.combo_variety_for(city, customer, sku_name)
         if fixed:
             return fixed
         nt = self.new_tab_variety(city, customer, sku_name)
@@ -236,8 +249,8 @@ class Masters:
         return bad.sort_values(["City", "Customer", "Customer SKU Name"]).reset_index(drop=True)
 
 
-VARIETY_ALIASES = {"royal gala": "Gala", "red delicious": "RD", "granny": "Granny Smith",
-                   "green": "Granny Smith"}
+VARIETY_ALIASES = {"royal gala": "Gala", "red delicious": "RD", "red del": "RD", "granny": "Granny Smith",
+                   "green": "Granny Smith", "honeycrisp": "Honey Crisp", "cripps pink": "Pink Lady"}
 
 
 def name_variety(varieties: list[str], sku_name: str) -> str:
@@ -361,12 +374,40 @@ def _new_mapping_sku() -> pd.DataFrame | None:
     return mapping_sheet.sku_rows(combos, old, cities)
 
 
+def _combo_varieties(m: Masters) -> dict:
+    """{(city, customer, our name) keys: variety} for SKUs whose Combination 'Customer Variety' names exactly
+    one known variety. Several ('Gala, RD, Queen, …' for Snacky / Daily Apple) or none -> left out."""
+    from core import mapping_sheet
+    try:
+        combos, _ = mapping_sheet.load()
+    except Exception:  # noqa: BLE001 - without the new sheet the old rules still apply
+        return {}
+    return combo_varieties(combos, m.varieties_for)
+
+
+def combo_varieties(combos: pd.DataFrame, varieties_for) -> dict:
+    from core.mapping_sheet import _k as mk
+    found: dict[tuple, set] = {}
+    for r in combos.to_dict("records"):
+        vs = varieties_for(r.get("parent", ""))
+        if not vs:
+            continue
+        key = (mk(r["city"]), mk(r["customer"]), mk(r["our"]))
+        got = found.setdefault(key, set())
+        for part in re.split(r"[,/]", str(r.get("cust_variety") or "")):
+            v = next((x for x in vs if _key(x) == _key(part)), "") or name_variety(vs, part)
+            if v:
+                got.add(v)
+    return {k: next(iter(v)) for k, v in found.items() if len(v) == 1}
+
+
 def load_masters() -> Masters:
     from core import mapping_sheet
     frames, source = _load_frames()
     m = masters_from_frames(frames, source)
     if mapping_sheet.use_new():
         sku = _new_mapping_sku()
+        m.combo_variety = _combo_varieties(m)
         if sku is not None:
             m.sku = sku
             m.sku_source = f"{source} + New Mapping (Combination 1)"

@@ -94,7 +94,7 @@ def secret_names() -> list[str]:
 
 
 DEFAULT_APPLE_VARIETIES = ["Gala", "Granny Smith", "Queen", "RD", "Pink Lady", "Crispy Pink",
-                           "Braeburn", "Sonya", "Fuji", "Jazz", "Envy"]
+                           "Braeburn", "Sonya", "Fuji", "Jazz", "Envy", "Honey Crisp", "Cosmic Crisp"]
 
 
 def variety_parents() -> list[str]:

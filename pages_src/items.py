@@ -171,6 +171,9 @@ def _lines_table(m: Masters) -> None:
              if state.get()["mode"] == "new" and filled < len(lines) else "")
     st.markdown(f"**Items in this indent**{value} <span class='mt-muted'>· {len(lines)} items · qty "
                 f"{fmt_num(sum(to_number(x.qty) for x in lines))}{zeros}</span>", unsafe_allow_html=True)
+    _fill_fixed_varieties(m)
+    lines = state.lines()
+    _variety_banner(m)
     has_variety = any(m.needs_variety(x.parent_sku) or x.variety for x in lines)
     with st.container(key="mtdesk_items"):
         _lines_desktop(m, lines, has_variety)
@@ -293,7 +296,7 @@ def _lines_desktop(m: Masters, lines, has_variety: bool) -> None:
     missing = [x.customer_sku_name for x in lines if m.needs_variety(x.parent_sku) and not x.variety
                and not m.variety_from_name(x.parent_sku, x.customer_sku_name)]
     if missing:
-        st.warning("🟡 Choose the variety for these Apple items:")
+        st.error("Pick the variety for each of these items:")
         for name in missing:
             x = next((x for x in new_lines if x.customer_sku_name == name), None)
             if x is None:
@@ -486,16 +489,41 @@ def _review(m: Masters, user: User) -> None:
 # ------------------------------------------------------------ actions
 
 def _fill_fixed_varieties(m: Masters) -> None:
-    """Apple SKUs whose name says the variety: set it (older lines may be blank)."""
+    """Apple SKUs whose name says the variety: set it (older lines may be blank). 24 Nov: a blank
+    variety is also filled from the mapping (New Mapping Combination, New tab, All Cux City)."""
     lines = state.lines()
+    hdr = state.header()
     changed = False
     for x in lines:
+        if not m.needs_variety(x.parent_sku):
+            continue
         fixed = m.variety_from_name(x.parent_sku, x.customer_sku_name)
+        if not fixed and not x.variety:
+            fixed = m.default_variety(hdr.city, hdr.customer, x.customer_sku_name)
         if fixed and x.variety != fixed:
             x.variety = fixed
             changed = True
     if changed:
         state.set_lines(lines, structural=False)
+
+
+def variety_missing(m: Masters) -> list[str]:
+    """24 Nov: items with a qty whose variety is still not chosen (Snacky / Daily Apple …).
+    Submit / Update stay off until every one has a variety."""
+    names = []
+    for x in to_save(state.lines()):
+        vs = m.varieties_for(x.parent_sku)
+        if vs and x.variety not in vs and not m.variety_from_name(x.parent_sku, x.customer_sku_name):
+            names.append(x.customer_sku_name)
+    return names
+
+
+def _variety_banner(m: Masters) -> list[str]:
+    miss = variety_missing(m)
+    if miss:
+        st.error(f"**Choose the variety for {len(miss)} item(s)** before you submit: "
+                 + ", ".join(miss), icon=":material/nutrition:")
+    return miss
 
 
 def _add_new_party() -> bool:
@@ -699,7 +727,8 @@ def render(m: Masters, user: User) -> None:
         c = st.columns([1, 1, 2])
         if c[0].button("Discard changes", width="stretch"):
             s["pending_action"] = "discard"
-        if c[1].button("Update indent", type="primary", disabled=not (changed and open_),
+        miss = variety_missing(m)
+        if c[1].button("Update indent", type="primary", disabled=not (changed and open_) or bool(miss),
                        width="stretch"):
             m = _before_check(m)
             errors = _check(m)
@@ -708,7 +737,9 @@ def render(m: Masters, user: User) -> None:
                     st.error(e)
             else:
                 s["review_open"] = True
-        if not open_:
+        if miss:
+            c[2].caption(f"🔴 Choose the variety for {len(miss)} item(s) first.")
+        elif not open_:
             st.error(f"Editing of {ind['indent_id']} closed at {deadline} (the delivery-day cutoff). "
                      "It can no longer be changed.")
         elif fix:
@@ -723,8 +754,11 @@ def render(m: Masters, user: User) -> None:
         c = st.columns([1, 1, 2])
         if c[0].button("Clear form", width="stretch", disabled=not state.has_work()):
             s["pending_action"] = "clear"
+        miss = variety_missing(m)
+        if miss:
+            c[2].caption(f"🔴 Choose the variety for {len(miss)} item(s) first.")
         if c[1].button("Submit indent", type="primary", width="stretch",
-                       disabled=not state.lines()):
+                       disabled=not state.lines() or bool(miss)):
             m = _before_check(m)
             errors = _check(m)
             if errors:
