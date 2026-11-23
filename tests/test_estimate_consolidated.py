@@ -47,3 +47,30 @@ def test_demand_by_variety_splits_rows():
     ])
     assert len(preprod.demand(lines)) == 1
     assert sorted(preprod.demand(lines, by_variety=True)["variety"]) == ["Gala", "Queen"]
+
+
+def test_batching_indent_and_po_qty():
+    from core.production_calc import merge_sheet, sheet_rows, with_po
+    bat = pd.DataFrame([
+        {"City": "PTP Bangalore", "Customer": "Zepto", "Delivery point": "S1", "Parent SKU": "Kiwi",
+         "Customer SKU Name": "3PC - Green Kiwi", "Variety": "", "Lot": "Pack", "Lot Size": "3 Pcs", "Spec": "",
+         "Qty": 10, "Indent": "IN-1"},
+        {"City": "PTP Bangalore", "Customer": "Zepto", "Delivery point": "S1", "Parent SKU": "Kiwi",
+         "Customer SKU Name": "2PC - Kiwi Sungold", "Variety": "", "Lot": "Pack", "Lot Size": "2 Pcs", "Spec": "",
+         "Qty": 5, "Indent": "IN-1"},
+        {"City": "PTP Bangalore", "Customer": "Swiggy", "Delivery point": "WH1", "Parent SKU": "Kiwi",
+         "Customer SKU Name": "3PC - Green Kiwi", "Variety": "", "Lot": "Pack", "Lot Size": "3 Pcs", "Spec": "",
+         "Qty": 7, "Indent": "IN-2"},
+    ])
+    v = with_po(bat, {("IN-1", "3pc - green kiwi"): 12}, {"IN-1"})
+    assert list(v.columns)[-2:] == ["Indent qty", "PO qty"] and "Indent" not in v.columns
+    assert list(v["PO qty"]) == [12, 0, None]
+    rows = sheet_rows(v, "2026-11-25", "now")
+    assert rows[0][10:13] == [10, 12, 2] and rows[2][11] == ""
+    old = [["Delivery date"] + ["x"] * 3]
+    merged = merge_sheet(old, rows, "2026-11-25", {"PTP Bangalore"})
+    assert len(merged) == 4
+    again = merge_sheet(merged, rows[:1], "2026-11-25", {"PTP Bangalore"})
+    assert len(again) == 2
+    other = merge_sheet(merged, [], "2026-11-26", {"PTP Bangalore"})
+    assert len(other) == 4

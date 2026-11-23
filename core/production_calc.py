@@ -474,3 +474,60 @@ def next_day_mask(lines: pd.DataFrame) -> pd.Series:
         words = rules.get(str(cust).strip().casefold())
         return words is not None and (not words or any(w in str(city).casefold() for w in words))
     return pd.Series([hit(c, t) for c, t in zip(lines["customer"], lines["city"])], index=lines.index, dtype=bool)
+
+
+# ------------------------------------------------------------------ batching: indent vs PO (24 Nov)
+
+SHEET_COLUMNS = ["Delivery date", "City", "Customer", "Delivery point", "Parent SKU", "Customer SKU Name", "Variety",
+                 "Lot", "Lot Size", "Spec", "Indent qty", "PO qty", "PO − indent", "Updated at"]
+
+
+def with_po(bat: pd.DataFrame, po_qty: dict, po_indents: set) -> pd.DataFrame:
+    """Batching table -> 'Qty' becomes 'Indent qty', a 'PO qty' column next to it, no 'Indent' column.
+    po_qty {(indent_id, sku key): qty}; po_indents = indents that have a PO with qty per item.
+    PO qty is blank while none of the row's indents has a PO; an item missing from the PO counts 0."""
+    out = bat.copy()
+    vals = []
+    for ids, name in zip(out.get("Indent", pd.Series(dtype=str)), out["Customer SKU Name"]):
+        ids = [i.strip() for i in str(ids or "").split(",") if i.strip()]
+        key = " ".join(str(name).split()).casefold()
+        have = [i for i in ids if i in po_indents]
+        vals.append(sum(float(po_qty.get((i, key), 0.0)) for i in have) if have else None)
+    out = out.rename(columns={"Qty": "Indent qty"})
+    pos = list(out.columns).index("Indent qty") + 1
+    out.insert(pos, "PO qty", pd.array([None if v is None else int(v) if float(v).is_integer() else v
+                                        for v in vals], dtype=object))
+    return out.drop(columns=[c for c in ("Indent",) if c in out.columns])
+
+
+def sheet_rows(view: pd.DataFrame, delivery_date: str, stamp: str) -> list[list]:
+    """Rows for the Batching_Sheet tab: one per delivery point + SKU, with the date and PO − indent."""
+    rows = []
+    for r in view.to_dict("records"):
+        ind, po = r.get("Indent qty"), r.get("PO qty")
+        diff = "" if po is None or pd.isna(po) else float(po) - float(ind or 0)
+        rows.append([delivery_date, r["City"], r["Customer"], r["Delivery point"], r["Parent SKU"],
+                     r["Customer SKU Name"], r.get("Variety", ""), r["Lot"], r["Lot Size"], r["Spec"], ind,
+                     "" if po is None or pd.isna(po) else po,
+                     "" if diff == "" else (int(diff) if float(diff).is_integer() else diff), stamp])
+    return rows
+
+
+def merge_sheet(existing: list[list], new_rows: list[list], delivery_date: str, cities: set[str]) -> list[list]:
+    """Batching_Sheet keeps every day: this date's rows for these cities are replaced, the rest kept.
+    An old-format tab (title rows, no header) is started fresh."""
+    keep = []
+    if existing and [str(x).strip() for x in existing[0][:len(SHEET_COLUMNS)]] == SHEET_COLUMNS:
+        cset = {c.casefold() for c in cities}
+        for r in existing[1:]:
+            if not any(str(x).strip() for x in r):
+                continue
+            r = list(r) + [""] * (len(SHEET_COLUMNS) - len(r))
+            if str(r[0]).strip() == delivery_date and str(r[1]).strip().casefold() in cset:
+                continue
+            keep.append(r[:len(SHEET_COLUMNS)])
+    rows = keep + new_rows
+    rows.sort(key=lambda r: (str(r[0]), str(r[1]).casefold(), str(r[2]).casefold(), str(r[3]).casefold(),
+                             str(r[4]).casefold(), str(r[5]).casefold()), reverse=False)
+    rows.sort(key=lambda r: str(r[0]), reverse=True)          # newest date first
+    return [SHEET_COLUMNS] + rows

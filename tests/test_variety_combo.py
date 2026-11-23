@@ -54,3 +54,15 @@ def test_estimate_uses_the_indent_variety():
     all_o = mapping_sheet.options(combos, None, "PTP Bangalore", "Zepto", "2PC - Snacky Apple", "Apple", "")
     gala = mapping_sheet.options(combos, None, "PTP Bangalore", "Zepto", "2PC - Snacky Apple", "Apple", "Gala")
     assert len(all_o) == 2 and list(gala) == ["Brazil · Gala"]
+
+
+def test_washington_is_a_country_not_a_variety():
+    from core import mapping_sheet
+    assert name_variety(APPLE, "1PC - Bulk Washington Apple Seb") == ""
+    assert mapping_sheet.name_country("1PC - Bulk Washington Apple Seb") == "USA"
+    combos = pd.DataFrame([
+        {"city": "PTP Bangalore", "customer": "Swiggy", "our": "1PC - Bulk Washington Apple Seb", "parent": "Apple",
+         "cust_variety": "", "cust_spec": "", "country": c, "grade": "RD", "spec": "100c", "box_kg": 18.0,
+         "lot": "18 kg"} for c in ("USA", "Chile")])
+    o = mapping_sheet.options(combos, None, "PTP Bangalore", "Swiggy", "1PC - Bulk Washington Apple Seb", "Apple", "RD")
+    assert list(o) == ["USA · RD"]

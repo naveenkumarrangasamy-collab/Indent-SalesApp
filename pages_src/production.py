@@ -12,8 +12,8 @@ from core import config, indents, masters, reports
 from core.auth import User
 from core.pdf_report import sections_pdf, table_pdf
 from core.production_calc import (batching, default_date, delivery_dates, filter_lines, make_ready,
-                                  make_ready_by_customer, next_day_mask, not_in_base, production,
-                                  unmapped)
+                                  make_ready_by_customer, merge_sheet, next_day_mask, not_in_base,
+                                  production, sheet_rows, unmapped, with_po)
 from core.sheets import SheetError
 from pages_src import common
 
@@ -341,13 +341,19 @@ def render_batching(user: User) -> None:
     except SheetError as e:
         common.sheet_error(e)
         return
-    bat = common.numbered(batching(lines, m))
-    _qty_strip(bat, "Qty", lines)
+    raw = batching(lines, m)
+    po_qty, po_ids = _po_quantities(lines)
+    view = with_po(raw, po_qty, po_ids)
+    bat = common.numbered(view)
+    _qty_strip(bat, "Indent qty", lines)
     has_var = bat["Variety"].astype(bool).any()
-    cols = ["Parent SKU", "Customer SKU Name"] + (["Variety"] if has_var else []) + ["Lot", "Lot Size", "Spec", "Qty"]
+    cols = ["Parent SKU", "Customer SKU Name"] + (["Variety"] if has_var else []) + \
+        ["Lot", "Lot Size", "Spec", "Indent qty", "PO qty"]
     points = list(bat.groupby(["City", "Customer", "Delivery point"], sort=False))
     st.dataframe(bat if has_var else bat.drop(columns=["Variety"]), hide_index=True, width="stretch",
-                 column_config={"Qty": st.column_config.NumberColumn(format="%g"),
+                 column_config={"Indent qty": st.column_config.NumberColumn(format="%g"),
+                                "PO qty": st.column_config.NumberColumn(
+                                    format="%g", help="Blank until the PO is uploaded"),
                                 "Spec": st.column_config.TextColumn(width="medium")})
     if m.has_prod_base:
         gaps = not_in_base(lines, m)
@@ -358,12 +364,10 @@ def render_batching(user: User) -> None:
     else:
         _unmapped_warning(lines, m)
 
-    # downloads: PDF one section per delivery point, Excel, CSV
+    # downloads: PDF one section per delivery point, Excel, CSV (no indent numbers)
     now = config.now_ist().strftime("%d %b %Y, %I:%M %p")
     sub = [st.session_state.get("bs_desc", ""), f"{len(points)} delivery points. Generated {now} IST."]
-    sections = [(f"{i}) {city} / {cust} / {store}",
-                 "Indent " + ", ".join(sorted(set(", ".join(part["Indent"]).split(", ")))),
-                 part[cols].reset_index(drop=True))
+    sections = [(f"{i}) {city} / {cust} / {store}", "", part[cols].reset_index(drop=True))
                 for i, ((city, cust, store), part) in enumerate(points, start=1)]
     from core.reports import xlsx
     c = st.columns([1, 1, 1, 3])
@@ -377,8 +381,56 @@ def render_batching(user: User) -> None:
     c[2].download_button("CSV", lambda: bat.to_csv(index=False).encode("utf-8"), on_click="ignore",
                          file_name=f"batching_{label}.csv",
                          mime="text/csv", icon=":material/download:", width="stretch")
-    if user.is_owner:
-        _publish("Batching sheet", BATCHING_TAB, bat, lines, user, "bs")
+    _sync_batching_tab(view, lines)
+
+
+def _po_quantities(lines: pd.DataFrame) -> tuple[dict, set]:
+    """{(indent_id, sku key): PO qty} and the indents whose PO has qty per item (PO_Item_Map links used)."""
+    from core.models import IndentLine
+    try:
+        po = indents.read_po_freeze()
+    except SheetError:
+        return {}, set()
+    out, ids = {}, set()
+    for iid, g in lines.groupby("indent_id"):
+        info = indents.po_info(po, iid)
+        if info["qty"] is None:
+            continue
+        ids.add(iid)
+        items = [IndentLine(parent_sku=r["parent_sku"], customer_sku_name=r["customer_sku_name"],
+                            variety=r.get("variety", ""), lot=r.get("lot", ""), qty=r["qty"])
+                 for r in g.to_dict("records")]
+        for r in indents.po_vs_indent(items, info, customer=str(g["customer"].iloc[0])):
+            if r["indent_qty"] is not None:
+                out[(iid, " ".join(str(r["customer_sku_name"]).split()).casefold())] = r["po_qty"] or 0.0
+    return out, ids
+
+
+def _sync_batching_tab(view: pd.DataFrame, lines: pd.DataFrame) -> None:
+    """24 Nov: the Batching_Sheet tab keeps one row per date + delivery point + SKU (indent qty, PO qty,
+    PO − indent), so another sheet can read it. Written when this page shows one delivery date and the
+    numbers changed since the last write in this session."""
+    from core.sheets import get_backend
+    day = st.session_state.get("bs_ctx", (None, ALL_DATES))[1]
+    if day == ALL_DATES or view.empty:
+        st.caption(f"Pick one delivery date to update the **{BATCHING_TAB}** tab of the Google Sheet.")
+        return
+    cities = set(lines["city"].unique())
+    stamp = config.now_ist().strftime("%Y-%m-%d %H:%M")
+    rows = sheet_rows(view, day, stamp)
+    sig = hash((day, tuple(sorted(cities)), str([r[:-1] for r in rows])))
+    if st.session_state.get("bs_synced") == sig:
+        st.caption(f"**{BATCHING_TAB}** tab of the Google Sheet is up to date for {_fmt_date(day)}.")
+        return
+    try:
+        backend = get_backend()
+        existing = backend.read_values(BATCHING_TAB) if BATCHING_TAB in backend.list_tabs() else []
+        backend.replace_tab(BATCHING_TAB, merge_sheet(existing, rows, day, cities))
+    except SheetError as e:
+        st.caption(f"Could not update the {BATCHING_TAB} tab: {e}")
+        return
+    st.session_state["bs_synced"] = sig
+    st.caption(f"**{BATCHING_TAB}** tab of the Google Sheet updated for {_fmt_date(day)} ({len(rows)} rows).")
 
 
 def _downloads(title: str, table: pd.DataFrame, fname: str, prefix: str, lines: pd.DataFrame) -> None:

@@ -274,6 +274,15 @@ def match_rows(combos: pd.DataFrame, city: str, customer: str, sku_name: str) ->
     return pd.DataFrame(), ""
 
 
+COUNTRY_WORDS = {"washington": "USA", "usa": "USA", "shimla": "India", "kashmir": "India", "himachal": "India"}
+
+
+def name_country(sku_name: str) -> str:
+    """The country a SKU name points to ('1PC - Bulk Washington Apple' -> USA); '' when none."""
+    low = f" {_c(sku_name).lower()} "
+    return next((c for w, c in COUNTRY_WORDS.items() if re.search(rf"(?<![a-z]){w}(?![a-z])", low)), "")
+
+
 def _variety_ok(grade: str, variety: str, parent: str) -> bool:
     v = _k(variety)
     if not v or v == _k(parent):
@@ -290,6 +299,11 @@ def options(combos: pd.DataFrame, parent_df: pd.DataFrame, city: str, customer: 
     from core.preprod import parse_spec
     rows, how = match_rows(combos, city, customer, sku_name)
     source = f"Combination 1 ({how})" if how else ""
+    hint = name_country(sku_name)                 # 24 Nov: 'Washington Apple' = USA
+    if hint and not rows.empty:
+        keep = rows[rows["country"].map(_k) == _k(hint)]
+        if not keep.empty:
+            rows = keep
     if not rows.empty and variety:                # 24 Nov: the indent's variety narrows the rows (Snacky Apple
         keep = rows[[_variety_ok(g, variety, parent) for g in rows["grade"]]]   # = Gala only -> Gala counts)
         if not keep.empty:

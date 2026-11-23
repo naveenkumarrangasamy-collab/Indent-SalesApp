@@ -571,8 +571,18 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   counts; boxes rounded up per count after clubbing. Kg lines → kg ÷ box kg; Blueberry → punnets ÷ 12. Lines with no
   variety (Apple / Mandarin / Orange) stay in a "Variety not chosen" row. Both estimate tabs use
   `preprod.demand(by_variety=True)`: the same SKU with two varieties → two rows (pre-production pages unchanged).
-- Washington → RD (alias), **Shimla** added to the Apple list. The 5 near-duplicate names are the same products
+- **Washington = USA (country), not a variety** (user 24 Nov): `mapping_sheet.name_country` (washington/usa → USA,
+  shimla/kashmir/himachal → India) narrows a SKU's Combination 1 rows to that country when it has any; the
+  variety is still asked. **Shimla** added to the Apple list. The 5 near-duplicate names are the same products
   (user 24 Nov); they are clubbed on the consolidated estimate; the sheet rows are left as they are.
+- **Batching sheet (24 Nov)**: "Qty" → **Indent qty**, new **PO qty** next to it (latest PO, Swiggy POs summed,
+  PO_Item_Map links used; blank until a PO with item qty; an item missing from the PO = 0), **no Indent column**
+  on screen or in PDF / Excel / CSV (`production_calc.with_po`, `pages_src.production._po_quantities`). The
+  **Batching_Sheet** tab of the Google Sheet is now a running table (header row 1: Delivery date, City, Customer,
+  Delivery point, Parent SKU, Customer SKU Name, Variety, Lot, Lot Size, Spec, Indent qty, PO qty, PO − indent,
+  Updated at; newest date first), written automatically whenever the page shows one delivery date and the
+  numbers changed (that date + those cities replaced, other days kept; `merge_sheet`). The old snapshot button
+  is gone from this page. PO-only items (on the PO, not the indent) are not in it yet.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.

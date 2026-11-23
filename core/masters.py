@@ -253,8 +253,7 @@ class Masters:
 
 
 VARIETY_ALIASES = {"royal gala": "Gala", "red delicious": "RD", "red del": "RD", "granny": "Granny Smith",
-                   "green": "Granny Smith", "honeycrisp": "Honey Crisp", "cripps pink": "Pink Lady",
-                   "washington": "RD"}
+                   "green": "Granny Smith", "honeycrisp": "Honey Crisp", "cripps pink": "Pink Lady"}
 
 
 def name_variety(varieties: list[str], sku_name: str) -> str:
