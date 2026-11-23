@@ -7,7 +7,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-from core import config, dispatch, indents, preprod
+from core import config, dispatch, indents, preprod, regrade
 from core.auth import User
 from core.models import fmt_num, to_number
 from core.schema import DISPATCH_LINES, RETURN_LINES
@@ -98,6 +98,8 @@ def _batched(pdata, day: str, city: str, group: str) -> dict[str, float]:
     out: dict[str, float] = {}
     for (k, _spec), v in preprod.used_saved(pdata[preprod.BATCHING_PLAN], day, city, group).items():
         out[k] = out.get(k, 0.0) + v
+    for k, v in regrade.used_for(regrade.uses(pdata[preprod.RETURN_USE], day), city, group).items():
+        out[k] = out.get(k, 0.0) + v          # MT stock from returns counts as batched
     return out
 
 
@@ -105,9 +107,29 @@ def _per(r) -> float:
     return preprod.need_unit(r["customer_sku_name"], r.get("lot", ""), r.get("parent_sku", ""))[1] or 1.0
 
 
+def _graded(rt: dict, g: pd.DataFrame, iid: str, grades: dict) -> str:
+    """'' (nothing returned), 'todo', 'part' or 'done' for the returns of one indent."""
+    if not rt:
+        return ""
+    per = {preprod._k(n): _per(r) for n, (_, r) in zip(g["customer_sku_name"], g.iterrows())}
+    states = []
+    for key, r in rt["items"].items():
+        ret = to_number(r.get("returned")) * per.get(key, 1.0)
+        if ret <= 0:
+            continue
+        v = grades.get((str(iid), key), {})
+        states.append(regrade.grade_status(ret, v.get("mt"), v.get("gt"), v.get("dump"))[0])
+    if not states:
+        return ""
+    if all(x == regrade.GRADED for x in states):
+        return "done"
+    return "todo" if all(x == regrade.NOT_GRADED for x in states) else "part"
+
+
 def _indent_states(lines: pd.DataFrame, day: str, pdata, ddata) -> dict[str, dict]:
     """Per indent: head + which steps are done (for the pills and Dispatch check)."""
     po = indents.latest_po()
+    grades = regrade.grading_saved(pdata[preprod.RETURN_GRADING], day)
     out = {}
     for iid, g in lines.groupby("indent_id", sort=False):
         r = g.iloc[0]
@@ -118,7 +140,7 @@ def _indent_states(lines: pd.DataFrame, day: str, pdata, ddata) -> dict[str, dic
         keys = {preprod._k(n) for n in g["customer_sku_name"]}
         d = dispatch.dispatched(ddata[DISPATCH_LINES], iid)
         rt = dispatch.returned(ddata[RETURN_LINES], iid)
-        out[iid] = {"city": r["city"], "customer": r["customer"], "store": r["store"], "group": grp,
+        out[iid] = {"graded": _graded(rt, g, iid, grades), "city": r["city"], "customer": r["customer"], "store": r["store"], "group": grp,
                     "lines": g, "frozen": frozen, "took": bool(took), "po": po.get(str(iid), {}).get("po_number", ""),
                     "batched_all": keys and keys <= set(bat), "batched_any": bool(keys & set(bat)),
                     "dispatch": d, "returns": rt, "status": str(r.get("status", ""))}
@@ -256,10 +278,11 @@ def render_returns(user: User) -> None:
     st.caption(f"Dispatched as {s['dispatch']['doc_no']} at {s['dispatch']['at'][11:16]}.")
     if s["returns"]:
         st.success(f"Returns saved; final invoice **{s['returns']['invoice_no']}**. Change and save again to replace.")
-    _hint(2, "Type what the store sent back (or rejected) and why. <b>Billed</b> is worked out for you.")
-    widths = [0.4, 3, 1.2, 1.2, 1.5, 1.8, 1.2]
+    _hint(2, "Type what the store sent back (or rejected) and why, and what it kept as <b>sample</b>. "
+             "<b>Billed</b> is worked out for you. Returned stock is graded next morning on <b>Return grading</b>.")
+    widths = [0.4, 2.8, 1.1, 1.1, 1.3, 1.6, 1.3, 1.1]
     for col, h in zip(st.columns(widths), ["#", "Customer SKU name", "Required", "Dispatched", "Returned (type here)",
-                                           "Reason", "Billed"]):
+                                           "Reason", "Customer sample", "Billed"]):
         col.markdown(f'<div class="bp-h">{h}</div>', unsafe_allow_html=True)
     base = f"rt_{day}_{iid}"
     parents = {preprod._k(n): p for n, p in zip(s["lines"]["customer_sku_name"], s["lines"]["parent_sku"])}
@@ -282,15 +305,20 @@ def render_returns(user: User) -> None:
             why = c[5].selectbox(f"Reason {r['customer_sku_name']}", reasons,
                                  index=reasons.index(o.get("reason")) if o and o.get("reason") in reasons else 0,
                                  key=f"{base}_{i}_why", label_visibility="collapsed", disabled=not ret)
-            billed = disp - ret
+            smp = c[6].number_input(f"Sample {r['customer_sku_name']}", min_value=0.0, step=1.0,
+                                    value=to_number(o.get("sample")) if o else 0.0, key=f"{base}_{i}_smp",
+                                    label_visibility="collapsed",
+                                    help="Kept by the customer for checking: not returned, not billed.")
+            billed = disp - ret - smp
             if billed < -1e-9:
                 over.append(r["customer_sku_name"])
-            c[6].markdown(f"**{fmt_num(max(billed, 0))} {word}**")
+            c[7].markdown(f"**{fmt_num(max(billed, 0))} {word}**")
             items.append({"customer_sku_name": r["customer_sku_name"], "lot": r.get("lot", ""), "dispatched": disp,
                           "returned": ret, "reason": "" if why == "–" or not ret else why, "billed": max(billed, 0),
+                          "sample": smp,
                           "price": to_number(r.get("price")), "parent_sku": parents.get(key, "")})
     if over:
-        st.error("Returned is more than dispatched: " + "; ".join(over))
+        st.error("Returned + sample is more than dispatched: " + "; ".join(over))
     if st.button("Save returns and make final invoice", type="primary", icon=":material/receipt_long:",
                  disabled=bool(over), key=f"{base}_go"):
         try:
@@ -323,12 +351,14 @@ def _dots(s: dict) -> list[str]:
     ret = "g" if s["returns"] else "y" if s["dispatch"] else "e"
     inv = "g" if s["returns"] else "e"
     po = "g" if s["po"] or s["status"].lower() == "frozen" else "e"
-    return ["g", po, pre, bat, dis, ret, inv]
+    grd = {"done": "g", "part": "y", "todo": "r"}.get(s["graded"], "e")
+    return ["g", po, pre, bat, dis, ret, inv, grd]
 
 
 def _note(s: dict) -> str:
     if s["returns"]:
-        return f"Invoice {s['returns']['invoice_no']}"
+        g = {"todo": " · returns to grade", "part": " · grading part done", "done": " · returns graded"}
+        return f"Invoice {s['returns']['invoice_no']}{g.get(s['graded'], '')}"
     if s["dispatch"]:
         return f"Dispatched {s['dispatch']['at'][11:16]} · {s['dispatch']['doc_no']}"
     if s["frozen"]:
@@ -357,7 +387,8 @@ def render_check(user: User) -> None:
     st.markdown('<div class="bp-h" style="margin:.6rem 0 .3rem"><span class="ds-dot g"></span> done &nbsp; '
                 '<span class="ds-dot y"></span> in progress &nbsp; <span class="ds-dot e"></span> not started</div>',
                 unsafe_allow_html=True)
-    heads = ["Customer · indent", "Indent", "PO", "Pre-production", "Batching", "Dispatch", "Returns", "Invoice", "Note"]
+    heads = ["Customer · indent", "Indent", "PO", "Pre-production", "Batching", "Dispatch", "Returns", "Invoice",
+             "Graded", "Note"]
     body = ""
     for iid, s in states.items():
         dots = "".join(f'<td style="text-align:center"><span class="ds-dot {d}"></span></td>' for d in _dots(s))
@@ -387,6 +418,110 @@ def render_check(user: User) -> None:
                      "Batched": f"{fmt_num(bat[key] / _per(r))} {word}" if key in bat else "–",
                      "Dispatched": fmt_num(to_number(d["dispatch_qty"])) if d else "–",
                      "Returned": fmt_num(to_number(rt["returned"])) if rt else "–",
+                     "Sample": fmt_num(to_number(rt.get("sample"))) if rt else "–",
                      "Billed": fmt_num(to_number(rt["billed"])) if rt else "–"})
     st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
     st.caption("Taken out and Batched are for the whole customer on this date (stores clubbed, like batching).")
+
+
+# ------------------------------------------------------------------ Return grading
+
+def render_grading(user: User) -> None:
+    if not _guard(user, "Return grading", "Pick the delivery date whose returns came back. Grade each returned "
+                  "item into MT (reuse for another MT customer), GT and Dump. Nothing waits for this page."):
+        return
+    ctx = _load(user, "rg")
+    if ctx is None:
+        return
+    day, lines, pdata, ddata = ctx
+    states = _indent_states(lines, day, pdata, ddata)
+    grades = regrade.grading_saved(pdata[preprod.RETURN_GRADING], day)
+    nxt = regrade.next_day(day)
+    rows = []
+    for iid, s in states.items():
+        if not s["returns"]:
+            continue
+        g = s["lines"].reset_index(drop=True)
+        by = {preprod._k(n): r for n, (_, r) in zip(g["customer_sku_name"], g.iterrows())}
+        took = preprod.taken(pdata[preprod.PREPROD_ACTUAL], day, s["city"], s["group"])
+        for key, rt in s["returns"]["items"].items():
+            lr = by.get(key)
+            if lr is None:
+                continue
+            unit, per = preprod.need_unit(lr["customer_sku_name"], lr.get("lot", ""), lr.get("parent_sku", ""))
+            ret = round(to_number(rt.get("returned")) * per, 3)
+            if ret <= 0:
+                continue
+            specs = list(took.get(key, {}).get("boxes", {})) or [""]
+            rows.append({"iid": iid, "s": s, "lr": lr, "key": key, "unit": unit, "ret": ret, "specs": specs,
+                         "old": grades.get((str(iid), key), {})})
+    if not rows:
+        st.info(f"No returns saved for deliveries of {day}. Returns are typed on the **Returns** page.")
+        return
+    st.markdown(f"#### Returns of {day} · MT stock goes to Pre-production of {nxt}")
+    _hint(1, "Type <b>MT</b>, <b>GT</b> and <b>Dump</b> in the yellow boxes; together they make up what came back. "
+             "MT stock not used on " + nxt + " goes to GT.")
+    widths = [0.4, 2.4, 2.6, 1.1, 1.1, 1.1, 1.1, 1.1, 1.3]
+    for col, h in zip(st.columns(widths), ["#", "Indent", "Item", "Returned", "Count", "MT", "GT", "Dump", "Status"]):
+        col.markdown(f'<div class="bp-h">{h}</div>', unsafe_allow_html=True)
+    base = f"rg_{day}"
+    out, over, tot = [], [], {"ret": 0.0, "mt": 0.0, "gt": 0.0, "dump": 0.0, "left": 0.0}
+    with st.container(key=f"bpin_rg_{_css(base)}"):
+        for i, x in enumerate(rows):
+            lr, old, w = x["lr"], x["old"], {"pcs": "pcs", "kg": "kg", "punnets": "punnets"}.get(x["unit"], "packs")
+            c = st.columns(widths, vertical_alignment="center")
+            c[0].markdown(f'<span class="bp-ro">{i + 1}</span>', unsafe_allow_html=True)
+            c[1].markdown(f"{x['iid']} · {x['s']['customer']}<div class='bp-h'>{x['s']['store']}</div>",
+                          unsafe_allow_html=True)
+            var = f" · {lr['variety']}" if str(lr.get("variety", "")).strip() else ""
+            c[2].markdown(f"{lr['customer_sku_name']}<div class='bp-h'>{lr.get('parent_sku', '')}{var}</div>",
+                          unsafe_allow_html=True)
+            c[3].markdown(f"**{fmt_num(x['ret'])} {w}**")
+            specs = x["specs"]
+            sp = c[4].selectbox(f"Count {i}", specs, index=specs.index(old["spec"]) if old.get("spec") in specs else 0,
+                                format_func=lambda v: preprod.spec_label(v) if v else "Any",
+                                key=f"{base}_{i}_sp", label_visibility="collapsed", disabled=len(specs) < 2)
+            vals = {}
+            for col, f in zip(c[5:8], ("mt", "gt", "dump")):
+                vals[f] = col.number_input(f"{f} {i}", min_value=0.0, step=1.0, value=old.get(f),
+                                           placeholder=w, key=f"{base}_{i}_{f}", label_visibility="collapsed")
+            stt, left = regrade.grade_status(x["ret"], vals["mt"], vals["gt"], vals["dump"])
+            cls = {"Graded": "bp-ok", "Part graded": "bp-warn"}.get(stt, "bp-bad")
+            txt = f"{fmt_num(left)} left" if stt == regrade.PART else "Over" if stt == "Over" else stt
+            c[8].markdown(f'<span class="bp-chip {cls}">{txt}</span>', unsafe_allow_html=True)
+            if stt == "Over":
+                over.append(lr["customer_sku_name"])
+            tot["ret"] += x["ret"]
+            tot["left"] += max(left, 0)
+            for f in ("mt", "gt", "dump"):
+                tot[f] += vals[f] or 0
+            if any(v is not None for v in vals.values()):
+                changed = any((vals[f] or 0) != (old.get(f) or 0) for f in vals) or sp != old.get("spec", "") \
+                    or not old
+                if changed:
+                    out.append({"indent_id": x["iid"], "city": x["s"]["city"], "customer": x["s"]["customer"],
+                                "customer_sku_name": lr["customer_sku_name"], "parent_sku": lr.get("parent_sku", ""),
+                                "variety": lr.get("variety", ""), "unit": x["unit"], "spec": sp,
+                                "returned": x["ret"], **{f: "" if vals[f] is None else vals[f] for f in vals}})
+    tc = st.columns(5)
+    for col, (k, v, colr) in zip(tc, [("Returned", tot["ret"], "#31333F"), ("MT (reuse)", tot["mt"], "#1E6B3C"),
+                                      ("GT", tot["gt"], "#31333F"), ("Dump", tot["dump"], "#A32018"),
+                                      ("Still to grade", tot["left"], "#7A4F00")]):
+        col.markdown(f'<div class="bp-tile"><div class="k">{k}</div><div class="v" style="color:{colr}">'
+                     f'{fmt_num(v)}</div></div>', unsafe_allow_html=True)
+    if over:
+        st.error("MT + GT + Dump is more than what came back: " + "; ".join(over))
+    if st.button("Save grading", type="primary", icon=":material/save:", disabled=bool(over or not out),
+                 key=f"{base}_save"):
+        try:
+            n = regrade.save_grading(get_backend(), day, out, user.email)
+        except SheetError as e:
+            st.error(f"Not saved. {e}")
+            return
+        common.flash("success", f"Grading saved ({n} item(s)). MT stock is ready for Pre-production of {nxt}.")
+        st.rerun()
+    pool_ = regrade.pool(pdata[preprod.RETURN_GRADING], pdata[preprod.BATCHING_PLAN], nxt)
+    summ = regrade.pool_summary(pool_)
+    st.markdown(f"##### MT stock for {nxt}")
+    st.caption(" · ".join(summ) + " (graded returns + batching MT grade of " + day + ")" if summ
+               else "Nothing saved yet.")

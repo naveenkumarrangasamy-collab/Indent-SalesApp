@@ -539,9 +539,9 @@ def make_backend():
     if seed.is_dir():
         import shutil
         from core.schema import (ACCESS, BATCHING_MASTER, BATCHING_PLAN, DISPATCH_LINES, OUTPUT_TABS,
-                                 PO_ITEM_MAP, PREPROD_ACTUAL, PREPROD_FREEZE, RETURN_LINES)
+                                 PO_ITEM_MAP, PREPROD_ACTUAL, PREPROD_FREEZE, RETURN_LINES, RETURN_GRADING, RETURN_USE)
         keep = set(OUTPUT_TABS) | {ACCESS, PO_ITEM_MAP, BATCHING_MASTER, PREPROD_ACTUAL, PREPROD_FREEZE,
-                                   BATCHING_PLAN, DISPATCH_LINES, RETURN_LINES}
+                                   BATCHING_PLAN, DISPATCH_LINES, RETURN_LINES, RETURN_GRADING, RETURN_USE}
         LOCAL_DATA_DIR.mkdir(parents=True, exist_ok=True)
         seed_names = {f.name for f in seed.glob("*.csv")}
         for f in seed.glob("*.csv"):

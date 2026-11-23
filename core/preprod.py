@@ -26,7 +26,8 @@ import pandas as pd
 from core import config
 from core.lots import lot_size
 from core.models import fmt_num, to_number
-from core.schema import BATCHING_MASTER, BATCHING_PLAN, PREPROD_ACTUAL, PREPROD_FREEZE
+from core.schema import (BATCHING_MASTER, BATCHING_PLAN, PREPROD_ACTUAL, PREPROD_FREEZE, RETURN_GRADING,
+                         RETURN_USE)
 
 ANY = "Any"
 ANY_SIZE = "Any size"     # Blueberry: one tray box, no per-mm split
@@ -308,23 +309,24 @@ ITEM = "_item"     # Batching_Plan row that carries one item's GT Qty and Dump (
 
 
 def item_saved(plan: pd.DataFrame | None, day: str, city: str, group: str) -> dict[str, tuple]:
-    """{sku key: (gt_qty, dump, mt_grade)} - the last saved values per item (None = not entered)."""
+    """{sku key: (gt_qty, dump, mt_grade, sample)} - the last saved values per item (None = not entered)."""
     df = _scope(_norm(plan, ["delivery_date", "city", "group", "customer_sku_name", "spec", "gt_qty", "dump",
-                             "mt_grade"]), day, city, group)
+                             "mt_grade", "sample"]), day, city, group)
     out = {}
     for r in df.to_dict("records"):
         if _c(r["spec"]) == ITEM:
-            vals = [_c(r.get(c)) for c in ("gt_qty", "dump", "mt_grade")]
+            vals = [_c(r.get(c)) for c in ("gt_qty", "dump", "mt_grade", "sample")]
             out[_k(r["customer_sku_name"])] = tuple(to_number(v) if v else None for v in vals)
     return out
 
 
-def back_to_box(left: float | None, gt: float | None, dump: float | None, mt: float | None = None) -> float | None:
-    """Left over = taken out - used; MT Grade, GT Qty and Dump come off it; the rest goes back to the box.
+def back_to_box(left: float | None, gt: float | None, dump: float | None, mt: float | None = None,
+                sample: float | None = None) -> float | None:
+    """Left over = taken out - used; MT Grade, GT Qty, Dump and Sample come off it; the rest goes back to the box.
     None when the left over is not known (sizes that are not counts, no box kg)."""
     if left is None:
         return None
-    return round(left - (gt or 0) - (dump or 0) - (mt or 0), 3)
+    return round(left - (gt or 0) - (dump or 0) - (mt or 0) - (sample or 0), 3)
 
 
 # ------------------------------------------------------------------ statuses
@@ -353,7 +355,8 @@ def _read(tab: str) -> pd.DataFrame:
 
 
 def read_all() -> dict[str, pd.DataFrame]:
-    return {t: _read(t) for t in (BATCHING_MASTER, PREPROD_ACTUAL, PREPROD_FREEZE, BATCHING_PLAN)}
+    return {t: _read(t) for t in (BATCHING_MASTER, PREPROD_ACTUAL, PREPROD_FREEZE, BATCHING_PLAN, RETURN_GRADING,
+                                  RETURN_USE)}
 
 
 def save_round(backend, day: str, city: str, group: str, entries: list[dict], reason: str, user: str) -> int:

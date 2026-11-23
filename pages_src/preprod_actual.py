@@ -7,7 +7,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-from core import masters, preprod
+from core import masters, preprod, regrade
 from core.auth import User
 from core.models import fmt_num
 from core.sheets import SheetError, get_backend
@@ -117,6 +117,10 @@ PA_CSS = """<style>
 [class*="st-key-pacnt_has"] [data-testid="stNumberInputContainer"]{border:2px solid #3D9A6A !important;background:#F2FAF5 !important;border-radius:8px}
 [class*="st-key-pacnt_has"] [data-testid="stNumberInputContainer"] *{background-color:transparent !important}
 .pa-taken{font-size:.78rem;color:#1E6B3C;margin-top:-.4rem}
+[class*="st-key-paret"] [data-testid="stNumberInputContainer"]{background:#FFFDF0 !important;border:2px solid #E8B10A !important;border-radius:8px}
+[class*="st-key-paret"] [data-testid="stNumberInputContainer"] *{background-color:transparent !important}
+[class*="st-key-paret"] [data-testid="stNumberInputStepUp"],[class*="st-key-paret"] [data-testid="stNumberInputStepDown"]{display:none}
+.pa-ret{font-size:.8rem;color:#1E6B3C}
 </style>"""
 
 
@@ -132,6 +136,9 @@ def _actual_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame,
     hist = preprod.rounds(data[preprod.PREPROD_ACTUAL], day, city, group)
     nonce = st.session_state.get("pa_nonce", 0)
     base = f"pa_{nonce}_{day}_{city}_{group}"
+    pool_ = regrade.pool(data[preprod.RETURN_GRADING], data[preprod.BATCHING_PLAN], day)
+    uses_ = regrade.uses(data[preprod.RETURN_USE], day)
+    use_changes, use_over = [], []
 
     st.markdown(PA_CSS, unsafe_allow_html=True)
     head = f"#### {group} · {city}"
@@ -153,8 +160,32 @@ def _actual_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame,
             c = st.columns([3.2, 2, 5.2, 1.8])
             c[0].markdown(f"**{i + 1}. {r['customer_sku_name']}**")
             var = f"{r['variety']} · " if r["variety"] else ""
-            c[0].caption(f"{var}{fmt_num(r['qty'])} × {fmt_num(r['per'])} = **{fmt_num(r['need'])} "
-                         f"{_unit_word(unit)}** needed")
+            w = _unit_word(unit)
+            c[0].caption(f"{var}{fmt_num(r['qty'])} × {fmt_num(r['per'])} = **{fmt_num(r['need'])} {w}** required")
+            pkey = regrade.pool_key(city, r["parent_sku"], r["variety"], unit)
+            me = (preprod._k(city), preprod._k(group), key)
+            avail = regrade.available(pool_, uses_, pkey, me)
+            saved_use = uses_.get(me, {}).get("qty", 0.0)
+            use = saved_use
+            if frozen and saved_use:
+                c[0].markdown(f'<div class="pa-ret">{fmt_num(saved_use)} {w} from returns (MT stock)</div>',
+                              unsafe_allow_html=True)
+            elif not frozen and (avail or saved_use):
+                with c[0].container(key=f"paret_{_css(base)}_{i}"):
+                    use = st.number_input(f"Use from returns · {fmt_num(avail)} {w} available", min_value=0.0,
+                                          max_value=float(max(avail, saved_use)), value=float(saved_use), step=1.0,
+                                          key=f"{base}_{i}_ret",
+                                          help="MT stock: graded returns + batching MT grade of the day before. "
+                                               "Not used today, it goes to GT.")
+                c[0].markdown(f'<div class="pa-ret">{regrade.pool_text(pool_, pkey)}</div>', unsafe_allow_html=True)
+                if use > avail + 1e-9:
+                    use_over.append(r["customer_sku_name"])
+                if abs(use - saved_use) > 1e-9:
+                    use_changes.append({"customer_sku_name": r["customer_sku_name"], "parent_sku": r["parent_sku"],
+                                        "variety": r["variety"], "unit": unit, "qty": use})
+            need_box = max(round(r["need"] - use, 3), 0.0)
+            if use:
+                c[0].caption(f"From boxes: **{fmt_num(need_box)} {w}**")
             countries = list(opts)
             fixed = t["country"] if t["boxes"] else ""
             if fixed and fixed not in countries:
@@ -164,7 +195,7 @@ def _actual_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame,
                                      help="Fixed after the first take-out." if fixed else None)
             opt = opts.get(country, {"spec": [], "unit": "Box", "box_kg": None})
             kg = f" · {fmt_num(opt['box_kg'])} kg {opt['unit'].lower()}" if opt.get("box_kg") else ""
-            c[1].caption(f"Suggested: {preprod.suggestion(r['need'], unit, opt)}{kg}")
+            c[1].caption(f"Suggested: {preprod.suggestion(need_box, unit, opt) if need_box else 'none (returns cover it)'}{kg}")
             if opt.get("source"):
                 c[1].caption(f"From: {opt['source']}")
             specs = list(opt["spec"]) + [s for s in t["boxes"] if s not in opt["spec"]]
@@ -191,7 +222,8 @@ def _actual_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame,
                         entries.append({"customer_sku_name": r["customer_sku_name"], "parent_sku": r["parent_sku"],
                                         "country": country, "spec": s, "boxes": int(add)})
             hold = _hold(t["boxes"], unit, opt)
-            status = preprod.actual_status(r["need"], hold, sum(t["boxes"].values()))
+            status = ("Enough" if need_box <= 1e-9 else
+                      preprod.actual_status(need_box, hold, sum(t["boxes"].values())))
             n_enough += status == "Enough"
             n_short += status in ("Not enough", "Not started")
             c[3].markdown(f"{ICON.get(status, '')} **{status}**")
@@ -203,24 +235,27 @@ def _actual_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame,
         c = st.columns([2, 2, 2, 3])
         reason = c[0].selectbox("Reason", preprod.REASONS, index=0 if hist.empty else 1, key=f"{base}_reason",
                                 label_visibility="collapsed")
+        if use_over:
+            st.error("More than the MT stock available: " + "; ".join(use_over))
         if c[1].button(f"Save take-out · round {len(hist) + 1}", type="primary", icon=":material/outbox:",
-                       disabled=not entries, width="stretch", key=f"{base}_save"):
+                       disabled=not (entries or use_changes) or bool(use_over), width="stretch", key=f"{base}_save"):
             try:
                 n = preprod.save_round(get_backend(), day, city, group, entries, reason, user.email)
+                u = regrade.save_uses(get_backend(), day, city, group, use_changes, user.email)
             except SheetError as e:
                 st.error(f"Not saved. {e}")
                 return
             st.session_state["pa_nonce"] = nonce + 1
-            common.flash("success", f"Take-out saved ({n} line(s)).")
+            common.flash("success", f"Take-out saved ({n} line(s)" + (f", {u} from returns" if u else "") + ").")
             st.rerun()
-        with c[2].popover("Freeze", icon=":material/lock:", disabled=bool(entries)):
+        with c[2].popover("Freeze", icon=":material/lock:", disabled=bool(entries or use_changes)):
             st.markdown(f"**Freeze {group}?** No more take-outs after this; it moves to the Batching plan.")
             if n_short:
                 st.warning(f"{n_short} item(s) are short or not started.")
             if st.button("Yes, freeze", type="primary", key=f"{base}_frz"):
                 _freeze(day, city, group, True, user)
-        if entries:
-            c[3].caption("Boxes typed above are not saved yet: save the take-out before freezing.")
+        if entries or use_changes:
+            c[3].caption("Boxes / returns typed above are not saved yet: save the take-out before freezing.")
     else:
         with st.popover("Unfreeze", icon=":material/lock_open:"):
             st.markdown("Unfreeze lets more boxes be taken out for this customer.")
@@ -307,6 +342,7 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
     took = preprod.taken(data[preprod.PREPROD_ACTUAL], day, city, group)
     saved = preprod.used_saved(data[preprod.BATCHING_PLAN], day, city, group)
     saved_item = preprod.item_saved(data[preprod.BATCHING_PLAN], day, city, group)
+    ret_used = regrade.used_for(regrade.uses(data[preprod.RETURN_USE], day), city, group)
     st.markdown(BP_CSS, unsafe_allow_html=True)
     st.markdown(f"#### {group} · {city}")
     base = f"{day}_{city}_{group}"
@@ -324,6 +360,10 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
     if not meta:
         st.info("No boxes were taken out for this customer.")
         return
+    if ret_used:
+        st.caption("MT stock from returns used in Pre-production counts as stock in hand: "
+                   + ", ".join(f"{rows.loc[i, 'customer_sku_name']} {fmt_num(ret_used[preprod._k(n)])}"
+                               for i, n in rows["customer_sku_name"].items() if preprod._k(n) in ret_used))
 
     # ---- step 1: used per count (yellow boxes)
     _hint(1, "Type the good pieces (or kg) used in each <b>yellow box</b>. The grey columns are filled in for you.")
@@ -372,8 +412,9 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
 
     # ---- step 2: per item
     st.markdown("##### Per item")
-    states = [preprod.batch_status(r["need"], used_by.get(i, 0.0), any_by.get(i, False), pct)
-              for i, r in rows.iterrows()]
+    ret_by = {i: ret_used.get(preprod._k(r["customer_sku_name"]), 0.0) for i, r in rows.iterrows()}
+    states = [preprod.batch_status(r["need"], used_by.get(i, 0.0) + ret_by[i], any_by.get(i, False) or ret_by[i] > 0,
+                                   pct) for i, r in rows.iterrows()]
     tc = st.columns(4)
     for col, (k, v, colr) in zip(tc, [("Items", len(rows), "#31333F"),
                                       ("Covered", states.count("Covered"), "#1E6B3C"),
@@ -382,17 +423,18 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
                                        "#A32018")]):
         col.markdown(f'<div class="bp-tile"><div class="k">{k}</div><div class="v" style="color:{colr}">{v}</div>'
                      '</div>', unsafe_allow_html=True)
-    _hint(2, "For the left over, type the <b>MT Grade</b>, <b>GT Qty</b> and <b>Dump</b> (unusable). "
+    _hint(2, "For the left over, type the <b>MT Grade</b>, <b>GT Qty</b>, <b>Dump</b> (unusable) and <b>Sample</b>. "
              "<b>Back to box</b> is worked out for you.")
     blocked, too_much, items_out = [], [], []
     for i, r in rows.iterrows():
         key = preprod._k(r["customer_sku_name"])
         w = _unit_word(r["unit"])
-        used, st_ = used_by.get(i, 0.0), states[i]
+        used, st_ = used_by.get(i, 0.0) + ret_by[i], states[i]
         if st_ == "Over limit":
             blocked.append(r["customer_sku_name"])
         extra = used - r["need"]
         left = left_by.get(i) if any_by.get(i) and left_known[i] else None
+        shown_used = any_by.get(i) or ret_by[i] > 0
         pct_done = min(used / r["need"] * 100, 100) if r["need"] else 0
         bar = "r" if st_ == "Over limit" else "w" if st_ == "Short" else ""
         with st.container(border=True, key=f"bpin_item_{css_key}_{i}"):
@@ -401,34 +443,40 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
                             f'style="width:{pct_done:.0f}%"></div></div>', unsafe_allow_html=True)
             top[1].markdown(f'<div style="text-align:right"><span class="bp-chip {CHIP.get(st_, "bp-bad")}">{st_}'
                             '</span></div>', unsafe_allow_html=True)
-            c = st.columns(8, vertical_alignment="bottom")
+            c = st.columns(9, vertical_alignment="bottom")
             c[0].markdown(f'<div class="bp-h">Required</div><b>{fmt_num(r["need"])} {w}</b><div class="bp-h">max '
                           f'{fmt_num(preprod.max_allowed(r["need"], pct))}</div>', unsafe_allow_html=True)
-            _cell(c[1], "Used", f"{fmt_num(used)} {w}" if any_by.get(i) else "–")
-            _cell(c[2], "Extra / short", "–" if not any_by.get(i) else
+            ret_txt = f'<div class="bp-h">incl. {fmt_num(ret_by[i])} returns</div>' if ret_by[i] else ""
+            c[1].markdown(f'<div class="bp-h">Used</div><b>{f"{fmt_num(used)} {w}" if shown_used else "–"}</b>'
+                          f'{ret_txt}', unsafe_allow_html=True)
+            _cell(c[2], "Extra / short", "–" if not shown_used else
                   f"+{fmt_num(extra)}" if extra > 0 else f"{fmt_num(-extra)} short" if extra < 0 else "0")
             _cell(c[3], "Left over", f"{fmt_num(left)} {w}" if left is not None else "–")
-            og, od, om = saved_item.get(key, (None, None, None))
+            og, od, om, osm = saved_item.get(key, (None, None, None, None))
             mt = c[4].number_input("MT Grade", min_value=0.0, step=1.0, value=om, placeholder=w,
                                    key=f"bp_mt_{base}_{i}")
             gt = c[5].number_input("GT Qty", min_value=0.0, step=1.0, value=og, placeholder=w,
                                    key=f"bp_gt_{base}_{i}")
             dump = c[6].number_input("Dump", min_value=0.0, step=1.0, value=od, placeholder=w,
                                      key=f"bp_dump_{base}_{i}")
-            back = preprod.back_to_box(left, gt, dump, mt)
+            smp = c[7].number_input("Sample", min_value=0.0, step=1.0, value=osm, placeholder=w,
+                                    key=f"bp_smp_{base}_{i}")
+            back = preprod.back_to_box(left, gt, dump, mt, smp)
             if back is not None and back < -1e-9:
                 too_much.append(r["customer_sku_name"])
-            _cell(c[7], "Back to box", f"{fmt_num(back)} {w}" if back is not None else "–")
-        if gt is not None or dump is not None or mt is not None:
+            _cell(c[8], "Back to box", f"{fmt_num(back)} {w}" if back is not None else "–")
+        if any(v is not None for v in (gt, dump, mt, smp)):
             items_out.append({"customer_sku_name": r["customer_sku_name"], "country": "", "spec": preprod.ITEM,
                               "boxes": "", "used": "", "unit": r["unit"], "mt_grade": "" if mt is None else mt,
-                              "gt_qty": "" if gt is None else gt, "dump": "" if dump is None else dump})
+                              "gt_qty": "" if gt is None else gt, "dump": "" if dump is None else dump,
+                              "sample": "" if smp is None else smp, "parent_sku": r["parent_sku"],
+                              "variety": r["variety"]})
     if over_box:
         st.error("Used is more than the boxes hold: " + "; ".join(over_box))
     if blocked:
         st.error(f"Over the {fmt_num(pct)} % limit: " + "; ".join(blocked) + ". Fix it to save.")
     if too_much:
-        st.error("MT Grade + GT Qty + Dump is more than the left over: " + "; ".join(too_much))
+        st.error("MT Grade + GT Qty + Dump + Sample is more than the left over: " + "; ".join(too_much))
     if st.button("Save batching plan", type="primary", icon=":material/save:",
                  disabled=bool(blocked or over_box or too_much), key=f"bp_save_{base}"):
         out = []

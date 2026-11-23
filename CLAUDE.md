@@ -531,6 +531,23 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Batching plan per item** also has **MT Grade** (typed); Back to box = left over − MT Grade − GT Qty − Dump;
   each card = name + status on top, 8 equal columns under it.
 
+### 23 Nov night: Return grading + MT stock (user-approved video/preview; OWNERS ONLY, trial)
+
+- **Return grading** (`/return-grading`, Dispatch menu; `pages_src/dispatch.render_grading`, logic `core/regrade.py`,
+  tests `tests/test_regrade.py`): pick the delivery date whose returns came back; one row per returned item (in pcs /
+  kg / punnets = returned packs × per pack), Count (the counts taken out for it, else Any), yellow **MT / GT / Dump**;
+  status Graded / n left / Not graded / Over (save blocked when more than returned). Tab `Return_Grading`.
+- **MT stock pool** for Pre-production of day D = MT graded from the returns of D − 1 + Batching plan **MT Grade**
+  of D − 1, by city + parent + variety (Apple only) + unit, **not by customer**. Not used on D → goes to GT (just not
+  counted later). GT / Dump / Sample are only recorded for now.
+- **Pre-production actual**: per SKU a yellow **Use from returns · n available** (available = pool − what other
+  SKUs/customers used that day); From boxes = required − use; suggestion and status use it; saved with the take-out
+  (tab `Return_Use`, last row per day + group + SKU). Never blocks: 0 available → take boxes as usual.
+- **Batching plan**: returns used count as stock in hand (Used "incl. n returns"); per item now 9 columns with
+  **Sample**; Back to box = left over − MT − GT − Dump − Sample; item rows also save parent_sku / variety (pool).
+- **Returns**: **Customer sample** column (kept by the customer, not billed): Billed = dispatched − returned − sample.
+- **Dispatch check**: new **Graded** dot; Batched on Dispatch includes returns used.
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.

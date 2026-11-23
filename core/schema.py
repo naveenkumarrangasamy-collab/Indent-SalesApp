@@ -27,6 +27,8 @@ PREPROD_ACTUAL = "Preprod_Actual"    # boxes taken out of storage, one row per S
 PREPROD_FREEZE = "Preprod_Freeze"    # customer frozen / unfrozen for a day (last row wins)
 DISPATCH_LINES = "Dispatch_Lines"    # what was loaded per indent + SKU (Delivery Order); last doc per indent wins
 RETURN_LINES = "Return_Lines"        # returned per indent + SKU at the store (final invoice); last save wins
+RETURN_GRADING = "Return_Grading"    # returns of day D graded MT / GT / Dump (last row per indent + SKU wins)
+RETURN_USE = "Return_Use"            # MT stock used per SKU in Pre-production (last row per day + group + SKU)
 BATCHING_PLAN = "Batching_Plan"      # pieces (kg) used from those boxes (last row per SKU + spec wins)
 
 TABS: dict[str, list[str]] = {
@@ -66,12 +68,17 @@ TABS: dict[str, list[str]] = {
                      "parent_sku", "country", "spec", "boxes", "reason"],
     PREPROD_FREEZE: ["delivery_date", "city", "group", "action", "at", "by"],
     BATCHING_PLAN: ["saved_at", "saved_by", "delivery_date", "city", "group", "customer_sku_name", "country",
-                    "spec", "boxes", "used", "unit", "gt_qty", "dump", "mt_grade"],
+                    "spec", "boxes", "used", "unit", "gt_qty", "dump", "mt_grade", "sample", "parent_sku",
+                    "variety"],
     DISPATCH_LINES: ["saved_at", "saved_by", "doc_no", "indent_id", "delivery_date", "city", "customer", "store",
                      "customer_sku_name", "lot", "indent_qty", "dispatch_qty", "price", "reason", "vehicle",
                      "driver", "dispatched_at"],
     RETURN_LINES: ["saved_at", "saved_by", "invoice_no", "indent_id", "doc_no", "customer_sku_name", "lot",
-                   "dispatched", "returned", "reason", "billed", "price"],
+                   "dispatched", "returned", "reason", "billed", "price", "sample"],
+    RETURN_GRADING: ["saved_at", "saved_by", "return_date", "pool_date", "indent_id", "city", "customer",
+                     "customer_sku_name", "parent_sku", "variety", "unit", "spec", "returned", "mt", "gt", "dump"],
+    RETURN_USE: ["saved_at", "saved_by", "use_date", "city", "group", "customer_sku_name", "parent_sku", "variety",
+                 "unit", "qty"],
 }
 
 MASTER_TABS = [SKU_MAP, STORE_MAP, VARIETIES, ACCESS]

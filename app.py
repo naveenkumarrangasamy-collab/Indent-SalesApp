@@ -87,7 +87,7 @@ _views_once()
 # address this user has no page for goes to his first page (no "Page not found", 21 Nov)
 GATE_PATHS = ("home", "indent", "bulk-indents", "delivery-times", "upload-po", "tracker", "indents", "production",
               "batching", "city-sku-report", "access", "preprod-actual", "batching-plan",
-              "dispatch", "returns", "dispatch-check")
+              "dispatch", "returns", "dispatch-check", "return-grading")
 user = common.current_user()
 common.flush_cookie()
 
@@ -135,6 +135,8 @@ if user.is_owner:
                                url_path="returns")
     pages["dcheck"] = st.Page(lambda: dispatch_page.render_check(user), title="Dispatch check", icon="🧭",
                               url_path="dispatch-check")
+    pages["grading"] = st.Page(lambda: dispatch_page.render_grading(user), title="Return grading", icon="🧺",
+                               url_path="return-grading")
 common.PAGES.clear()
 common.PAGES.update(pages)
 
@@ -146,13 +148,15 @@ if sees_production:   # owner and warehouse; sales do not get production or the 
     sections["Production"] = [pages["production"], pages["batching"], pages["tracker"]]
 if user.is_owner:
     sections["Pre-production (owners, trial)"] = [pages["preprod"], pages["plan"]]
-    sections["Dispatch (owners, trial)"] = [pages["dispatch"], pages["returns"], pages["dcheck"]]
+    sections["Dispatch (owners, trial)"] = [pages["dispatch"], pages["returns"], pages["grading"],
+                                                 pages["dcheck"]]
     sections["Admin"] = ([pages["access"]] if "access" in pages else []) + [pages["times"]]
 landing = pages["home"] if makes_indents else pages["production"]
 URLS = {"home": "home", "indent": "indent", "my_indents": "indents", "po": "upload-po",
         "tracker": "tracker", "production": "production", "batching": "batching", "access": "access",
         "times": "delivery-times", "preprod": "preprod-actual", "plan": "batching-plan",
-        "dispatch": "dispatch", "returns": "returns", "dcheck": "dispatch-check"}
+        "dispatch": "dispatch", "returns": "returns", "dcheck": "dispatch-check",
+        "grading": "return-grading"}
 in_menu = [pg for group in sections.values() for pg in group]
 shown = {URLS[k] for k, pg in pages.items() if any(pg is q for q in in_menu)}   # addresses the menu already uses
 _away = [x for x in ("signin", "login") + GATE_PATHS if x not in shown]
