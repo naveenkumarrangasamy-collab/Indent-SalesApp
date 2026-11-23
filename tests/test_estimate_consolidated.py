@@ -71,6 +71,8 @@ def test_batching_indent_and_po_qty():
     assert st["3PC - Green Kiwi|Zepto"] == "PO higher" and st["2PC - Kiwi Sungold|Zepto"] == "Not on PO"
     assert st["1PC - Avocado|Zepto"] == "PO lower" and st["1PC - Hass|Zepto"] == "Match"
     assert st["3PC - Green Kiwi|Swiggy"] == "No PO yet" and st["1Kg - Plum|Zepto"] == "Not on indent"
+    plum = v[v["Customer SKU Name"] == "1Kg - Plum"].iloc[0]
+    assert plum["Indent qty"] == 0 and plum["PO qty"] == 3 and plum["Difference"] == 3
     rows = sheet_rows(v, "2026-11-25", "now")
     hi = next(r for r in rows if r[5] == "3PC - Green Kiwi" and r[2] == "Zepto")
     assert hi[10:14] == [10, 12, 2, "PO higher"]

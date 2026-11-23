@@ -493,7 +493,7 @@ def with_po(bat: pd.DataFrame, po_qty: dict, po_indents: set, extras: list[dict]
     """Batching table -> 'Qty' becomes 'Indent qty', then 'PO qty', 'Difference' (PO − indent) and
     'Status'; no 'Indent' column. po_qty {(indent_id, sku key): qty or None = not on that PO};
     po_indents = indents that have a PO with qty per item. Status: No PO yet / Match / PO lower /
-    PO higher / Not on PO (blank PO qty, never 0) / Not on indent (`extras`: PO-only items, rows with
+    PO higher / Not on PO (blank PO qty, never 0) / Not on indent (indent qty 0; `extras`: PO-only items, rows with
     City, Customer, Delivery point, Customer SKU Name, PO qty)."""
     out = bat.copy()
     pos, diffs, stats = [], [], []
@@ -520,7 +520,7 @@ def with_po(bat: pd.DataFrame, po_qty: dict, po_indents: set, extras: list[dict]
     out["Indent qty"] = out["Indent qty"].astype(object)
     rows = [{**{c: "" for c in out.columns}, "City": e["City"], "Customer": e["Customer"],
              "Delivery point": e["Delivery point"], "Customer SKU Name": e["Customer SKU Name"],
-             "Indent qty": None, "PO qty": _n(e["PO qty"]), "Difference": _n(e["PO qty"]),
+             "Indent qty": 0, "PO qty": _n(e["PO qty"]), "Difference": _n(e["PO qty"]),
              "Status": NOT_ON_INDENT} for e in (extras or [])]
     if rows:
         out = pd.concat([out, pd.DataFrame(rows, columns=out.columns).astype(object)], ignore_index=True)

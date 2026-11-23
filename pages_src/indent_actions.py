@@ -91,24 +91,29 @@ def _po_dialog(indent_id: str, user: User) -> None:
                 f"({info['pos']} received so far). Press **End of POs** after the last one; the indent "
                 "is then frozen and the differences are shown.", icon=":material/library_add:")
     pre = _prefill(indent_id)
-    no_po = cur.header.customer.strip().casefold() in config.no_po_customers()
+    can_freeze = cur.header.customer.strip().casefold() in config.no_po_customers() and not multi and not replacing
+    how = st.selectbox("PO", ["Freeze", "Upload PO"], key=f"po_how_{indent_id}") if can_freeze else "Upload PO"
+    no_po = how == "Freeze"
     if no_po:
-        st.info(f"{cur.header.customer} sends no PO. The quantities below start from the indent: change only "
-                "what differs, then press **Freeze**. What you freeze is the PO (unchanged = same as the "
-                "indent). A screenshot or PDF is optional.", icon=":material/lock:")
+        st.info("No PO file needed. The quantities below start from the indent: change only what differs, "
+                "then press **Freeze**. What you freeze is the PO (unchanged = same as the indent).",
+                icon=":material/lock:")
         if not pre.get("po_qty") and "init" not in pre:
             pre["po_qty"] = {x.customer_sku_name: float(x.qty) for x in cur.lines}
 
     # 1. the PO file (read automatically when it is a text PDF)
     c = st.columns([1, 1.6])
-    up = c[1].file_uploader("Screenshot or PDF (optional)" if no_po else "PO file (PDF)",
-                            type=["pdf"] + (["png", "jpg", "jpeg", "webp"] if no_po else []),
-                            key=f"po_file_{indent_id}")
     files = st.session_state.setdefault("po_files", {})
-    if up is not None:
-        files[indent_id] = (up.name, up.getvalue())
-    elif indent_id in files:
-        c[1].caption(f"Using **{files[indent_id][0]}** chosen earlier (choose another file to replace it).")
+    if no_po:
+        files.pop(indent_id, None)
+    else:
+        up = c[1].file_uploader("PO file (PDF or screenshot)" if can_freeze else "PO file (PDF)",
+                                type=["pdf"] + (["png", "jpg", "jpeg", "webp"] if can_freeze else []),
+                                key=f"po_file_{indent_id}")
+        if up is not None:
+            files[indent_id] = (up.name, up.getvalue())
+        elif indent_id in files:
+            c[1].caption(f"Using **{files[indent_id][0]}** chosen earlier (choose another file to replace it).")
     file_name, file_bytes = files.get(indent_id, (None, None))
     is_pdf = bool(file_name) and file_name.casefold().endswith(".pdf")
     read = _read(file_bytes) if file_bytes and is_pdf else None
@@ -127,7 +132,7 @@ def _po_dialog(indent_id: str, user: User) -> None:
     if read and read.lines:
         this_po, learned = _read_table(cur, read, po_number, indent_id, user)
     else:
-        if read is not None and not no_po:
+        if read is not None:
             st.warning(" ".join(read.checks) or "No item lines found in this PDF: type the quantities.")
         this_po = _manual_table(cur, pre, indent_id, multi, so_far)
     tot_i = sum(float(x.qty) for x in cur.lines)
@@ -148,11 +153,10 @@ def _po_dialog(indent_id: str, user: User) -> None:
     mail_again = replacing and st.checkbox("E-mail the replaced PO again", value=False, key=f"po_mail_{indent_id}")
     b = st.columns(3 if multi else 2)
     label = "Replace PO" if replacing else "Add this PO" if multi else ("Upload with differences" if diffs else "Upload PO")
-    if no_po and not replacing and not multi:
+    if no_po:
         label = "Freeze with differences" if diffs else "Freeze"
-    if no_po and not file_name:
         file_name = "No PO file (frozen in the app)"
-    need = [w for w, ok in (("choose the PO PDF", file_bytes or no_po), ("type the PO qty of at least one item",
+    need = [w for w, ok in (("choose the PO file", file_bytes or no_po), ("type the PO qty of at least one item",
                                                                 this_po)) if not ok]
     if need:
         st.caption("To upload: " + " and ".join(need) + ".")
@@ -170,6 +174,8 @@ def _po_dialog(indent_id: str, user: User) -> None:
         try:
             with st.spinner("Saving the PO…"):
                 _learn(learned)
+                this_po, note_new = _name_new_items(backend, cur, this_po, user)
+                note += note_new
                 v, frozen_now = indents.freeze(indent_id, cur.version, file_name, user.email, po_file_link=link,
                                                po_qty=this_po, po_number=po_number.strip(),
                                                po_has_extra=any(k not in {x.customer_sku_name for x in cur.lines}
@@ -202,6 +208,38 @@ def _po_dialog(indent_id: str, user: User) -> None:
     if b[-1].button("Cancel", width="stretch"):
         _close()
         st.rerun()
+
+
+def _name_new_items(backend, cur, this_po: dict, user: User) -> tuple[dict, str]:
+    """24 Nov: an item on the PO that is not on the indent gets a name in our style ('Plum - 2 pcs' ->
+    '2PC - Plum') and, when its fruit is known, is added to the master (All Cux City + New) so it can
+    be picked on later indents. The PO is saved either way."""
+    from core import master_add, masters
+    on_indent = {" ".join(x.customer_sku_name.split()).casefold() for x in cur.lines}
+    out, add = {}, []
+    try:
+        m = masters.load_masters()
+        parents = sorted({str(p) for p in m.sku["Parent SKU"] if str(p).strip()})
+    except Exception:  # noqa: BLE001 - naming is a convenience; never block the PO
+        m, parents = None, []
+    for k, v in this_po.items():
+        if " ".join(str(k).split()).casefold() in on_indent:
+            out[k] = v
+            continue
+        name = master_add.new_sku_name(str(k)) or str(k)
+        out[name] = out.get(name, 0.0) + v
+        parent = master_add.guess_parent(name, parents) if parents else ""
+        if m is not None and parent and not m.parent_of(cur.header.city, cur.header.customer, name):
+            add.append({"Parent SKU": parent, "Customer SKU Name": name, "Variety": "",
+                        "Lot": master_add.lot_of(name)})
+    if not add:
+        return out, ""
+    try:
+        master_add.add_items(backend, cur.header.city, cur.header.customer, add, user.email)
+        masters.clear_cache()
+    except Exception:  # noqa: BLE001
+        return out, ""
+    return out, f" {len(add)} new item(s) added to the SKU list."
 
 
 NOT_OURS = "— not in our list"
