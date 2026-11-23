@@ -146,7 +146,7 @@ def render(user: User) -> None:
                    "see their own section at the bottom.")
     names = ["By spec size", "Make-ready list", "By customer"]
     if user.is_owner:
-        names.append("Estimate (new sheet)")
+        names += ["Estimate (new sheet)", "Estimate (consolidated)"]
     v1, v2, v3, *v4 = st.tabs(names)
     with v1:
         show = common.numbered(prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"]))
@@ -177,6 +177,8 @@ def render(user: User) -> None:
     if v4:
         with v4[0]:
             _estimate_new(all_lines, m, label)
+        with v4[1]:
+            _estimate_consolidated(all_lines, m, label)
     _next_day(m)
     gaps = not_in_base(all_lines, m)
     if not gaps.empty:
@@ -205,7 +207,7 @@ def _estimate_new(lines: pd.DataFrame, m, label: str) -> None:
     except SheetError as e:
         common.sheet_error(e)
         return
-    dem = preprod.demand(lines)
+    dem = preprod.demand(lines, by_variety=True)
     if dem.empty:
         st.info("No items with a quantity for this date.")
         return
@@ -218,6 +220,46 @@ def _estimate_new(lines: pd.DataFrame, m, label: str) -> None:
                        file_name=f"estimate_new_{label}.xlsx", mime=reports.XLSX, icon=":material/download:",
                        key="est_xlsx", on_click="ignore")
     for head, df in blocks:
+        st.markdown(f"**{head}**")
+        st.dataframe(df, hide_index=True, width="stretch")
+
+
+def _estimate_consolidated(lines: pd.DataFrame, m, label: str) -> None:
+    """Owners' trial (24 Nov): every customer clubbed, no names. Per fruit -> variety · country · box:
+    the boxes to take out of primary at each count and in total."""
+    from core import mapping_sheet, preprod
+    from pages_src.preprod_actual import _opts
+    if st.session_state.get("ps_ctx", (None, ALL_DATES))[1] == ALL_DATES:
+        st.info("Pick one delivery date.")
+        return
+    try:
+        data = preprod.read_all()
+        data["_mapping"] = mapping_sheet.load()
+    except SheetError as e:
+        common.sheet_error(e)
+        return
+    dem = preprod.demand(lines, by_variety=True)
+    if dem.empty:
+        st.info("No items with a quantity for this date.")
+        return
+    blocks = preprod.consolidated(dem, lambda r: _opts(m, data, r), m.needs_variety)
+    total = sum(int(df["_n"].sum()) for _, df in blocks)
+    rows = sum(len(df) for _, df in blocks)
+    missing = sum(int((df["Variety · country"] == preprod.NO_VARIETY).sum()) for _, df in blocks)
+    c = st.columns(3)
+    c[0].metric("Boxes / trays from primary", f"≈ {total}")
+    c[1].metric("Fruits · rows", f"{len(blocks)} · {rows}")
+    c[2].metric("Variety not chosen", missing)
+    st.caption("Trial, owners only. All customers together, no names. Each SKU uses its first country "
+               "(Combination 1) and its allowed counts; its pieces are shared evenly over those counts and "
+               "boxes are rounded up per count after clubbing. Exact boxes are entered on "
+               "**Pre-production actual**.")
+    show = [(h, common.numbered(df.drop(columns=["_n"]))) for h, df in blocks]
+    st.download_button("Excel", lambda: reports.xlsx({f"{i + 1} {h.split(' · ')[0]}"[:31]: df
+                                                      for i, (h, df) in enumerate(show)}),
+                       file_name=f"estimate_consolidated_{label}.xlsx", mime=reports.XLSX,
+                       icon=":material/download:", key="estc_xlsx", on_click="ignore")
+    for head, df in show:
         st.markdown(f"**{head}**")
         st.dataframe(df, hide_index=True, width="stretch")
 

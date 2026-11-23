@@ -564,6 +564,15 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - IN-049 (Firstclub, 23 Nov) "FirstClub Special Apple - King Size" was saved with variety **Envy** by hand; no
   mapping says Envy, so its estimate showed Envy only.
 - Aliases: "red del" → RD, honeycrisp, cripps pink → Pink Lady; Honey Crisp + Cosmic Crisp in the list.
+- **Production sheet → "Estimate (consolidated)" tab (owners only, 24 Nov)**: every customer clubbed, no names;
+  one table per city + fruit, one row per variety (grade) · country · box: Need, SKUs · customers, **Boxes at each
+  count** ("90C · 6 | 100C · 5"), Total; tiles Boxes from primary / Fruits · rows / Variety not chosen
+  (`preprod.consolidated`). A SKU uses its first country option; its pieces are shared **evenly** over its allowed
+  counts; boxes rounded up per count after clubbing. Kg lines → kg ÷ box kg; Blueberry → punnets ÷ 12. Lines with no
+  variety (Apple / Mandarin / Orange) stay in a "Variety not chosen" row. Both estimate tabs use
+  `preprod.demand(by_variety=True)`: the same SKU with two varieties → two rows (pre-production pages unchanged).
+- Washington → RD (alias), **Shimla** added to the Apple list. The 5 near-duplicate names are the same products
+  (user 24 Nov); they are clubbed on the consolidated estimate; the sheet rows are left as they are.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.

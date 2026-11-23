@@ -122,9 +122,10 @@ def per_box(spec_item: str, unit: str, box_kg: float | None) -> float | None:
 
 # ------------------------------------------------------------------ demand
 
-def demand(lines: pd.DataFrame) -> pd.DataFrame:
+def demand(lines: pd.DataFrame, by_variety: bool = False) -> pd.DataFrame:
     """Indent lines (current version, one date) -> one row per city + customer group + SKU name:
-    city, group, customer, customer_sku_name, parent_sku, variety, qty, unit, per, need, indents."""
+    city, group, customer, customer_sku_name, parent_sku, variety, qty, unit, per, need, indents.
+    `by_variety` (estimates, 24 Nov): the same SKU with two varieties (WH1 Gala, WH2 Queen) -> two rows."""
     from core.production_calc import customer_group
     cols = ["city", "group", "customer", "customer_sku_name", "parent_sku", "variety", "qty", "unit", "per",
             "need", "indents"]
@@ -138,6 +139,8 @@ def demand(lines: pd.DataFrame) -> pd.DataFrame:
     df["group"] = [customer_group(c, s) for c, s in zip(df["customer"], df["store"])]
     df["_name"] = df["customer_sku_name"].map(_c)
     df["_key"] = df["_name"].str.casefold()
+    if by_variety and "variety" in df.columns:
+        df["_key"] = df["_key"] + "|" + df["variety"].map(_c).str.casefold()
     rows = []
     for (city, group, _), g in df.groupby(["city", "group", "_key"], sort=False):
         first = g.iloc[0]
@@ -440,4 +443,81 @@ def estimate_rows(dem: pd.DataFrame, opts_for) -> list[tuple[str, pd.DataFrame]]
                          "Box kg": ", ".join(fmt_num(k) for k in kgs) or "-",
                          "≈ Boxes": box_range(r["need"], r["unit"], o, r["parent_sku"])})
         out.append((f"{group} · {city}", pd.DataFrame(rows)))
+    return out
+
+
+# ------------------------------------------------------------------ consolidated estimate (24 Nov)
+
+NO_VARIETY = "Variety not chosen"
+
+
+def _split_counts(need: float, spec: list[str]) -> dict[str, float]:
+    """The pieces of one SKU shared evenly over its allowed counts: {count: pcs}."""
+    counts = [s for s in spec if is_count(s)]
+    return {c: need / len(counts) for c in counts} if counts else {}
+
+
+def consolidated(dem: pd.DataFrame, opts_for, needs_variety) -> list[tuple[str, pd.DataFrame]]:
+    """All customers clubbed, no customer names: one table per city + parent, one row per variety ·
+    country · box, with the boxes to take out of primary at each count and in total.
+    A SKU uses its first country option (the one in use); its pieces are shared evenly over its
+    allowed counts and boxes are rounded up per count after clubbing. Lines whose variety is still
+    not chosen are kept apart ('Variety not chosen')."""
+    groups: dict[tuple, dict] = {}
+    for r in dem.to_dict("records"):
+        parent, unit, need = _c(r["parent_sku"]), r["unit"], float(r["need"] or 0)
+        if needs_variety(parent) and not _c(r.get("variety")):
+            key = (r["city"], parent, NO_VARIETY, "", None, unit)
+            opt = {}
+        else:
+            o = opts_for(r)
+            label, opt = next(iter(o.items())) if o else (ANY, {})
+            if label == ANY:
+                opt = {}
+            grade = _c(opt.get("grade")) or _c(r.get("variety")) or parent
+            key = (r["city"], parent, grade, _c(opt.get("country")) or "Country not mapped",
+                   opt.get("box_kg"), unit)
+        g = groups.setdefault(key, {"need": 0.0, "pcs": {}, "skus": set(), "cust": set(),
+                                    "word": opt.get("unit") or "Box", "spec": []})
+        g["need"] += need
+        g["skus"].add(_c(r["customer_sku_name"]).casefold())
+        g["cust"].add(r["group"])
+        if unit == "pcs" and opt:
+            for cnt, pcs in _split_counts(need, opt.get("spec", [])).items():
+                g["pcs"][cnt] = g["pcs"].get(cnt, 0.0) + pcs
+        for s in opt.get("spec", []):
+            if s not in g["spec"]:
+                g["spec"].append(s)
+    tables: dict[tuple, list] = {}
+    for (city, parent, grade, country, kg, unit), g in groups.items():
+        word, need = g["word"], g["need"]
+        cells, total = [], None
+        if grade == NO_VARIETY:
+            cells = ["Pick the variety on the indent"]
+        elif unit == "pcs" and g["pcs"]:
+            per = {c: math.ceil(p / float(c) - 1e-9) for c, p in sorted(g["pcs"].items(), key=lambda x: float(x[0]))}
+            cells = [f"{spec_label(c)} · {n}" for c, n in per.items()]
+            total = sum(per.values())
+        elif unit == "kg" and kg:
+            total = math.ceil(need / kg - 1e-9)
+            cells = [", ".join(spec_label(s) for s in g["spec"]) or "-"]
+        elif unit == "punnets":
+            word = "Tray"
+            total = math.ceil(need / _per_tray() - 1e-9)
+            cells = [", ".join(spec_label(s) for s in g["spec"] if s != ANY_SIZE) or "-"]
+        else:
+            cells = [", ".join(spec_label(s) for s in g["spec"]) or "-"]
+        box = (f"{fmt_num(kg)} kg {word.lower()}" if kg else word) if grade != NO_VARIETY else "-"
+        if unit == "punnets":
+            box = f"{fmt_num(_per_tray())} punnets"
+        name = grade if grade == NO_VARIETY else f"{grade} · {country}"
+        tables.setdefault((city, parent), []).append({
+            "Variety · country": name, "Box": box, "Need": f"{fmt_num(round(need, 2))} {unit}",
+            "SKUs · customers": f"{len(g['skus'])} · {len(g['cust'])}",
+            "Boxes at each count": " | ".join(cells), "Total": f"{total} {word}" if total is not None else "-",
+            "_n": total or 0, "_last": grade == NO_VARIETY})
+    out = []
+    for (city, parent), rows in sorted(tables.items(), key=lambda x: (x[0][0], x[0][1].casefold())):
+        df = pd.DataFrame(rows).sort_values(["_last", "Variety · country"]).drop(columns=["_last"])
+        out.append((f"{parent} · {city}", df.reset_index(drop=True)))
     return out
