@@ -164,8 +164,8 @@ def _dispatch_body(user, day, iid, s, states, pdata, ddata) -> None:
     _hint(1, "Type what is actually loaded in each <b>yellow box</b>. It starts from the Batching plan; change it "
              "if the truck load is different.")
     widths = [0.4, 3, 1.3, 1.5, 1.6, 1.5, 1.7]
-    for col, h in zip(st.columns(widths), ["#", "Customer SKU name", "Indent", "Batched", "Dispatch qty (type here)",
-                                           "vs indent", "vs batching"]):
+    for col, h in zip(st.columns(widths), ["#", "Customer SKU name", "Required", "Batched", "Dispatch qty (type here)",
+                                           "vs required", "vs batching"]):
         col.markdown(f'<div class="bp-h">{h}</div>', unsafe_allow_html=True)
     base = f"ds_{day}_{iid}"
     items, bad = [], []
@@ -183,7 +183,7 @@ def _dispatch_body(user, day, iid, s, states, pdata, ddata) -> None:
             c = st.columns(widths, vertical_alignment="center")
             c[0].markdown(f'<span class="bp-ro">{i + 1}</span>', unsafe_allow_html=True)
             c[1].markdown(r["customer_sku_name"])
-            c[2].markdown(f'<span class="bp-ro">{fmt_num(qty)} {word}</span>', unsafe_allow_html=True)
+            c[2].markdown(f'<b>{fmt_num(qty)} {word}</b>', unsafe_allow_html=True)
             c[3].markdown(f'<span class="bp-ro">{fmt_num(b_lots) + " " + word if b_lots is not None else "–"}'
                           f'{" (after other stores)" if others and b_lots is not None else ""}</span>',
                           unsafe_allow_html=True)
@@ -257,9 +257,9 @@ def render_returns(user: User) -> None:
     if s["returns"]:
         st.success(f"Returns saved; final invoice **{s['returns']['invoice_no']}**. Change and save again to replace.")
     _hint(2, "Type what the store sent back (or rejected) and why. <b>Billed</b> is worked out for you.")
-    widths = [0.4, 3, 1.3, 1.5, 1.8, 1.3]
-    for col, h in zip(st.columns(widths), ["#", "Customer SKU name", "Dispatched", "Returned (type here)", "Reason",
-                                           "Billed"]):
+    widths = [0.4, 3, 1.2, 1.2, 1.5, 1.8, 1.2]
+    for col, h in zip(st.columns(widths), ["#", "Customer SKU name", "Required", "Dispatched", "Returned (type here)",
+                                           "Reason", "Billed"]):
         col.markdown(f'<div class="bp-h">{h}</div>', unsafe_allow_html=True)
     base = f"rt_{day}_{iid}"
     parents = {preprod._k(n): p for n, p in zip(s["lines"]["customer_sku_name"], s["lines"]["parent_sku"])}
@@ -273,18 +273,19 @@ def render_returns(user: User) -> None:
             c = st.columns(widths, vertical_alignment="center")
             c[0].markdown(f'<span class="bp-ro">{i + 1}</span>', unsafe_allow_html=True)
             c[1].markdown(r["customer_sku_name"])
-            c[2].markdown(f'<span class="bp-ro">{fmt_num(disp)} {word}</span>', unsafe_allow_html=True)
-            ret = c[3].number_input(f"Returned {r['customer_sku_name']}", min_value=0.0, step=1.0,
+            c[2].markdown(f'<b>{fmt_num(to_number(r.get("indent_qty")))} {word}</b>', unsafe_allow_html=True)
+            c[3].markdown(f'<span class="bp-ro">{fmt_num(disp)} {word}</span>', unsafe_allow_html=True)
+            ret = c[4].number_input(f"Returned {r['customer_sku_name']}", min_value=0.0, step=1.0,
                                     value=to_number(o.get("returned")) if o else 0.0, key=f"{base}_{i}",
                                     label_visibility="collapsed")
             reasons = ["–"] + dispatch.RETURN_REASONS
-            why = c[4].selectbox(f"Reason {r['customer_sku_name']}", reasons,
+            why = c[5].selectbox(f"Reason {r['customer_sku_name']}", reasons,
                                  index=reasons.index(o.get("reason")) if o and o.get("reason") in reasons else 0,
                                  key=f"{base}_{i}_why", label_visibility="collapsed", disabled=not ret)
             billed = disp - ret
             if billed < -1e-9:
                 over.append(r["customer_sku_name"])
-            c[5].markdown(f"**{fmt_num(max(billed, 0))} {word}**")
+            c[6].markdown(f"**{fmt_num(max(billed, 0))} {word}**")
             items.append({"customer_sku_name": r["customer_sku_name"], "lot": r.get("lot", ""), "dispatched": disp,
                           "returned": ret, "reason": "" if why == "–" or not ret else why, "billed": max(billed, 0),
                           "price": to_number(r.get("price")), "parent_sku": parents.get(key, "")})
@@ -380,7 +381,7 @@ def render_check(user: User) -> None:
         boxes = sum(took.get(key, {}).get("boxes", {}).values())
         d = s["dispatch"].get("items", {}).get(key) if s["dispatch"] else None
         rt = s["returns"].get("items", {}).get(key) if s["returns"] else None
-        rows.append({"#": i + 1, "Item": r["customer_sku_name"], "Indent": f"{fmt_num(r['qty_n'])} {word}",
+        rows.append({"#": i + 1, "Item": r["customer_sku_name"], "Required": f"{fmt_num(r['qty_n'])} {word}",
                      "PO": fmt_num(po_q[key]) if key in po_q else "–",
                      "Taken out": f"{fmt_num(boxes)} box" if boxes else "–",
                      "Batched": f"{fmt_num(bat[key] / _per(r))} {word}" if key in bat else "–",

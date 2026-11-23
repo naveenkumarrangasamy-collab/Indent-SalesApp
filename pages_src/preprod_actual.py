@@ -327,12 +327,13 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
 
     # ---- step 1: used per count (yellow boxes)
     _hint(1, "Type the good pieces (or kg) used in each <b>yellow box</b>. The grey columns are filled in for you.")
-    widths = [0.4, 3, 2, 0.9, 0.8, 1.2, 1.6]
-    heads = ["#", "Customer SKU name", "Country", "Count", "Boxes", "In boxes", "Used (type here)"]
+    widths = [0.4, 3, 1.2, 1.8, 0.9, 0.8, 1.2, 1.6]
+    heads = ["#", "Customer SKU name", "Required", "Country", "Count", "Boxes", "In boxes", "Used (type here)"]
     hc = st.columns(widths)
     for c, h in zip(hc, heads):
         c.markdown(f'<div class="bp-h">{h}</div>', unsafe_allow_html=True)
     used_vals = []
+    shown = set()
     with st.container(key=f"bpin_used_{css_key}"):
         for j, mrow in enumerate(meta):
             r = rows.loc[mrow["i"]]
@@ -340,13 +341,16 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
             c = st.columns(widths, vertical_alignment="center")
             c[0].markdown(f'<span class="bp-ro">{mrow["i"] + 1}</span>', unsafe_allow_html=True)
             c[1].markdown(r["customer_sku_name"])
-            c[2].markdown(f'<span class="bp-ro">{mrow["country"]}</span>', unsafe_allow_html=True)
-            c[3].markdown(f'<span class="bp-ro">{preprod.spec_label(mrow["spec"])}</span>', unsafe_allow_html=True)
-            c[4].markdown(f'<span class="bp-ro">{fmt_num(mrow["boxes"])}</span>', unsafe_allow_html=True)
-            c[5].markdown(f'<span class="bp-ro">{fmt_num(mrow["in"]) + " " + w if mrow["in"] is not None else ""}'
+            req = "" if mrow["i"] in shown else f'{fmt_num(r["need"])} {w}'      # once per item
+            shown.add(mrow["i"])
+            c[2].markdown(f'<b>{req}</b>', unsafe_allow_html=True)
+            c[3].markdown(f'<span class="bp-ro">{mrow["country"]}</span>', unsafe_allow_html=True)
+            c[4].markdown(f'<span class="bp-ro">{preprod.spec_label(mrow["spec"])}</span>', unsafe_allow_html=True)
+            c[5].markdown(f'<span class="bp-ro">{fmt_num(mrow["boxes"])}</span>', unsafe_allow_html=True)
+            c[6].markdown(f'<span class="bp-ro">{fmt_num(mrow["in"]) + " " + w if mrow["in"] is not None else ""}'
                           '</span>', unsafe_allow_html=True)
             old = saved.get((mrow["key"], mrow["spec"]))
-            v = c[6].number_input(f"Used {r['customer_sku_name']} {mrow['spec']}", min_value=0.0, step=1.0,
+            v = c[7].number_input(f"Used {r['customer_sku_name']} {mrow['spec']}", min_value=0.0, step=1.0,
                                   value=float(old) if old is not None else None, placeholder=f"type {w}",
                                   key=f"bp_u_{base}_{j}", label_visibility="collapsed")
             used_vals.append(v)
@@ -398,7 +402,7 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
             top[1].markdown(f'<div style="text-align:right"><span class="bp-chip {CHIP.get(st_, "bp-bad")}">{st_}'
                             '</span></div>', unsafe_allow_html=True)
             c = st.columns(8, vertical_alignment="bottom")
-            c[0].markdown(f'<div class="bp-h">Needed</div><b>{fmt_num(r["need"])} {w}</b><div class="bp-h">max '
+            c[0].markdown(f'<div class="bp-h">Required</div><b>{fmt_num(r["need"])} {w}</b><div class="bp-h">max '
                           f'{fmt_num(preprod.max_allowed(r["need"], pct))}</div>', unsafe_allow_html=True)
             _cell(c[1], "Used", f"{fmt_num(used)} {w}" if any_by.get(i) else "–")
             _cell(c[2], "Extra / short", "–" if not any_by.get(i) else

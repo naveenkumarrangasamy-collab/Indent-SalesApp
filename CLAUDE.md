@@ -527,6 +527,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   `company_address`, `company_gstin` (until set the PDFs show [NAME] etc.).
 - **Dispatch check**: tiles + one row per indent with dots Indent / PO / Pre-production / Batching / Dispatch /
   Returns / Invoice and a note; item-by-item trail (Indent, PO, Taken out, Batched, Dispatched, Returned, Billed).
+- **Required (indent) qty shown till the end** (user 23 Nov 8 PM): Batching plan step 1 has a **Required** column (once per item), per-item cards say Required, Dispatch / Returns / Dispatch check trail all have a **Required** column.
 - **Batching plan per item** also has **MT Grade** (typed); Back to box = left over − MT Grade − GT Qty − Dump;
   each card = name + status on top, 8 equal columns under it.
 
