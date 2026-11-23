@@ -555,6 +555,14 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - Variety order: name → **New Mapping Combination** "Customer Variety" when it names exactly one
   (`masters.combo_varieties`, `Masters.combo_variety_for`) → New tab → All Cux City → the user picks.
   Snacky / Daily / Everyday / Bulk apples list all 11 in Combination, so they are always asked.
+- **Mandarin and Orange ask too** (secret `ask_variety_parents`, default Apple, Mandarin, Orange): their list
+  is the New Mapping **Parent** tab (Mandarin: Xinyu, Wogan, Afourer, Honey Murcott, Nova, Nadorcott, RHM,
+  Murcott, Tango; Orange: Valencia, Midknight Valencia, Navel; `masters.parent_varieties`). Avocado, Blueberry,
+  Kiwi, Grapes are not asked. Production tables still show variety for `variety_parents` (Apple) only.
+- **Estimate uses the indent's variety**: Combination 1 rows of the SKU are narrowed to that variety's grades
+  (`mapping_sheet.options`; Snacky Apple + Gala → only Gala countries/counts); all rows if none match.
+- IN-049 (Firstclub, 23 Nov) "FirstClub Special Apple - King Size" was saved with variety **Envy** by hand; no
+  mapping says Envy, so its estimate showed Envy only.
 - Aliases: "red del" → RD, honeycrisp, cripps pink → Pink Lady; Honey Crisp + Cosmic Crisp in the list.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)

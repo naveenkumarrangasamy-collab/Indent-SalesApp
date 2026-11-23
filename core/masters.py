@@ -40,6 +40,7 @@ class Masters:
     sku_source: str = "SKU_Map tab"
     prod_base: pd.DataFrame | None = None   # the 'New' tab (production base)
     combo_variety: dict | None = None       # 24 Nov: New Mapping Combination customer variety, one per SKU
+    parent_varieties: dict | None = None    # 24 Nov: {parent key: [varieties]} from the New Mapping Parent tab
 
     def prod_info(self, city: str, customer: str, sku_name: str) -> dict | None:
         """The 'New' tab row for this SKU name (city + customer + name), else None.
@@ -217,6 +218,8 @@ class Masters:
         Apple uses the sheet's list ('Apple Varity' tab etc.), or the default list
         when the sheet has none."""
         if _key(parent) not in {_key(p) for p in config.variety_parents()}:
+            if _key(parent) in {_key(p) for p in config.ask_variety_parents()}:
+                return list((self.parent_varieties or {}).get(_key(parent), []))   # Mandarin, Orange
             return []
         df = self.varieties
         df = df[df["Parent SKU"].map(_key) == _key(parent)]
@@ -374,6 +377,31 @@ def _new_mapping_sku() -> pd.DataFrame | None:
     return mapping_sheet.sku_rows(combos, old, cities)
 
 
+def _parent_varieties() -> dict:
+    from core import mapping_sheet
+    try:
+        _, parent = mapping_sheet.load()
+    except Exception:  # noqa: BLE001
+        return {}
+    return parent_varieties(parent)
+
+
+def parent_varieties(parent: pd.DataFrame) -> dict:
+    """{parent key: varieties in sheet order} ('Mandarin' -> Xinyu, Wogan, …); the fruit's own name and
+    '(no variety)' are left out."""
+    out: dict[str, list[str]] = {}
+    if parent is None or parent.empty:
+        return out
+    for p, g in zip(parent["parent"], parent["grade"]):
+        g = " ".join(str(g or "").split())
+        if not g or _key(g) in (_key(p), "novariety") or g.startswith("("):
+            continue
+        lst = out.setdefault(_key(p), [])
+        if g not in lst:
+            lst.append(g)
+    return out
+
+
 def _combo_varieties(m: Masters) -> dict:
     """{(city, customer, our name) keys: variety} for SKUs whose Combination 'Customer Variety' names exactly
     one known variety. Several ('Gala, RD, Queen, …' for Snacky / Daily Apple) or none -> left out."""
@@ -407,6 +435,7 @@ def load_masters() -> Masters:
     m = masters_from_frames(frames, source)
     if mapping_sheet.use_new():
         sku = _new_mapping_sku()
+        m.parent_varieties = _parent_varieties()
         m.combo_variety = _combo_varieties(m)
         if sku is not None:
             m.sku = sku

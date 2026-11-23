@@ -97,6 +97,13 @@ DEFAULT_APPLE_VARIETIES = ["Gala", "Granny Smith", "Queen", "RD", "Pink Lady", "
                            "Braeburn", "Sonya", "Fuji", "Jazz", "Envy", "Honey Crisp", "Cosmic Crisp"]
 
 
+def ask_variety_parents() -> list[str]:
+    """24 Nov: fruits whose variety must be chosen on Create indent when nothing maps it (Mandarin /
+    Orange take their list from the New Mapping Parent tab). Secret `ask_variety_parents`."""
+    v = get("ask_variety_parents", ["Apple", "Mandarin", "Orange"])
+    return [str(x) for x in (v if isinstance(v, (list, tuple)) else [v])]
+
+
 def variety_parents() -> list[str]:
     """Only these parent SKUs ask for a variety (default: Apple)."""
     v = get("variety_parents", ["Apple"])
