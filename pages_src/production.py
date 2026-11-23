@@ -53,21 +53,31 @@ def _filtered(user: User, prefix: str):
     options = dates + [ALL_DATES]
     today = config.now_ist().date().isoformat()
     pick = default_date(dates, today)
-    c = st.columns([1.3, 1, 2])
-    d = c[0].selectbox("Delivery date", options, index=options.index(pick) if pick else len(options) - 1,
-                       key=f"{prefix}_date",
-                       format_func=lambda x: _fmt_date(x) + (f"  ({counts.get(x, 0)} indents)"
-                                                             if x in counts else ""))
+    today_d = config.now_ist().date()
+
+    def _day(x: str) -> str:
+        if x == ALL_DATES:
+            return x
+        try:
+            dd = date.fromisoformat(x)
+        except ValueError:
+            return x
+        word = {0: "Today", 1: "Tomorrow", -1: "Yesterday"}.get((dd - today_d).days)
+        return (f"{word} · " if word else "") + dd.strftime("%a %d %b") + f" ({counts.get(x, 0)})"
+    dk = f"{prefix}_date"
+    if st.session_state.get(dk) not in options:
+        st.session_state[dk] = pick if pick else ALL_DATES
+    d = st.segmented_control("Delivery date", options, key=dk, format_func=_day, required=True) or ALL_DATES
     cities = sorted(current["city"].unique())
     if not user.sees_all_cities and len(user.cities) == 1:
         city = user.cities[0]               # mapped to one city: no city filter
-        c[1].markdown(f"<span class='mt-muted'>City</span><br><b>{city}</b>", unsafe_allow_html=True)
+        st.markdown(f"<span class='mt-muted'>City</span>&nbsp; <b>{city}</b>", unsafe_allow_html=True)
     else:
-        city = c[1].selectbox("City", ["All cities"] + cities, key=f"{prefix}_city")
+        ck = f"{prefix}_city"
+        if st.session_state.get(ck) not in ["All cities"] + cities:
+            st.session_state[ck] = "All cities"
+        city = st.pills("City", ["All cities"] + cities, key=ck) or "All cities"
     scope = indents.scope_text(user)
-    c[2].caption(f"All customers together · current version of every submitted or PO-frozen indent · "
-                 f"{scope}. Only dates that have indents are listed.")
-
     lines = filter_lines(current, delivery_date=None if d == ALL_DATES else d,
                          city=None if city == "All cities" else city, allowed_ids=None)
     st.session_state[f"{prefix}_ctx"] = (current, d, None if city == "All cities" else city)
@@ -350,7 +360,6 @@ def render_batching(user: User) -> None:
         parts.append(v)
     view = pd.concat(parts, ignore_index=True)
     bat = common.numbered(view)
-    _qty_strip(bat, "Indent qty", lines)
     has_var = bat["Variety"].astype(bool).any()
     cols = ["Parent SKU", "Customer SKU Name"] + (["Variety"] if has_var else []) + \
         ["Lot", "Lot Size", "Spec", "Indent qty", "PO qty", "Difference", "Status"]
