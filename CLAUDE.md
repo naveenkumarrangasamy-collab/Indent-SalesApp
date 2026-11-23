@@ -507,6 +507,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   box** = left over − GT − Dump (auto; save blocked when negative), status chip. GT/Dump saved in Batching_Plan
   as a row with spec `_item` (cols `gt_qty`, `dump`; `preprod.item_saved`, `back_to_box`).
 
+- **Pre-production counts look (23 Nov, user-approved preview)**: each count box labelled only "90C" (no
+  "· 0 taken"), 5 per row (wraps), no +/- buttons, green when a number is typed (`st-key-pacnt_has*`), a small
+  green "N taken" under a count only when something is saved there (`PA_CSS`). Suggested reads
+  "90C 6 · 100C 5 Box".
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.

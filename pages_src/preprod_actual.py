@@ -111,6 +111,19 @@ def render_actual(user: User) -> None:
     _actual_body(user, day, city, group, dem, m, data)
 
 
+PA_CSS = """<style>
+[class*="st-key-pacnt"] [data-testid="stNumberInputStepUp"],[class*="st-key-pacnt"] [data-testid="stNumberInputStepDown"]{display:none}
+[class*="st-key-pacnt"] label p{font-weight:600;font-size:.9rem;white-space:nowrap}
+[class*="st-key-pacnt_has"] [data-testid="stNumberInputContainer"]{border:2px solid #3D9A6A !important;background:#F2FAF5 !important;border-radius:8px}
+[class*="st-key-pacnt_has"] [data-testid="stNumberInputContainer"] *{background-color:transparent !important}
+.pa-taken{font-size:.78rem;color:#1E6B3C;margin-top:-.4rem}
+</style>"""
+
+
+def _css(v: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_-]", "_", v)
+
+
 @st.fragment
 def _actual_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m, data) -> None:
     rows = dem[(dem["city"] == city) & (dem["group"] == group)].reset_index(drop=True)
@@ -120,6 +133,7 @@ def _actual_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame,
     nonce = st.session_state.get("pa_nonce", 0)
     base = f"pa_{nonce}_{day}_{city}_{group}"
 
+    st.markdown(PA_CSS, unsafe_allow_html=True)
     head = f"#### {group} · {city}"
     if frozen:
         st.markdown(head)
@@ -156,18 +170,26 @@ def _actual_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame,
             specs = list(opt["spec"]) + [s for s in t["boxes"] if s not in opt["spec"]]
             if not specs:
                 c[2].warning("No counts for this SKU in the master yet (Batching_Master / New / Mapping Whole).")
-            cols = c[2].columns(max(len(specs), 1)) if specs else []
-            for j, s in enumerate(specs):
-                so_far = t["boxes"].get(s, 0)
-                lab = f"{preprod.spec_label(s)} · {fmt_num(so_far)} taken"
-                if frozen:
-                    cols[j].metric(preprod.spec_label(s), f"{fmt_num(so_far)} {opt['unit'].lower()}")
-                    continue
-                add = cols[j].number_input(lab, min_value=0, step=1, value=0, key=f"{base}_{i}_{s}",
-                                           help="Boxes taken out now (this round). Saved totals are added up.")
-                if add:
-                    entries.append({"customer_sku_name": r["customer_sku_name"], "parent_sku": r["parent_sku"],
-                                    "country": country, "spec": s, "boxes": int(add)})
+            per_row = 5
+            for start in range(0, len(specs), per_row):
+                chunk = specs[start:start + per_row]
+                cols = c[2].columns(per_row)
+                for j, s in enumerate(chunk):
+                    so_far = t["boxes"].get(s, 0)
+                    wkey = f"{base}_{i}_{s}"
+                    has = bool(st.session_state.get(wkey))
+                    with cols[j].container(key=f"pacnt_{'has' if has else 'no'}_{_css(wkey)}"):
+                        if frozen:
+                            st.metric(preprod.spec_label(s), f"{fmt_num(so_far)} {opt['unit'].lower()}")
+                            continue
+                        add = st.number_input(preprod.spec_label(s), min_value=0, step=1, value=0, key=wkey,
+                                              help="Boxes taken out now (this round). Saved totals are added up.")
+                        if so_far:
+                            st.markdown(f'<div class="pa-taken">{fmt_num(so_far)} taken</div>',
+                                        unsafe_allow_html=True)
+                    if add:
+                        entries.append({"customer_sku_name": r["customer_sku_name"], "parent_sku": r["parent_sku"],
+                                        "country": country, "spec": s, "boxes": int(add)})
             hold = _hold(t["boxes"], unit, opt)
             status = preprod.actual_status(r["need"], hold, sum(t["boxes"].values()))
             n_enough += status == "Enough"

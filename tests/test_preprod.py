@@ -54,7 +54,7 @@ def test_countries_from_mapping_whole_with_box_kg():
     assert list(o) == ["New Zealand", "Italy"]
     assert o["New Zealand"]["spec"] == ["90", "100", "110"] and o["New Zealand"]["box_kg"] == 18
     assert o["Italy"]["spec"] == ["100", "113"]
-    assert preprod.suggestion(480, "pcs", o["New Zealand"]) == "90C: 6 Box | 100C: 5 Box | 110C: 5 Box"
+    assert preprod.suggestion(480, "pcs", o["New Zealand"]) == "90C 6 · 100C 5 · 110C 5 Box"
 
 
 def test_batching_master_wins_over_new_tab():

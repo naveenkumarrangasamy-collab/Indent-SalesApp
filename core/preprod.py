@@ -211,7 +211,7 @@ def country_options(masters, bmaster: pd.DataFrame | None, city: str, customer: 
 
 
 def suggestion(need: float, unit: str, opt: dict) -> str:
-    """'90C: 6 Box | 100C: 5 Box' (all at one count), or '5 Box of 15 kg' for kg lines."""
+    """'90C 6 · 100C 5 Box' (all at one count), or '5 Box of 15 kg' for kg lines."""
     word = opt.get("unit") or "Box"
     if unit == "kg" and opt.get("box_kg"):
         return f"{math.ceil(need / opt['box_kg'] - 1e-9)} {word} of {fmt_num(opt['box_kg'])} kg"
@@ -219,9 +219,11 @@ def suggestion(need: float, unit: str, opt: dict) -> str:
         trays = f"{math.ceil(need / _per_tray() - 1e-9)} {word}"
         sizes = ", ".join(spec_label(s) for s in opt.get("spec", []) if s != ANY_SIZE)
         return f"{trays} ({sizes})" if sizes else trays
-    parts = [f"{spec_label(s)}: {math.ceil(need / float(s) - 1e-9)} {word}"
+    parts = [f"{spec_label(s)} {math.ceil(need / float(s) - 1e-9)}"
              for s in opt.get("spec", []) if unit == "pcs" and is_count(s)]
-    return " | ".join(parts) or ", ".join(spec_label(s) for s in opt.get("spec", [])) or "-"
+    if parts:
+        return " · ".join(parts) + f" {word}"
+    return ", ".join(spec_label(s) for s in opt.get("spec", [])) or "-"
 
 
 # ------------------------------------------------------------------ saved data
