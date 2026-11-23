@@ -44,12 +44,14 @@ def _chip(spec: str) -> str:
     return f'<span class="bp-chip {_CLS.get(cls, "ds-neu")}">{text}</span>'
 
 
-def _flow(now: int) -> None:
+def _flow(s: dict) -> None:
+    """Step bar from the indent's real state: done steps green, the first open step yellow."""
+    done = [True, s["frozen"], s["batched_all"], bool(s["dispatch"]), bool(s["returns"]), bool(s["returns"])]
+    now = next((i for i, d in enumerate(done) if not d), len(done))
     parts = []
-    for i, s in enumerate(STEPS):
-        cls = "d" if i < now else "n" if i == now else ""
-        parts.append(f'<span class="ds-st {cls}">{"✓ " if i < now else f"{i + 1} " if i >= now else ""}{s}'
-                     f'{" · now" if i == now else ""}</span>')
+    for i, (name, d) in enumerate(zip(STEPS, done)):
+        cls = "d" if d else "n" if i == now else ""
+        parts.append(f'<span class="ds-st {cls}">{"✓ " if d else f"{i + 1} "}{name}{" · now" if i == now else ""}</span>')
     st.markdown('<div class="ds-flow">' + "".join(parts) + "</div>", unsafe_allow_html=True)
 
 
@@ -152,7 +154,7 @@ def _dispatch_body(user, day, iid, s, states, pdata, ddata) -> None:
     pct = preprod.extra_limit_pct()
     g = s["lines"].reset_index(drop=True)
     st.markdown(f"#### {iid} · {s['customer']} - {s['store']} · {s['city']}")
-    _flow(3 if not s["dispatch"] else 4)
+    _flow(s)
     bat = _batched(pdata, day, s["city"], s["group"])
     same_group = [i for i, o in states.items() if o["group"] == s["group"] and o["city"] == s["city"] and i != iid]
     saved = s["dispatch"].get("items", {}) if s["dispatch"] else {}
@@ -250,7 +252,7 @@ def render_returns(user: User) -> None:
     iid = labels[pick]
     s = states[iid]
     st.markdown(f"#### {iid} · {s['customer']} - {s['store']} · {s['city']}")
-    _flow(4 if not s["returns"] else 6)
+    _flow(s)
     st.caption(f"Dispatched as {s['dispatch']['doc_no']} at {s['dispatch']['at'][11:16]}.")
     if s["returns"]:
         st.success(f"Returns saved; final invoice **{s['returns']['invoice_no']}**. Change and save again to replace.")
