@@ -279,6 +279,7 @@ BP_CSS = """<style>
 [class*="st-key-bpin"] [data-testid="stNumberInputContainer"]{background:#FFFDF0 !important;border:2px solid #E8B10A !important;border-radius:8px !important}
 [class*="st-key-bpin"] [data-testid="stNumberInputContainer"] *{background-color:transparent !important}
 [class*="st-key-bpin"] [data-testid="stNumberInputContainer"] input{font-size:1.05rem}
+[class*="st-key-bpin_item"] [data-testid="stNumberInputStepUp"],[class*="st-key-bpin_item"] [data-testid="stNumberInputStepDown"]{display:none}
 .bp-hint{display:flex;gap:.5rem;align-items:center;background:#FFF8DB;border:1px solid #F2DF9B;color:#6B4E00;border-radius:8px;padding:.55rem .8rem;font-size:.9rem;margin:.3rem 0 .7rem}
 .bp-step{flex:none;display:inline-flex;align-items:center;justify-content:center;width:1.3rem;height:1.3rem;border-radius:50%;background:#E8B10A;color:#fff;font-size:.75rem;font-weight:700}
 .bp-h{font-size:.8rem;color:#6B6F7B}.bp-ro{color:#6B6F7B}
