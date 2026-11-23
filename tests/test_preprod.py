@@ -138,3 +138,19 @@ def test_save_round_skips_zero_boxes():
     assert n == 1 and b.rows["Preprod_Actual"][0]["boxes"] == 2
     preprod.set_frozen(b, "2026-11-22", "Bangalore", "Flipkart", True, "me")
     assert b.rows["Preprod_Freeze"][0]["action"] == "freeze"
+
+
+def test_gt_dump_and_back_to_box():
+    from core import preprod as pp
+    import pandas as pd
+    assert pp.back_to_box(10, 5, 2) == 3
+    assert pp.back_to_box(10, None, None) == 10
+    assert pp.back_to_box(None, 1, 1) is None
+    assert pp.back_to_box(6, 0, 9) == -3            # page blocks the save
+    plan = pd.DataFrame([
+        {"delivery_date": "d", "city": "c", "group": "g", "customer_sku_name": "A", "spec": "100", "used": "90",
+         "gt_qty": "", "dump": ""},
+        {"delivery_date": "d", "city": "c", "group": "g", "customer_sku_name": "A", "spec": pp.ITEM, "used": "",
+         "gt_qty": "6", "dump": ""}])
+    assert pp.item_saved(plan, "d", "c", "g") == {"a": (6.0, None)}
+    assert pp.used_saved(plan, "d", "c", "g") == {("a", "100"): 90.0}

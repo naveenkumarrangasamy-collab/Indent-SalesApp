@@ -64,7 +64,7 @@ TABS: dict[str, list[str]] = {
                      "parent_sku", "country", "spec", "boxes", "reason"],
     PREPROD_FREEZE: ["delivery_date", "city", "group", "action", "at", "by"],
     BATCHING_PLAN: ["saved_at", "saved_by", "delivery_date", "city", "group", "customer_sku_name", "country",
-                    "spec", "boxes", "used", "unit"],
+                    "spec", "boxes", "used", "unit", "gt_qty", "dump"],
 }
 
 MASTER_TABS = [SKU_MAP, STORE_MAP, VARIETIES, ACCESS]

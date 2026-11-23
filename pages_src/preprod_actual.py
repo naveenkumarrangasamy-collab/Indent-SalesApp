@@ -251,81 +251,159 @@ def render_plan(user: User) -> None:
     _plan_body(user, day, city, group, dem, m, data, pct)
 
 
+BP_CSS = """<style>
+[class*="st-key-bpin"] div[data-baseweb="input"]{background:#FFFDF0 !important;border:2px solid #E8B10A !important;border-radius:8px !important}
+[class*="st-key-bpin"] div[data-baseweb="input"] input{background:transparent !important;font-size:1.05rem}
+.bp-hint{display:flex;gap:.5rem;align-items:center;background:#FFF8DB;border:1px solid #F2DF9B;color:#6B4E00;border-radius:8px;padding:.55rem .8rem;font-size:.9rem;margin:.3rem 0 .7rem}
+.bp-step{flex:none;display:inline-flex;align-items:center;justify-content:center;width:1.3rem;height:1.3rem;border-radius:50%;background:#E8B10A;color:#fff;font-size:.75rem;font-weight:700}
+.bp-h{font-size:.8rem;color:#6B6F7B}.bp-ro{color:#6B6F7B}
+.bp-chip{display:inline-block;padding:.15rem .6rem;border-radius:999px;font-size:.8rem;font-weight:600}
+.bp-ok{background:#E3F3E9;color:#1E6B3C}.bp-warn{background:#FDF0D5;color:#7A4F00}.bp-bad{background:#FCE4E2;color:#A32018}
+.bp-bar{height:6px;border-radius:3px;background:#EEF0F4;overflow:hidden;margin:.3rem 0;max-width:220px}
+.bp-fill{height:6px;background:#3D9A6A}.bp-fill.w{background:#E8B10A}.bp-fill.r{background:#D64545}
+.bp-tile{border:1px solid #E6E9EF;border-radius:10px;padding:.5rem .8rem}.bp-tile .k{font-size:.8rem;color:#6B6F7B}
+.bp-tile .v{font-size:1.4rem;font-weight:700}
+</style>"""
+CHIP = {"Covered": "bp-ok", "Short": "bp-warn", "Pending": "bp-bad", "Over limit": "bp-bad"}
+
+
+def _hint(n: int, text: str) -> None:
+    st.markdown(f'<div class="bp-hint"><span class="bp-step">{n}</span><span>{text}</span></div>',
+                unsafe_allow_html=True)
+
+
+def _cell(col, head: str, value: str) -> None:
+    col.markdown(f'<div class="bp-h">{head}</div><b>{value}</b>', unsafe_allow_html=True)
+
+
 def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m, data, pct: float) -> None:
     rows = dem[(dem["city"] == city) & (dem["group"] == group)].reset_index(drop=True)
     took = preprod.taken(data[preprod.PREPROD_ACTUAL], day, city, group)
     saved = preprod.used_saved(data[preprod.BATCHING_PLAN], day, city, group)
+    saved_item = preprod.item_saved(data[preprod.BATCHING_PLAN], day, city, group)
+    st.markdown(BP_CSS, unsafe_allow_html=True)
     st.markdown(f"#### {group} · {city}")
+    base = f"{day}_{city}_{group}"
 
-    ed_rows, meta = [], []
+    meta = []
     for i, r in rows.iterrows():
         key = preprod._k(r["customer_sku_name"])
         t = took.get(key, {"country": "", "boxes": {}})
         opt = _opts(m, data, r).get(t["country"], {"box_kg": None, "unit": "Box"})
-        for s, n in t["boxes"].items():
-            pb = preprod.per_box(s, r["unit"], opt.get("box_kg"))
-            ed_rows.append({"#": str(i + 1), "Customer SKU name": r["customer_sku_name"], "Country": t["country"],
-                            "Count": preprod.spec_label(s), "Boxes": fmt_num(n),
-                            "In boxes": f"{fmt_num(n * pb)} {_unit_word(r['unit'])}" if pb else "",
-                            "Used": saved.get((key, s))})
-            meta.append({"i": i, "spec": s, "boxes": n, "in": n * pb if pb else None, "country": t["country"]})
-    if not ed_rows:
+        for s_, n in t["boxes"].items():
+            pb = preprod.per_box(s_, r["unit"], opt.get("box_kg"))
+            meta.append({"i": i, "spec": s_, "boxes": n, "in": n * pb if pb else None, "country": t["country"],
+                         "key": key})
+    if not meta:
         st.info("No boxes were taken out for this customer.")
         return
-    unit_cap = "pcs or kg" if set(rows["unit"]) - {"pcs"} else "pcs"
-    table = pd.DataFrame(ed_rows)
-    table["Used"] = pd.to_numeric(table["Used"], errors="coerce")
-    ed = st.data_editor(table, key=f"bp_ed_{day}_{city}_{group}", hide_index=True, width="stretch",
-                        disabled=["#", "Customer SKU name", "Country", "Count", "Boxes", "In boxes"],
-                        column_config={"Used": st.column_config.NumberColumn(
-                            f"Used ({unit_cap})", min_value=0, step=1, help="Good pieces (kg) from these boxes "
-                            "that went to this customer.")})
 
-    used_by_line: dict[int, float] = {}
-    any_by_line: dict[int, bool] = {}
-    left_by_line: dict[int, float] = {}
-    over_box = []
-    for mrow, u in zip(meta, ed["Used"]):
-        u = None if pd.isna(u) else float(u)
+    # ---- step 1: used per count (yellow boxes)
+    _hint(1, "Type the good pieces (or kg) used in each <b>yellow box</b>. The grey columns are filled in for you.")
+    widths = [0.4, 3, 2, 0.9, 0.8, 1.2, 1.6]
+    heads = ["#", "Customer SKU name", "Country", "Count", "Boxes", "In boxes", "Used (type here)"]
+    hc = st.columns(widths)
+    for c, h in zip(hc, heads):
+        c.markdown(f'<div class="bp-h">{h}</div>', unsafe_allow_html=True)
+    used_vals = []
+    with st.container(key=f"bpin_used_{base}"):
+        for j, mrow in enumerate(meta):
+            r = rows.loc[mrow["i"]]
+            w = _unit_word(r["unit"])
+            c = st.columns(widths, vertical_alignment="center")
+            c[0].markdown(f'<span class="bp-ro">{mrow["i"] + 1}</span>', unsafe_allow_html=True)
+            c[1].markdown(r["customer_sku_name"])
+            c[2].markdown(f'<span class="bp-ro">{mrow["country"]}</span>', unsafe_allow_html=True)
+            c[3].markdown(f'<span class="bp-ro">{preprod.spec_label(mrow["spec"])}</span>', unsafe_allow_html=True)
+            c[4].markdown(f'<span class="bp-ro">{fmt_num(mrow["boxes"])}</span>', unsafe_allow_html=True)
+            c[5].markdown(f'<span class="bp-ro">{fmt_num(mrow["in"]) + " " + w if mrow["in"] is not None else ""}'
+                          '</span>', unsafe_allow_html=True)
+            old = saved.get((mrow["key"], mrow["spec"]))
+            v = c[6].number_input(f"Used {r['customer_sku_name']} {mrow['spec']}", min_value=0.0, step=1.0,
+                                  value=float(old) if old is not None else None, placeholder=f"type {w}",
+                                  key=f"bp_u_{base}_{j}", label_visibility="collapsed")
+            used_vals.append(v)
+
+    used_by, any_by, left_by, over_box = {}, {}, {}, []
+    left_known = {i: True for i in range(len(rows))}
+    for mrow, u in zip(meta, used_vals):
         i = mrow["i"]
-        if u is not None:
-            used_by_line[i] = used_by_line.get(i, 0) + u
-            any_by_line[i] = True
-            if mrow["in"] is not None:
-                left_by_line[i] = left_by_line.get(i, 0) + max(mrow["in"] - u, 0)
-                if u > mrow["in"] + 1e-9:
-                    over_box.append(f"{rows.loc[i, 'customer_sku_name']} {preprod.spec_label(mrow['spec'])}")
-    summary, blocked = [], []
+        if mrow["in"] is None:
+            left_known[i] = False
+        if u is None:
+            continue
+        used_by[i] = used_by.get(i, 0.0) + u
+        any_by[i] = True
+        if mrow["in"] is not None:
+            left_by[i] = left_by.get(i, 0.0) + max(mrow["in"] - u, 0)
+            if u > mrow["in"] + 1e-9:
+                over_box.append(f"{rows.loc[i, 'customer_sku_name']} {preprod.spec_label(mrow['spec'])}")
+
+    # ---- step 2: per item
+    st.markdown("##### Per item")
+    states = [preprod.batch_status(r["need"], used_by.get(i, 0.0), any_by.get(i, False), pct)
+              for i, r in rows.iterrows()]
+    tc = st.columns(4)
+    for col, (k, v, colr) in zip(tc, [("Items", len(rows), "#31333F"),
+                                      ("Covered", states.count("Covered"), "#1E6B3C"),
+                                      ("Short", states.count("Short"), "#7A4F00"),
+                                      ("Still to enter", states.count("Pending") + states.count("Over limit"),
+                                       "#A32018")]):
+        col.markdown(f'<div class="bp-tile"><div class="k">{k}</div><div class="v" style="color:{colr}">{v}</div>'
+                     '</div>', unsafe_allow_html=True)
+    _hint(2, "For the left over, type the <b>GT Qty</b> and the <b>Dump</b> (unusable). "
+             "<b>Back to box</b> is worked out for you.")
+    blocked, too_much, items_out = [], [], []
     for i, r in rows.iterrows():
-        used = used_by_line.get(i, 0.0)
-        st_ = preprod.batch_status(r["need"], used, any_by_line.get(i, False), pct)
+        key = preprod._k(r["customer_sku_name"])
+        w = _unit_word(r["unit"])
+        used, st_ = used_by.get(i, 0.0), states[i]
         if st_ == "Over limit":
             blocked.append(r["customer_sku_name"])
-        w = _unit_word(r["unit"])
         extra = used - r["need"]
-        summary.append({"#": str(i + 1), "Customer SKU name": r["customer_sku_name"],
-                        "Needed": f"{fmt_num(r['need'])} {w}", "Max": f"{fmt_num(preprod.max_allowed(r['need'], pct))}",
-                        "Used": fmt_num(used) if any_by_line.get(i) else "",
-                        "Extra / short": "" if not any_by_line.get(i) else
-                        (f"+{fmt_num(extra)} ({fmt_num(round(extra / r['need'] * 100, 1))} %)" if extra > 0 and r["need"]
-                         else f"{fmt_num(-extra)} short" if extra < 0 else "0"),
-                        "Left in boxes": f"{fmt_num(left_by_line[i])} {w}" if i in left_by_line else "",
-                        "Status": f"{ICON.get(st_, '')} {st_}"})
-    st.markdown("##### Per item")
-    st.dataframe(pd.DataFrame(summary), hide_index=True, width="stretch")
+        left = left_by.get(i) if any_by.get(i) and left_known[i] else None
+        pct_done = min(used / r["need"] * 100, 100) if r["need"] else 0
+        bar = "r" if st_ == "Over limit" else "w" if st_ == "Short" else ""
+        with st.container(border=True, key=f"bpin_item_{base}_{i}"):
+            c = st.columns([2.6, 1.1, 1, 1.1, 1, 1.3, 1.3, 1.1, 1.2], vertical_alignment="center")
+            c[0].markdown(f'<b>{i + 1}. {r["customer_sku_name"]}</b><div class="bp-bar"><div class="bp-fill {bar}" '
+                          f'style="width:{pct_done:.0f}%"></div></div>', unsafe_allow_html=True)
+            c[1].markdown(f'<div class="bp-h">Needed</div><b>{fmt_num(r["need"])} {w}</b><div class="bp-h">max '
+                          f'{fmt_num(preprod.max_allowed(r["need"], pct))}</div>', unsafe_allow_html=True)
+            _cell(c[2], "Used", f"{fmt_num(used)} {w}" if any_by.get(i) else "–")
+            _cell(c[3], "Extra / short", "" if not any_by.get(i) else
+                  f"+{fmt_num(extra)}" if extra > 0 else f"{fmt_num(-extra)} short" if extra < 0 else "0")
+            _cell(c[4], "Left over", f"{fmt_num(left)} {w}" if left is not None else "–")
+            og, od = saved_item.get(key, (None, None))
+            gt = c[5].number_input("GT Qty", min_value=0.0, step=1.0, value=og, placeholder=f"type {w}",
+                                   key=f"bp_gt_{base}_{i}")
+            dump = c[6].number_input("Dump", min_value=0.0, step=1.0, value=od, placeholder=f"type {w}",
+                                     key=f"bp_dump_{base}_{i}")
+            back = preprod.back_to_box(left, gt, dump)
+            if back is not None and back < -1e-9:
+                too_much.append(r["customer_sku_name"])
+            _cell(c[7], "Back to box", f"{fmt_num(back)} {w}" if back is not None else "–")
+            c[8].markdown(f'<span class="bp-chip {CHIP.get(st_, "bp-bad")}">{st_}</span>', unsafe_allow_html=True)
+        if gt is not None or dump is not None:
+            items_out.append({"customer_sku_name": r["customer_sku_name"], "country": "", "spec": preprod.ITEM,
+                              "boxes": "", "used": "", "unit": r["unit"],
+                              "gt_qty": "" if gt is None else gt, "dump": "" if dump is None else dump})
     if over_box:
         st.error("Used is more than the boxes hold: " + "; ".join(over_box))
     if blocked:
         st.error(f"Over the {fmt_num(pct)} % limit: " + "; ".join(blocked) + ". Fix it to save.")
-    if st.button("Save batching plan", type="primary", icon=":material/save:", disabled=bool(blocked or over_box),
-                 key=f"bp_save_{day}_{city}_{group}"):
+    if too_much:
+        st.error("GT Qty + Dump is more than the left over: " + "; ".join(too_much))
+    if st.button("Save batching plan", type="primary", icon=":material/save:",
+                 disabled=bool(blocked or over_box or too_much), key=f"bp_save_{base}"):
         out = []
-        for mrow, u in zip(meta, ed["Used"]):
-            if pd.isna(u):
+        for mrow, u in zip(meta, used_vals):
+            if u is None:
                 continue
             r = rows.loc[mrow["i"]]
             out.append({"customer_sku_name": r["customer_sku_name"], "country": mrow["country"], "spec": mrow["spec"],
                         "boxes": mrow["boxes"], "used": float(u), "unit": r["unit"]})
+        out += items_out
         try:
             n = preprod.save_plan(get_backend(), day, city, group, out, user.email)
         except SheetError as e:

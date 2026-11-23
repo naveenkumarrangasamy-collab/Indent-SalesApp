@@ -500,6 +500,13 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   Exact boxes on Pre-production actual.
   The other production tabs, mails and Batching sheet are unchanged (old sheet).
 
+- **Batching plan look (23 Nov, user-approved preview)**: step 1 = one row per SKU + count, grey read-only
+  columns and ONE yellow **Used** box per row (number_input in a `st-key-bpin*` container, CSS `BP_CSS`);
+  step 2 **Per item** = tiles (Items / Covered / Short / Still to enter) + one bordered card per item: Needed
+  (max), Used, Extra/short, **Left over** (taken out − used), yellow **GT Qty** and **Dump** to type, **Back to
+  box** = left over − GT − Dump (auto; save blocked when negative), status chip. GT/Dump saved in Batching_Plan
+  as a row with spec `_item` (cols `gt_qty`, `dump`; `preprod.item_saved`, `back_to_box`).
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.
