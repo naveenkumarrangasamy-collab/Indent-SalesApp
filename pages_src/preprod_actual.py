@@ -2,6 +2,8 @@
 Logic and storage: core/preprod.py. The existing Production / Batching sheets are unchanged."""
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import streamlit as st
 
@@ -252,8 +254,9 @@ def render_plan(user: User) -> None:
 
 
 BP_CSS = """<style>
-[class*="st-key-bpin"] div[data-baseweb="input"]{background:#FFFDF0 !important;border:2px solid #E8B10A !important;border-radius:8px !important}
-[class*="st-key-bpin"] div[data-baseweb="input"] input{background:transparent !important;font-size:1.05rem}
+[class*="st-key-bpin"] [data-testid="stNumberInputContainer"]{background:#FFFDF0 !important;border:2px solid #E8B10A !important;border-radius:8px !important}
+[class*="st-key-bpin"] [data-testid="stNumberInputContainer"] *{background-color:transparent !important}
+[class*="st-key-bpin"] [data-testid="stNumberInputContainer"] input{font-size:1.05rem}
 .bp-hint{display:flex;gap:.5rem;align-items:center;background:#FFF8DB;border:1px solid #F2DF9B;color:#6B4E00;border-radius:8px;padding:.55rem .8rem;font-size:.9rem;margin:.3rem 0 .7rem}
 .bp-step{flex:none;display:inline-flex;align-items:center;justify-content:center;width:1.3rem;height:1.3rem;border-radius:50%;background:#E8B10A;color:#fff;font-size:.75rem;font-weight:700}
 .bp-h{font-size:.8rem;color:#6B6F7B}.bp-ro{color:#6B6F7B}
@@ -284,6 +287,7 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
     st.markdown(BP_CSS, unsafe_allow_html=True)
     st.markdown(f"#### {group} · {city}")
     base = f"{day}_{city}_{group}"
+    css_key = re.sub(r"[^A-Za-z0-9_-]", "_", base)        # container keys become CSS class names
 
     meta = []
     for i, r in rows.iterrows():
@@ -306,7 +310,7 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
     for c, h in zip(hc, heads):
         c.markdown(f'<div class="bp-h">{h}</div>', unsafe_allow_html=True)
     used_vals = []
-    with st.container(key=f"bpin_used_{base}"):
+    with st.container(key=f"bpin_used_{css_key}"):
         for j, mrow in enumerate(meta):
             r = rows.loc[mrow["i"]]
             w = _unit_word(r["unit"])
@@ -364,7 +368,7 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
         left = left_by.get(i) if any_by.get(i) and left_known[i] else None
         pct_done = min(used / r["need"] * 100, 100) if r["need"] else 0
         bar = "r" if st_ == "Over limit" else "w" if st_ == "Short" else ""
-        with st.container(border=True, key=f"bpin_item_{base}_{i}"):
+        with st.container(border=True, key=f"bpin_item_{css_key}_{i}"):
             c = st.columns([2.6, 1.1, 1, 1.1, 1, 1.3, 1.3, 1.1, 1.2], vertical_alignment="center")
             c[0].markdown(f'<b>{i + 1}. {r["customer_sku_name"]}</b><div class="bp-bar"><div class="bp-fill {bar}" '
                           f'style="width:{pct_done:.0f}%"></div></div>', unsafe_allow_html=True)
