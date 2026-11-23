@@ -15,6 +15,7 @@ from core.production_calc import (batching, default_date, delivery_dates, filter
                                   make_ready_by_customer, merge_sheet, next_day_mask, not_in_base,
                                   production, sheet_rows, unmapped, with_po,
                                   MATCH, NO_PO, NOT_ON_INDENT, NOT_ON_PO, PO_HIGH, PO_LOW, STATUS_COLOURS)
+from core.models import fmt_num
 from core.sheets import SheetError
 from pages_src import common
 
@@ -369,11 +370,12 @@ def render_batching(user: User) -> None:
                           (MATCH, PO_LOW, PO_HIGH, NOT_ON_PO, NOT_ON_INDENT, NO_PO))
                + ". Red = PO lower than the indent or not on the PO; yellow = PO higher; orange = on the PO "
                  "but not on the indent.")
-    show = bat if has_var else bat.drop(columns=["Variety"])
+    show = (bat if has_var else bat.drop(columns=["Variety"])).copy()
+    for c_ in ("Indent qty", "PO qty", "Difference"):        # blank, not "None", while there is no PO
+        show[c_] = [("+" if c_ == "Difference" and isinstance(x, (int, float)) and x > 0 else "")
+                    + fmt_num(x) if x is not None and x != "" and not pd.isna(x) else "" for x in show[c_]]
     fills = {k: f"background-color: #{v}; color: #1a1a1a" for k, v in STATUS_COLOURS.items()}
-    styled = show.style.apply(lambda r: [fills.get(r["Status"], "")] * len(r), axis=1).format(
-        {c: (lambda x: "" if x is None or x == "" or pd.isna(x) else f"{x:g}")
-         for c in ("Indent qty", "PO qty", "Difference")})
+    styled = show.style.apply(lambda r: [fills.get(r["Status"], "")] * len(r), axis=1)
     st.dataframe(styled, hide_index=True, width="stretch",
                  column_config={"Spec": st.column_config.TextColumn(width="medium")})
     if m.has_prod_base:
