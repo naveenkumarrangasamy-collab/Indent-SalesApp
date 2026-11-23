@@ -548,6 +548,18 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Returns**: **Customer sample** column (kept by the customer, not billed): Billed = dispatched − returned − sample.
 - **Dispatch check**: new **Graded** dot; Batched on Dispatch includes returns used.
 
+### 24 Nov: variety before Submit (user-approved)
+
+- **Create indent / attach**: Submit and Update are off until every Apple line with a qty has a variety
+  (`items.variety_missing`; red banner over the item list + "🔴 Choose the variety for n item(s) first").
+- Variety order: name → **New Mapping Combination** "Customer Variety" when it names exactly one
+  (`masters.combo_varieties`, `Masters.combo_variety_for`) → New tab → All Cux City → the user picks.
+  Snacky / Daily / Everyday / Bulk apples list all 11 in Combination, so they are always asked.
+- Aliases: "red del" → RD, honeycrisp, cripps pink → Pink Lady; Honey Crisp + Cosmic Crisp in the list.
+- SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
+  (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
+  wait for the user.
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.
