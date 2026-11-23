@@ -479,38 +479,63 @@ def next_day_mask(lines: pd.DataFrame) -> pd.Series:
 # ------------------------------------------------------------------ batching: indent vs PO (24 Nov)
 
 SHEET_COLUMNS = ["Delivery date", "City", "Customer", "Delivery point", "Parent SKU", "Customer SKU Name", "Variety",
-                 "Lot", "Lot Size", "Spec", "Indent qty", "PO qty", "PO − indent", "Updated at"]
+                 "Lot", "Lot Size", "Spec", "Indent qty", "PO qty", "Difference", "Status", "Updated at"]
+NO_PO, MATCH, PO_LOW, PO_HIGH, NOT_ON_PO, NOT_ON_INDENT = ("No PO yet", "Match", "PO lower", "PO higher",
+                                                           "Not on PO", "Not on indent")
+STATUS_COLOURS = {PO_LOW: "F8C9C9", NOT_ON_PO: "F8C9C9", PO_HIGH: "FFE89A", NOT_ON_INDENT: "FFD3A1"}
 
 
-def with_po(bat: pd.DataFrame, po_qty: dict, po_indents: set) -> pd.DataFrame:
-    """Batching table -> 'Qty' becomes 'Indent qty', a 'PO qty' column next to it, no 'Indent' column.
-    po_qty {(indent_id, sku key): qty}; po_indents = indents that have a PO with qty per item.
-    PO qty is blank while none of the row's indents has a PO; an item missing from the PO counts 0."""
+def _n(v):
+    return None if v is None else int(v) if float(v).is_integer() else float(v)
+
+
+def with_po(bat: pd.DataFrame, po_qty: dict, po_indents: set, extras: list[dict] | None = None) -> pd.DataFrame:
+    """Batching table -> 'Qty' becomes 'Indent qty', then 'PO qty', 'Difference' (PO − indent) and
+    'Status'; no 'Indent' column. po_qty {(indent_id, sku key): qty or None = not on that PO};
+    po_indents = indents that have a PO with qty per item. Status: No PO yet / Match / PO lower /
+    PO higher / Not on PO (blank PO qty, never 0) / Not on indent (`extras`: PO-only items, rows with
+    City, Customer, Delivery point, Customer SKU Name, PO qty)."""
     out = bat.copy()
-    vals = []
-    for ids, name in zip(out.get("Indent", pd.Series(dtype=str)), out["Customer SKU Name"]):
+    pos, diffs, stats = [], [], []
+    for ids, name, ind in zip(out.get("Indent", pd.Series(dtype=str)), out["Customer SKU Name"], out["Qty"]):
         ids = [i.strip() for i in str(ids or "").split(",") if i.strip()]
         key = " ".join(str(name).split()).casefold()
         have = [i for i in ids if i in po_indents]
-        vals.append(sum(float(po_qty.get((i, key), 0.0)) for i in have) if have else None)
-    out = out.rename(columns={"Qty": "Indent qty"})
-    pos = list(out.columns).index("Indent qty") + 1
-    out.insert(pos, "PO qty", pd.array([None if v is None else int(v) if float(v).is_integer() else v
-                                        for v in vals], dtype=object))
-    return out.drop(columns=[c for c in ("Indent",) if c in out.columns])
+        got = [po_qty.get((i, key)) for i in have]
+        got = [float(g) for g in got if g is not None]
+        ind = float(ind or 0)
+        if not have:
+            po, diff, st_ = None, None, NO_PO
+        elif not got:
+            po, diff, st_ = None, -ind, (NOT_ON_PO if ind else MATCH)
+        else:
+            po = sum(got)
+            diff = po - ind
+            st_ = MATCH if abs(diff) < 1e-9 else PO_LOW if diff < 0 else PO_HIGH
+        pos.append(_n(po)); diffs.append(_n(diff)); stats.append(st_)
+    out = out.rename(columns={"Qty": "Indent qty"}).drop(columns=[c for c in ("Indent",) if c in out.columns])
+    out["PO qty"] = pd.array(pos, dtype=object)
+    out["Difference"] = pd.array(diffs, dtype=object)
+    out["Status"] = stats
+    out["Indent qty"] = out["Indent qty"].astype(object)
+    rows = [{**{c: "" for c in out.columns}, "City": e["City"], "Customer": e["Customer"],
+             "Delivery point": e["Delivery point"], "Customer SKU Name": e["Customer SKU Name"],
+             "Indent qty": None, "PO qty": _n(e["PO qty"]), "Difference": _n(e["PO qty"]),
+             "Status": NOT_ON_INDENT} for e in (extras or [])]
+    if rows:
+        out = pd.concat([out, pd.DataFrame(rows, columns=out.columns).astype(object)], ignore_index=True)
+        out = out.sort_values(["City", "Customer", "Delivery point"], key=_SORT, kind="stable").reset_index(drop=True)
+    return out
 
 
 def sheet_rows(view: pd.DataFrame, delivery_date: str, stamp: str) -> list[list]:
-    """Rows for the Batching_Sheet tab: one per delivery point + SKU, with the date and PO − indent."""
-    rows = []
-    for r in view.to_dict("records"):
-        ind, po = r.get("Indent qty"), r.get("PO qty")
-        diff = "" if po is None or pd.isna(po) else float(po) - float(ind or 0)
-        rows.append([delivery_date, r["City"], r["Customer"], r["Delivery point"], r["Parent SKU"],
-                     r["Customer SKU Name"], r.get("Variety", ""), r["Lot"], r["Lot Size"], r["Spec"], ind,
-                     "" if po is None or pd.isna(po) else po,
-                     "" if diff == "" else (int(diff) if float(diff).is_integer() else diff), stamp])
-    return rows
+    """Rows for the Batching_Sheet tab: one per delivery point + SKU."""
+    def cell(v):
+        return "" if v is None or (not isinstance(v, str) and pd.isna(v)) else v
+    return [[delivery_date, r["City"], r["Customer"], r["Delivery point"], r["Parent SKU"], r["Customer SKU Name"],
+             r.get("Variety", ""), r["Lot"], r["Lot Size"], r["Spec"], cell(r.get("Indent qty")),
+             cell(r.get("PO qty")), cell(r.get("Difference")), r["Status"], stamp]
+            for r in view.to_dict("records")]
 
 
 def merge_sheet(existing: list[list], new_rows: list[list], delivery_date: str, cities: set[str]) -> list[list]:

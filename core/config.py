@@ -176,8 +176,9 @@ def multi_po_customers() -> set[str]:
 def no_po_customers() -> set[str]:
     """Customers that send no PO / PO number (19 Nov: More; orders come in WhatsApp
     groups). Their 'PO' can be a screenshot (PNG/JPG) and the PO qty starts from the
-    indent qty. Secret `no_po_customers`, default ["More"]."""
-    v = get("no_po_customers", ["More"])
+    indent qty. 24 Nov: Metro and Bigbasket too; **Freeze** with no file = the PO.
+    Secret `no_po_customers`, default ["More", "Metro", "Bigbasket"]."""
+    v = get("no_po_customers", ["More", "Metro", "Bigbasket"])
     v = [v] if isinstance(v, str) else list(v or [])
     return {str(x).strip().casefold() for x in v if str(x).strip()}
 

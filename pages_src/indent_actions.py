@@ -93,15 +93,15 @@ def _po_dialog(indent_id: str, user: User) -> None:
     pre = _prefill(indent_id)
     no_po = cur.header.customer.strip().casefold() in config.no_po_customers()
     if no_po:
-        st.info(f"{cur.header.customer} sends no PO: attach the order screenshot (e.g. from WhatsApp) or a PDF. "
-                "The PO number can stay blank. PO qty starts from the indent qty: change only what differs.",
-                icon=":material/screenshot:")
+        st.info(f"{cur.header.customer} sends no PO. The quantities below start from the indent: change only "
+                "what differs, then press **Freeze**. What you freeze is the PO (unchanged = same as the "
+                "indent). A screenshot or PDF is optional.", icon=":material/lock:")
         if not pre.get("po_qty") and "init" not in pre:
             pre["po_qty"] = {x.customer_sku_name: float(x.qty) for x in cur.lines}
 
     # 1. the PO file (read automatically when it is a text PDF)
     c = st.columns([1, 1.6])
-    up = c[1].file_uploader("PO (PDF or screenshot)" if no_po else "PO file (PDF)",
+    up = c[1].file_uploader("Screenshot or PDF (optional)" if no_po else "PO file (PDF)",
                             type=["pdf"] + (["png", "jpg", "jpeg", "webp"] if no_po else []),
                             key=f"po_file_{indent_id}")
     files = st.session_state.setdefault("po_files", {})
@@ -148,7 +148,11 @@ def _po_dialog(indent_id: str, user: User) -> None:
     mail_again = replacing and st.checkbox("E-mail the replaced PO again", value=False, key=f"po_mail_{indent_id}")
     b = st.columns(3 if multi else 2)
     label = "Replace PO" if replacing else "Add this PO" if multi else ("Upload with differences" if diffs else "Upload PO")
-    need = [w for w, ok in (("choose the PO " + ("PDF or screenshot" if no_po else "PDF"), file_bytes), ("type the PO qty of at least one item",
+    if no_po and not replacing and not multi:
+        label = "Freeze with differences" if diffs else "Freeze"
+    if no_po and not file_name:
+        file_name = "No PO file (frozen in the app)"
+    need = [w for w, ok in (("choose the PO PDF", file_bytes or no_po), ("type the PO qty of at least one item",
                                                                 this_po)) if not ok]
     if need:
         st.caption("To upload: " + " and ".join(need) + ".")
@@ -157,7 +161,7 @@ def _po_dialog(indent_id: str, user: User) -> None:
         link, note = "", ""
         folder = config.po_drive_folder_id()
         backend = get_backend()
-        if folder or backend.mode == "local":
+        if file_bytes and (folder or backend.mode == "local"):
             try:
                 with st.spinner("Saving the PO file…"):
                     link = backend.upload_pdf(f"{indent_id} - {file_name}", file_bytes, folder)

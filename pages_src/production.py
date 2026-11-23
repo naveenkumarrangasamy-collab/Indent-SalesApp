@@ -13,7 +13,8 @@ from core.auth import User
 from core.pdf_report import sections_pdf, table_pdf
 from core.production_calc import (batching, default_date, delivery_dates, filter_lines, make_ready,
                                   make_ready_by_customer, merge_sheet, next_day_mask, not_in_base,
-                                  production, sheet_rows, unmapped, with_po)
+                                  production, sheet_rows, unmapped, with_po,
+                                  MATCH, NO_PO, NOT_ON_INDENT, NOT_ON_PO, PO_HIGH, PO_LOW, STATUS_COLOURS)
 from core.sheets import SheetError
 from pages_src import common
 
@@ -341,20 +342,31 @@ def render_batching(user: User) -> None:
     except SheetError as e:
         common.sheet_error(e)
         return
-    raw = batching(lines, m)
-    po_qty, po_ids = _po_quantities(lines)
-    view = with_po(raw, po_qty, po_ids)
+    po_qty, po_ids, extras = _po_quantities(lines)
+    parts = []
+    for day, part in lines.groupby("delivery_date", sort=True):
+        v = with_po(batching(part, m), po_qty, po_ids, [e for e in extras if e["day"] == day])
+        v.insert(0, "Delivery date", day)
+        parts.append(v)
+    view = pd.concat(parts, ignore_index=True)
     bat = common.numbered(view)
     _qty_strip(bat, "Indent qty", lines)
     has_var = bat["Variety"].astype(bool).any()
     cols = ["Parent SKU", "Customer SKU Name"] + (["Variety"] if has_var else []) + \
-        ["Lot", "Lot Size", "Spec", "Indent qty", "PO qty"]
-    points = list(bat.groupby(["City", "Customer", "Delivery point"], sort=False))
-    st.dataframe(bat if has_var else bat.drop(columns=["Variety"]), hide_index=True, width="stretch",
-                 column_config={"Indent qty": st.column_config.NumberColumn(format="%g"),
-                                "PO qty": st.column_config.NumberColumn(
-                                    format="%g", help="Blank until the PO is uploaded"),
-                                "Spec": st.column_config.TextColumn(width="medium")})
+        ["Lot", "Lot Size", "Spec", "Indent qty", "PO qty", "Difference", "Status"]
+    points = list(bat.groupby(["Delivery date", "City", "Customer", "Delivery point"], sort=False))
+    counts = bat["Status"].value_counts()
+    st.caption(" · ".join(f"**{counts.get(k, 0)}** {k.lower()}" for k in
+                          (MATCH, PO_LOW, PO_HIGH, NOT_ON_PO, NOT_ON_INDENT, NO_PO))
+               + ". Red = PO lower than the indent or not on the PO; yellow = PO higher; orange = on the PO "
+                 "but not on the indent.")
+    show = bat if has_var else bat.drop(columns=["Variety"])
+    fills = {k: f"background-color: #{v}; color: #1a1a1a" for k, v in STATUS_COLOURS.items()}
+    styled = show.style.apply(lambda r: [fills.get(r["Status"], "")] * len(r), axis=1).format(
+        {c: (lambda x: "" if x is None or x == "" or pd.isna(x) else f"{x:g}")
+         for c in ("Indent qty", "PO qty", "Difference")})
+    st.dataframe(styled, hide_index=True, width="stretch",
+                 column_config={"Spec": st.column_config.TextColumn(width="medium")})
     if m.has_prod_base:
         gaps = not_in_base(lines, m)
         if not gaps.empty:
@@ -367,43 +379,49 @@ def render_batching(user: User) -> None:
     # downloads: PDF one section per delivery point, Excel, CSV (no indent numbers)
     now = config.now_ist().strftime("%d %b %Y, %I:%M %p")
     sub = [st.session_state.get("bs_desc", ""), f"{len(points)} delivery points. Generated {now} IST."]
-    sections = [(f"{i}) {city} / {cust} / {store}", "", part[cols].reset_index(drop=True))
-                for i, ((city, cust, store), part) in enumerate(points, start=1)]
+    sections = [(f"{i}) {city} / {cust} / {store}", _fmt_date(day), part[cols].reset_index(drop=True))
+                for i, ((day, city, cust, store), part) in enumerate(points, start=1)]
     from core.reports import xlsx
     c = st.columns([1, 1, 1, 3])
     c[0].download_button("PDF", lambda: sections_pdf("Batching sheet", sub, sections,
                                                      footer="MT Indent - Batching sheet"), on_click="ignore",
                          file_name=f"batching_{label}.pdf", mime="application/pdf",
                          icon=":material/picture_as_pdf:", width="stretch")
-    c[1].download_button("Excel", lambda: xlsx({"Batching": bat}), on_click="ignore", file_name=f"batching_{label}.xlsx",
+    c[1].download_button("Excel", lambda: xlsx({"Batching": bat}, row_fill=STATUS_COLOURS), on_click="ignore", file_name=f"batching_{label}.xlsx",
                          mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                          icon=":material/download:", width="stretch")
     c[2].download_button("CSV", lambda: bat.to_csv(index=False).encode("utf-8"), on_click="ignore",
                          file_name=f"batching_{label}.csv",
                          mime="text/csv", icon=":material/download:", width="stretch")
-    _sync_batching_tab(view, lines)
+    _sync_batching_tab(view.drop(columns=["Delivery date"]), lines)
 
 
-def _po_quantities(lines: pd.DataFrame) -> tuple[dict, set]:
-    """{(indent_id, sku key): PO qty} and the indents whose PO has qty per item (PO_Item_Map links used)."""
+def _po_quantities(lines: pd.DataFrame) -> tuple[dict, set, list[dict]]:
+    """{(indent_id, sku key): PO qty or None = not on the PO}, the indents whose PO has qty per item
+    (PO_Item_Map links used), and the PO-only items (on a PO, not on the indent)."""
     from core.models import IndentLine
     try:
         po = indents.read_po_freeze()
     except SheetError:
-        return {}, set()
-    out, ids = {}, set()
+        return {}, set(), []
+    out, ids, extras = {}, set(), []
     for iid, g in lines.groupby("indent_id"):
         info = indents.po_info(po, iid)
         if info["qty"] is None:
             continue
         ids.add(iid)
+        first = g.iloc[0]
         items = [IndentLine(parent_sku=r["parent_sku"], customer_sku_name=r["customer_sku_name"],
                             variety=r.get("variety", ""), lot=r.get("lot", ""), qty=r["qty"])
                  for r in g.to_dict("records")]
-        for r in indents.po_vs_indent(items, info, customer=str(g["customer"].iloc[0])):
+        for r in indents.po_vs_indent(items, info, customer=str(first["customer"])):
             if r["indent_qty"] is not None:
-                out[(iid, " ".join(str(r["customer_sku_name"]).split()).casefold())] = r["po_qty"] or 0.0
-    return out, ids
+                out[(iid, " ".join(str(r["customer_sku_name"]).split()).casefold())] = r["po_qty"]
+            elif r["po_qty"]:
+                extras.append({"day": first["delivery_date"], "City": first["city"], "Customer": first["customer"],
+                               "Delivery point": first["store"], "Customer SKU Name": r["customer_sku_name"],
+                               "PO qty": r["po_qty"]})
+    return out, ids, extras
 
 
 def _sync_batching_tab(view: pd.DataFrame, lines: pd.DataFrame) -> None:

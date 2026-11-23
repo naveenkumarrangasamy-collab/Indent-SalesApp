@@ -51,26 +51,31 @@ def test_demand_by_variety_splits_rows():
 
 def test_batching_indent_and_po_qty():
     from core.production_calc import merge_sheet, sheet_rows, with_po
+    row = {"City": "PTP Bangalore", "Customer": "Zepto", "Delivery point": "S1", "Parent SKU": "Kiwi",
+           "Variety": "", "Lot": "Pack", "Lot Size": "3 Pcs", "Spec": ""}
     bat = pd.DataFrame([
-        {"City": "PTP Bangalore", "Customer": "Zepto", "Delivery point": "S1", "Parent SKU": "Kiwi",
-         "Customer SKU Name": "3PC - Green Kiwi", "Variety": "", "Lot": "Pack", "Lot Size": "3 Pcs", "Spec": "",
-         "Qty": 10, "Indent": "IN-1"},
-        {"City": "PTP Bangalore", "Customer": "Zepto", "Delivery point": "S1", "Parent SKU": "Kiwi",
-         "Customer SKU Name": "2PC - Kiwi Sungold", "Variety": "", "Lot": "Pack", "Lot Size": "2 Pcs", "Spec": "",
-         "Qty": 5, "Indent": "IN-1"},
-        {"City": "PTP Bangalore", "Customer": "Swiggy", "Delivery point": "WH1", "Parent SKU": "Kiwi",
-         "Customer SKU Name": "3PC - Green Kiwi", "Variety": "", "Lot": "Pack", "Lot Size": "3 Pcs", "Spec": "",
-         "Qty": 7, "Indent": "IN-2"},
+        {**row, "Customer SKU Name": "3PC - Green Kiwi", "Qty": 10, "Indent": "IN-1"},
+        {**row, "Customer SKU Name": "2PC - Kiwi Sungold", "Qty": 5, "Indent": "IN-1"},
+        {**row, "Customer SKU Name": "1PC - Avocado", "Qty": 8, "Indent": "IN-1"},
+        {**row, "Customer SKU Name": "1PC - Hass", "Qty": 4, "Indent": "IN-1"},
+        {**row, "Customer": "Swiggy", "Delivery point": "WH1", "Customer SKU Name": "3PC - Green Kiwi", "Qty": 7,
+         "Indent": "IN-2"},
     ])
-    v = with_po(bat, {("IN-1", "3pc - green kiwi"): 12}, {"IN-1"})
-    assert list(v.columns)[-2:] == ["Indent qty", "PO qty"] and "Indent" not in v.columns
-    assert list(v["PO qty"]) == [12, 0, None]
+    po = {("IN-1", "3pc - green kiwi"): 12, ("IN-1", "2pc - kiwi sungold"): None, ("IN-1", "1pc - avocado"): 6,
+          ("IN-1", "1pc - hass"): 4}
+    extra = [{"City": "PTP Bangalore", "Customer": "Zepto", "Delivery point": "S1",
+              "Customer SKU Name": "1Kg - Plum", "PO qty": 3}]
+    v = with_po(bat, po, {"IN-1"}, extra)
+    assert "Indent" not in v.columns and list(v.columns)[-4:] == ["Indent qty", "PO qty", "Difference", "Status"]
+    st = dict(zip(v["Customer SKU Name"] + "|" + v["Customer"], v["Status"]))
+    assert st["3PC - Green Kiwi|Zepto"] == "PO higher" and st["2PC - Kiwi Sungold|Zepto"] == "Not on PO"
+    assert st["1PC - Avocado|Zepto"] == "PO lower" and st["1PC - Hass|Zepto"] == "Match"
+    assert st["3PC - Green Kiwi|Swiggy"] == "No PO yet" and st["1Kg - Plum|Zepto"] == "Not on indent"
     rows = sheet_rows(v, "2026-11-25", "now")
-    assert rows[0][10:13] == [10, 12, 2] and rows[2][11] == ""
-    old = [["Delivery date"] + ["x"] * 3]
-    merged = merge_sheet(old, rows, "2026-11-25", {"PTP Bangalore"})
-    assert len(merged) == 4
-    again = merge_sheet(merged, rows[:1], "2026-11-25", {"PTP Bangalore"})
-    assert len(again) == 2
-    other = merge_sheet(merged, [], "2026-11-26", {"PTP Bangalore"})
-    assert len(other) == 4
+    hi = next(r for r in rows if r[5] == "3PC - Green Kiwi" and r[2] == "Zepto")
+    assert hi[10:14] == [10, 12, 2, "PO higher"]
+    assert next(r for r in rows if r[13] == "No PO yet")[11] == ""
+    merged = merge_sheet([["old title"]], rows, "2026-11-25", {"PTP Bangalore"})
+    assert len(merged) == 7
+    assert len(merge_sheet(merged, rows[:1], "2026-11-25", {"PTP Bangalore"})) == 2
+    assert len(merge_sheet(merged, [], "2026-11-26", {"PTP Bangalore"})) == 7

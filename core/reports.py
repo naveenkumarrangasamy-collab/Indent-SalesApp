@@ -79,7 +79,8 @@ def customer_df(rows: pd.DataFrame) -> pd.DataFrame:
 
 # ------------------------------------------------------------------ files
 
-def xlsx(sheets: dict[str, pd.DataFrame]) -> bytes:
+def xlsx(sheets: dict[str, pd.DataFrame], row_fill: dict | None = None) -> bytes:
+    """`row_fill` {Status value: hex colour}: rows of a sheet with a 'Status' column get that fill."""
     from openpyxl.styles import Font, PatternFill
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as xw:
@@ -94,6 +95,11 @@ def xlsx(sheets: dict[str, pd.DataFrame]) -> bytes:
                 width = max([len(str(col))] + [len(str(v)) for v in df[col].head(300)]) + 2
                 ws.column_dimensions[ws.cell(1, i).column_letter].width = min(48, width)
             ws.freeze_panes = "A2"
+            if row_fill and "Status" in df.columns:
+                for i, stv in enumerate(df["Status"], start=2):
+                    if stv in row_fill:
+                        for cell in ws[i]:
+                            cell.fill = PatternFill("solid", fgColor=row_fill[stv])
     return buf.getvalue()
 
 
