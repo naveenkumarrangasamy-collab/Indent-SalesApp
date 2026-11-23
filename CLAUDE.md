@@ -575,14 +575,19 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   shimla/kashmir/himachal → India) narrows a SKU's Combination 1 rows to that country when it has any; the
   variety is still asked. **Shimla** added to the Apple list. The 5 near-duplicate names are the same products
   (user 24 Nov); they are clubbed on the consolidated estimate; the sheet rows are left as they are.
-- **Batching sheet (24 Nov)**: "Qty" → **Indent qty**, new **PO qty** next to it (latest PO, Swiggy POs summed,
-  PO_Item_Map links used; blank until a PO with item qty; an item missing from the PO = 0), **no Indent column**
-  on screen or in PDF / Excel / CSV (`production_calc.with_po`, `pages_src.production._po_quantities`). The
-  **Batching_Sheet** tab of the Google Sheet is now a running table (header row 1: Delivery date, City, Customer,
-  Delivery point, Parent SKU, Customer SKU Name, Variety, Lot, Lot Size, Spec, Indent qty, PO qty, PO − indent,
-  Updated at; newest date first), written automatically whenever the page shows one delivery date and the
-  numbers changed (that date + those cities replaced, other days kept; `merge_sheet`). The old snapshot button
-  is gone from this page. PO-only items (on the PO, not the indent) are not in it yet.
+- **Batching sheet (24 Nov)**: columns Delivery date, City, Customer, Delivery point, Parent SKU, Customer SKU
+  Name, Variety, Lot, Lot Size, Spec, **Indent qty, PO qty, Difference (PO − indent), Status**; **no Indent
+  column** (screen, PDF, Excel, CSV). Status + row colour: Match / **PO lower** and **Not on PO** = red (PO qty
+  blank, never 0) / **PO higher** = yellow / **Not on indent** = orange (PO-only items, own rows) / No PO yet.
+  Swiggy POs are summed, PO_Item_Map links used (`production_calc.with_po`, `STATUS_COLOURS`,
+  `pages_src.production._po_quantities`); Excel rows carry the same colours (`reports.xlsx(row_fill=)`).
+  The **Batching_Sheet** tab of the Google Sheet is a running table with the same columns + Updated at (newest
+  date first), written automatically when the page shows one delivery date and the numbers changed (that date +
+  those cities replaced, other days kept; `merge_sheet`). The old snapshot button is gone from this page.
+- **No-PO customers = More, Metro, Bigbasket** (24 Nov): the PO dialog needs no file; quantities start from the
+  indent; **Freeze** (edited or not) records them as the PO and freezes the indent. A screenshot / PDF is optional.
+- Swiggy (multi-PO): a later PO may carry an item that is not on the indent ("Items on the PO that are not in
+  this indent" / read from the PDF) → shown as Not on indent; after **End of POs** nothing more is added.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.
