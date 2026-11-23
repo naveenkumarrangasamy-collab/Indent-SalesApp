@@ -60,6 +60,11 @@ Simple `name = value` lines must come **before** any `[section]`. Duplicate keys
 
 ### Tooling notes for Claude
 
+- **Auto-redeploy stopped on 23 Nov** (pushes reach GitHub but the app keeps the old code). After every push,
+  **reboot from Chrome**: share.streamlit.io (signed in as GitHub user Kathiramirtheeswaraa, user-approved
+  24 Nov) → workspace menu top-left → **naveenkumarrangasamy-collab** → indent-salesapp ⋮ → Reboot → Reboot.
+  The app is back in ~1 min (first load may show an error page; reload). No data is touched.
+
 - The GitHub API for Actions and secrets is blocked from the Claude cloud proxy, so use Chrome (Claude in Chrome) for anything in the GitHub web UI.
 - File uploads into Chrome from the user's computer need the user to pick the file. Use the **paste box** on the Import indents tab instead.
 - In Chrome, the app runs in a same-origin iframe. Open `/~/+/<page>` to work on it directly.
@@ -575,6 +580,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   shimla/kashmir/himachal → India) narrows a SKU's Combination 1 rows to that country when it has any; the
   variety is still asked. **Shimla** added to the Apple list. The 5 near-duplicate names are the same products
   (user 24 Nov); they are clubbed on the consolidated estimate; the sheet rows are left as they are.
+- **Production / Batching sheet filters (24 Nov)**: Delivery date = buttons ("Today · Tue 24 Nov (2)", every date
+  with indents, All dates), City = pills; the Batching sheet has no tiles; blank (not "None") PO qty / Difference.
 - **Batching sheet (24 Nov)**: columns Delivery date, City, Customer, Delivery point, Parent SKU, Customer SKU
   Name, Variety, Lot, Lot Size, Spec, **Indent qty, PO qty, Difference (PO − indent), Status**; **no Indent
   column** (screen, PDF, Excel, CSV). Status + row colour: Match / **PO lower** and **Not on PO** = red (PO qty
