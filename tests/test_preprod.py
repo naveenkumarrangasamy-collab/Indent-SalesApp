@@ -152,5 +152,6 @@ def test_gt_dump_and_back_to_box():
          "gt_qty": "", "dump": ""},
         {"delivery_date": "d", "city": "c", "group": "g", "customer_sku_name": "A", "spec": pp.ITEM, "used": "",
          "gt_qty": "6", "dump": ""}])
-    assert pp.item_saved(plan, "d", "c", "g") == {"a": (6.0, None)}
+    assert pp.item_saved(plan, "d", "c", "g") == {"a": (6.0, None, None)}
+    assert pp.back_to_box(10, 2, 1, 3) == 4
     assert pp.used_saved(plan, "d", "c", "g") == {("a", "100"): 90.0}

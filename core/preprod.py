@@ -308,23 +308,23 @@ ITEM = "_item"     # Batching_Plan row that carries one item's GT Qty and Dump (
 
 
 def item_saved(plan: pd.DataFrame | None, day: str, city: str, group: str) -> dict[str, tuple]:
-    """{sku key: (gt_qty, dump)} - the last saved GT Qty / Dump per item (None = not entered)."""
-    df = _scope(_norm(plan, ["delivery_date", "city", "group", "customer_sku_name", "spec", "gt_qty", "dump"]),
-                day, city, group)
+    """{sku key: (gt_qty, dump, mt_grade)} - the last saved values per item (None = not entered)."""
+    df = _scope(_norm(plan, ["delivery_date", "city", "group", "customer_sku_name", "spec", "gt_qty", "dump",
+                             "mt_grade"]), day, city, group)
     out = {}
     for r in df.to_dict("records"):
         if _c(r["spec"]) == ITEM:
-            g, d = _c(r.get("gt_qty")), _c(r.get("dump"))
-            out[_k(r["customer_sku_name"])] = (to_number(g) if g else None, to_number(d) if d else None)
+            vals = [_c(r.get(c)) for c in ("gt_qty", "dump", "mt_grade")]
+            out[_k(r["customer_sku_name"])] = tuple(to_number(v) if v else None for v in vals)
     return out
 
 
-def back_to_box(left: float | None, gt: float | None, dump: float | None) -> float | None:
-    """Left over = taken out - used; GT Qty and Dump come off it; the rest goes back to the box.
+def back_to_box(left: float | None, gt: float | None, dump: float | None, mt: float | None = None) -> float | None:
+    """Left over = taken out - used; MT Grade, GT Qty and Dump come off it; the rest goes back to the box.
     None when the left over is not known (sizes that are not counts, no box kg)."""
     if left is None:
         return None
-    return round(left - (gt or 0) - (dump or 0), 3)
+    return round(left - (gt or 0) - (dump or 0) - (mt or 0), 3)
 
 
 # ------------------------------------------------------------------ statuses

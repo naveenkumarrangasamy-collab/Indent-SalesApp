@@ -512,6 +512,24 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   green "N taken" under a count only when something is saved there (`PA_CSS`). Suggested reads
   "90C 6 · 100C 5 Box".
 
+### 23 Nov evening: Dispatch → Returns → Invoice (user-approved preview; OWNERS ONLY, trial)
+
+- Menu **"Dispatch (owners, trial)"**: Dispatch (`/dispatch`), Returns (`/returns`), Dispatch check
+  (`/dispatch-check`); `pages_src/dispatch.py`, logic `core/dispatch.py`, tests `tests/test_dispatch.py`.
+- **Dispatch**: indents whose customer is frozen in Pre-production. One row per item: Indent, Batched (Batching
+  plan used ÷ pieces per lot, minus what other stores of the same customer already dispatched), yellow
+  **Dispatch qty** (starts from batching), vs indent (Same / short / +extra / over the 10 % limit) and vs batching
+  (Matches / over / under). Over limit or over batching needs a reason. Vehicle, driver, time →
+  **Delivery Order** `DO-IN046-1` (proforma PDF; a re-dispatch makes -2 and replaces it). Tab `Dispatch_Lines`.
+- **Returns**: dispatched indents; yellow Returned + reason (Damaged / Quality / Over PO qty / Short shelf life /
+  Other); Billed = dispatched − returned → **final invoice** `INV-IN046` (PDF, rate = indent price, GST from secret
+  `gst_pct` {parent: %}, HSN from `hsn_codes`). Tab `Return_Lines`. Seller details: secrets `company_name`,
+  `company_address`, `company_gstin` (until set the PDFs show [NAME] etc.).
+- **Dispatch check**: tiles + one row per indent with dots Indent / PO / Pre-production / Batching / Dispatch /
+  Returns / Invoice and a note; item-by-item trail (Indent, PO, Taken out, Batched, Dispatched, Returned, Billed).
+- **Batching plan per item** also has **MT Grade** (typed); Back to box = left over − MT Grade − GT Qty − Dump;
+  each card = name + status on top, 8 equal columns under it.
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.

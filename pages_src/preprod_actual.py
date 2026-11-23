@@ -377,7 +377,7 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
                                        "#A32018")]):
         col.markdown(f'<div class="bp-tile"><div class="k">{k}</div><div class="v" style="color:{colr}">{v}</div>'
                      '</div>', unsafe_allow_html=True)
-    _hint(2, "For the left over, type the <b>GT Qty</b> and the <b>Dump</b> (unusable). "
+    _hint(2, "For the left over, type the <b>MT Grade</b>, <b>GT Qty</b> and <b>Dump</b> (unusable). "
              "<b>Back to box</b> is worked out for you.")
     blocked, too_much, items_out = [], [], []
     for i, r in rows.iterrows():
@@ -391,35 +391,39 @@ def _plan_body(user: User, day: str, city: str, group: str, dem: pd.DataFrame, m
         pct_done = min(used / r["need"] * 100, 100) if r["need"] else 0
         bar = "r" if st_ == "Over limit" else "w" if st_ == "Short" else ""
         with st.container(border=True, key=f"bpin_item_{css_key}_{i}"):
-            c = st.columns([2.6, 1.1, 1, 1.1, 1, 1.3, 1.3, 1.1, 1.2], vertical_alignment="center")
-            c[0].markdown(f'<b>{i + 1}. {r["customer_sku_name"]}</b><div class="bp-bar"><div class="bp-fill {bar}" '
-                          f'style="width:{pct_done:.0f}%"></div></div>', unsafe_allow_html=True)
-            c[1].markdown(f'<div class="bp-h">Needed</div><b>{fmt_num(r["need"])} {w}</b><div class="bp-h">max '
+            top = st.columns([6, 1], vertical_alignment="center")
+            top[0].markdown(f'<b>{i + 1}. {r["customer_sku_name"]}</b><div class="bp-bar"><div class="bp-fill {bar}" '
+                            f'style="width:{pct_done:.0f}%"></div></div>', unsafe_allow_html=True)
+            top[1].markdown(f'<div style="text-align:right"><span class="bp-chip {CHIP.get(st_, "bp-bad")}">{st_}'
+                            '</span></div>', unsafe_allow_html=True)
+            c = st.columns(8, vertical_alignment="bottom")
+            c[0].markdown(f'<div class="bp-h">Needed</div><b>{fmt_num(r["need"])} {w}</b><div class="bp-h">max '
                           f'{fmt_num(preprod.max_allowed(r["need"], pct))}</div>', unsafe_allow_html=True)
-            _cell(c[2], "Used", f"{fmt_num(used)} {w}" if any_by.get(i) else "–")
-            _cell(c[3], "Extra / short", "" if not any_by.get(i) else
+            _cell(c[1], "Used", f"{fmt_num(used)} {w}" if any_by.get(i) else "–")
+            _cell(c[2], "Extra / short", "–" if not any_by.get(i) else
                   f"+{fmt_num(extra)}" if extra > 0 else f"{fmt_num(-extra)} short" if extra < 0 else "0")
-            _cell(c[4], "Left over", f"{fmt_num(left)} {w}" if left is not None else "–")
-            og, od = saved_item.get(key, (None, None))
-            gt = c[5].number_input("GT Qty", min_value=0.0, step=1.0, value=og, placeholder=f"type {w}",
+            _cell(c[3], "Left over", f"{fmt_num(left)} {w}" if left is not None else "–")
+            og, od, om = saved_item.get(key, (None, None, None))
+            mt = c[4].number_input("MT Grade", min_value=0.0, step=1.0, value=om, placeholder=w,
+                                   key=f"bp_mt_{base}_{i}")
+            gt = c[5].number_input("GT Qty", min_value=0.0, step=1.0, value=og, placeholder=w,
                                    key=f"bp_gt_{base}_{i}")
-            dump = c[6].number_input("Dump", min_value=0.0, step=1.0, value=od, placeholder=f"type {w}",
+            dump = c[6].number_input("Dump", min_value=0.0, step=1.0, value=od, placeholder=w,
                                      key=f"bp_dump_{base}_{i}")
-            back = preprod.back_to_box(left, gt, dump)
+            back = preprod.back_to_box(left, gt, dump, mt)
             if back is not None and back < -1e-9:
                 too_much.append(r["customer_sku_name"])
             _cell(c[7], "Back to box", f"{fmt_num(back)} {w}" if back is not None else "–")
-            c[8].markdown(f'<span class="bp-chip {CHIP.get(st_, "bp-bad")}">{st_}</span>', unsafe_allow_html=True)
-        if gt is not None or dump is not None:
+        if gt is not None or dump is not None or mt is not None:
             items_out.append({"customer_sku_name": r["customer_sku_name"], "country": "", "spec": preprod.ITEM,
-                              "boxes": "", "used": "", "unit": r["unit"],
+                              "boxes": "", "used": "", "unit": r["unit"], "mt_grade": "" if mt is None else mt,
                               "gt_qty": "" if gt is None else gt, "dump": "" if dump is None else dump})
     if over_box:
         st.error("Used is more than the boxes hold: " + "; ".join(over_box))
     if blocked:
         st.error(f"Over the {fmt_num(pct)} % limit: " + "; ".join(blocked) + ". Fix it to save.")
     if too_much:
-        st.error("GT Qty + Dump is more than the left over: " + "; ".join(too_much))
+        st.error("MT Grade + GT Qty + Dump is more than the left over: " + "; ".join(too_much))
     if st.button("Save batching plan", type="primary", icon=":material/save:",
                  disabled=bool(blocked or over_box or too_much), key=f"bp_save_{base}"):
         out = []

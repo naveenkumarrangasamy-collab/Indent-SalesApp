@@ -538,9 +538,10 @@ def make_backend():
     seed = LOCAL_DATA_DIR / "seed"
     if seed.is_dir():
         import shutil
-        from core.schema import (ACCESS, BATCHING_MASTER, BATCHING_PLAN, OUTPUT_TABS, PO_ITEM_MAP,
-                                 PREPROD_ACTUAL, PREPROD_FREEZE)
-        keep = set(OUTPUT_TABS) | {ACCESS, PO_ITEM_MAP, BATCHING_MASTER, PREPROD_ACTUAL, PREPROD_FREEZE, BATCHING_PLAN}
+        from core.schema import (ACCESS, BATCHING_MASTER, BATCHING_PLAN, DISPATCH_LINES, OUTPUT_TABS,
+                                 PO_ITEM_MAP, PREPROD_ACTUAL, PREPROD_FREEZE, RETURN_LINES)
+        keep = set(OUTPUT_TABS) | {ACCESS, PO_ITEM_MAP, BATCHING_MASTER, PREPROD_ACTUAL, PREPROD_FREEZE,
+                                   BATCHING_PLAN, DISPATCH_LINES, RETURN_LINES}
         LOCAL_DATA_DIR.mkdir(parents=True, exist_ok=True)
         seed_names = {f.name for f in seed.glob("*.csv")}
         for f in seed.glob("*.csv"):
