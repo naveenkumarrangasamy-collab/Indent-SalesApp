@@ -631,6 +631,16 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   written under the last row used in A–M; nothing is moved or deleted; an item that left the indent keeps its row
   with Indent Qty 0. Colours as the Batching sheet. Runs on the server after every save / PO / freeze (with
   `sheet_views.refresh_soon`), after a redeploy and on every `?hourly=run`. Needs the service account as **Editor**.
+- **Pre-production actual = city level (24 Nov 6:45 PM, user-approved; owners, trial)** (`core/preprod_city.py`,
+  `pages_src/preprod_city.py`, tests `tests/test_preprod_city.py`; replaces the per-customer page, whose code stays in
+  `preprod_actual.py`): date + city (Bangalore first); every customer clubbed, one row per fruit + unit, **Apple per
+  variety**, **every Blueberry = punnets** (12 a tray). Need = PO qty when the indent has a PO (not on PO = 0,
+  PO-only items count), else indent qty, × pcs/kg per pack. "Asked" = need split by the customers' spec; notes for
+  POs much lower than the indent. Option dropdown "Country · Grade · Count · Box kg" from the New Mapping **Parent**
+  tab (Apple: grades of its variety); boxes typed per option (rows can be added); rounds add up in Preprod_Actual
+  with group **"All customers"**; Freeze the city. **Production sheet → "Estimate actual" tab, Creator only**: need,
+  estimate, taken, fruit in boxes, extra/short per city. Batching plan / Dispatch still expect per-customer freezes
+  (next step: move them to the city freeze).
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.

@@ -159,6 +159,8 @@ def render(user: User) -> None:
     names = ["By spec size", "Make-ready list", "By customer"]
     if user.is_owner:
         names += ["Estimate (new sheet)", "Estimate (consolidated)"]
+    if user.is_full_owner:            # 24 Nov evening: Creator only while being tried
+        names += ["Estimate actual"]
     v1, v2, v3, *v4 = st.tabs(names)
     with v1:
         show = common.numbered(prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"]))
@@ -191,6 +193,14 @@ def render(user: User) -> None:
             _estimate_new(all_lines, m, label)
         with v4[1]:
             _estimate_consolidated(all_lines, m, label)
+        if len(v4) > 2:
+            with v4[2]:
+                _day = st.session_state.get("ps_ctx", (None, ALL_DATES))[1]
+                if _day == ALL_DATES:
+                    st.info("Pick one delivery date.")
+                else:
+                    from pages_src import preprod_city
+                    preprod_city.render_estimate_actual(all_lines, m, _day)
     _next_day(m)
     gaps = not_in_base(all_lines, m)
     if not gaps.empty:
