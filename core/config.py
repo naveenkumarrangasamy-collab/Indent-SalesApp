@@ -100,7 +100,7 @@ DEFAULT_APPLE_VARIETIES = ["Gala", "Granny Smith", "Queen", "RD", "Pink Lady", "
 def ask_variety_parents() -> list[str]:
     """24 Nov: fruits whose variety must be chosen on Create indent when nothing maps it (Mandarin /
     Orange take their list from the New Mapping Parent tab). Secret `ask_variety_parents`."""
-    v = get("ask_variety_parents", ["Apple", "Mandarin", "Orange"])
+    v = get("ask_variety_parents", ["Apple"])      # 24 Nov 10 AM (user): only Apple asks
     return [str(x) for x in (v if isinstance(v, (list, tuple)) else [v])]
 
 

@@ -66,3 +66,18 @@ def test_washington_is_a_country_not_a_variety():
          "lot": "18 kg"} for c in ("USA", "Chile")])
     o = mapping_sheet.options(combos, None, "PTP Bangalore", "Swiggy", "1PC - Bulk Washington Apple Seb", "Apple", "RD")
     assert list(o) == ["USA · RD"]
+
+
+def test_combination_spec_used_when_new_tab_has_none():
+    from core.masters import Masters, combo_specs, _spec_text
+    from core.mapping_sheet import _k as mk
+    assert _spec_text("Avocado", "18, 20, 22") == "18C, 20C, 22C"
+    assert _spec_text("Kiwi", "33, 36") == "33mm, 36mm"
+    assert _spec_text("Grapes", "16mm+, 18mm+") == "16mm, 18mm"
+    combos = pd.DataFrame([{"city": "PTP Bangalore", "customer": "Zepto", "our": "3Pc - Kiwi Green",
+                            "parent": "Kiwi", "cust_spec": "33, 36"}])
+    m = Masters(sku=pd.DataFrame(), stores=pd.DataFrame(), varieties=pd.DataFrame(), access=pd.DataFrame())
+    m.combo_spec = combo_specs(combos)
+    assert m.prod_info("PTP Bangalore", "Zepto", "3Pc - Kiwi Green")["Spec-Size"] == "33mm, 36mm"
+    assert m.prod_info("PTP Bangalore", "Zepto", "nothing") is None
+    assert (mk("PTP Bangalore"), mk("Zepto"), mk("3Pc - Kiwi Green")) in m.combo_spec

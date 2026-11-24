@@ -606,6 +606,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   column Counts instead of per-count boxes; tile ≈ lo–hi. Both estimate tabs: **city is its own header**
   ("### PTP Bangalore"), then one table per fruit (consolidated) / per customer (new sheet), no city in the
   table titles.
+- **24 Nov 10:20 AM (user)**: **only Apple asks for a variety** (`ask_variety_parents` default ["Apple"]; Mandarin /
+  Orange no longer asked). **No spec in the New tab → the customer's spec from New Mapping Combination**
+  ("Customer Spec", country ignored; `Masters.prod_info` falls back to `combo_spec`, built in the cached
+  `_variety_maps`; '18, 20, 22' → '18C, 20C, 22C', Kiwi '33, 36' → '33mm, 36mm', '16mm+' → '16mm'). So Production
+  (By spec size / Make-ready / By customer), Batching sheet and the "not mapped" warning use it.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.

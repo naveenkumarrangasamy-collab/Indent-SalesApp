@@ -41,20 +41,30 @@ class Masters:
     prod_base: pd.DataFrame | None = None   # the 'New' tab (production base)
     combo_variety: dict | None = None       # 24 Nov: New Mapping Combination customer variety, one per SKU
     parent_varieties: dict | None = None    # 24 Nov: {parent key: [varieties]} from the New Mapping Parent tab
+    combo_spec: dict | None = None          # 24 Nov: {(city, customer, name) keys: (parent, "18C, 20C")} Combination
 
     def prod_info(self, city: str, customer: str, sku_name: str) -> dict | None:
         """The 'New' tab row for this SKU name (city + customer + name), else None.
         A row with no City matches every city."""
         df = self.prod_base
         if df is None or df.empty:
-            return None
+            df = pd.DataFrame(columns=["City", "Customer", "Customer SKU Name"])
         hit = df[(df["Customer"].map(_key) == _key(customer))
                  & (df["Customer SKU Name"].map(_key) == _key(sku_name))]
-        if hit.empty:
-            return None
-        exact = hit[hit["City"].map(_key) == _key(city)]
-        hit = exact if not exact.empty else hit[hit["City"].map(_key) == ""]
-        return None if hit.empty else hit.iloc[0].to_dict()
+        exact = hit[hit["City"].map(_key) == _key(city)] if not hit.empty else hit
+        hit = exact if not exact.empty else hit[hit["City"].map(_key) == ""] if not hit.empty else hit
+        row = None if hit.empty else hit.iloc[0].to_dict()
+        if row and (str(row.get("Spec-Size") or "").strip() or str(row.get("Repacking") or "").strip()):
+            return row
+        # 24 Nov (user): no spec in the New tab -> the customer's spec typed in New Mapping Combination
+        from core.mapping_sheet import _k as mk
+        got = (self.combo_spec or {}).get((mk(city), mk(customer), mk(sku_name)))
+        if got:
+            parent, spec = got
+            base = row or {"City": city, "Customer": customer, "Parent SKU": parent,
+                           "Customer SKU Name": sku_name, "Variety": "", "Repacking": "", "Spec-Origin": ""}
+            return {**base, "Spec-Size": spec}
+        return row
 
     @property
     def has_prod_base(self) -> bool:
@@ -383,7 +393,7 @@ def _variety_key(m: Masters) -> tuple:
 
 
 @st.cache_data(ttl=config.master_cache_seconds(), show_spinner=False)
-def _variety_maps(key: tuple) -> tuple[dict, dict]:
+def _variety_maps(key: tuple) -> tuple[dict, dict, dict]:
     """24 Nov: built once per master refresh, not on every click (it scans all of Combination 1)."""
     base = {_key(p): list(v) for p, v in key}
     pv = _parent_varieties()
@@ -396,8 +406,35 @@ def _variety_maps(key: tuple) -> tuple[dict, dict]:
     try:
         combos, _ = mapping_sheet.load()
     except Exception:  # noqa: BLE001
-        return pv, {}
-    return pv, combo_varieties(combos, vf)
+        return pv, {}, {}
+    return pv, combo_varieties(combos, vf), combo_specs(combos)
+
+
+def _spec_text(parent: str, raw: str) -> str:
+    """'18, 20, 22' -> '18C, 20C, 22C'; Kiwi '33, 36' -> '33mm, 36mm'; '16mm+' -> '16mm'."""
+    out = []
+    for part in re.split(r"[,/;]", str(raw or "")):
+        t = part.strip().rstrip("+").strip()
+        if not t:
+            continue
+        if re.fullmatch(r"\d+(\.\d+)?", t):
+            t += "mm" if _key(parent) == "kiwi" else "C"
+        elif re.fullmatch(r"\d+(\.\d+)?\s*[cC]", t):
+            t = t.replace(" ", "").upper()
+        out.append(t)
+    return ", ".join(dict.fromkeys(out))
+
+
+def combo_specs(combos: pd.DataFrame) -> dict:
+    """{(city, customer, our name) keys: (parent, spec)} for Combination rows with a Customer Spec."""
+    from core.mapping_sheet import _k as mk
+    out = {}
+    for r in combos.to_dict("records"):
+        spec = _spec_text(r.get("parent", ""), r.get("cust_spec", ""))
+        key = (mk(r["city"]), mk(r["customer"]), mk(r["our"]))
+        if spec and key not in out:
+            out[key] = (r.get("parent", ""), spec)
+    return out
 
 
 def _parent_varieties() -> dict:
@@ -458,7 +495,7 @@ def load_masters() -> Masters:
     m = masters_from_frames(frames, source)
     if mapping_sheet.use_new():
         sku = _new_mapping_sku()
-        m.parent_varieties, m.combo_variety = _variety_maps(_variety_key(m))
+        m.parent_varieties, m.combo_variety, m.combo_spec = _variety_maps(_variety_key(m))
         if sku is not None:
             m.sku = sku
             m.sku_source = f"{source} + New Mapping (Combination 1)"
