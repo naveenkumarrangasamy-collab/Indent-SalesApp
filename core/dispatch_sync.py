@@ -37,7 +37,25 @@ def sheet_id() -> str:
 
 
 def tab_name() -> str:
-    return str(config.get("dispatch_sheet_tab", "Copy of 03 - BLR_MTDispatch")).strip()
+    return str(config.get("dispatch_sheet_tab", "Auto 03 - BLR_MTDispatch")).strip()
+
+
+def tab_gid() -> int:
+    """The tab's fixed id (survives renames; was 'Copy of 03 …', renamed 'Auto 03 …' on 24 Nov)."""
+    try:
+        return int(config.get("dispatch_sheet_gid", 339596934))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _worksheet(client):
+    ss = client.open_by_key(sheet_id())
+    if tab_gid():
+        try:
+            return ss.get_worksheet_by_id(tab_gid())
+        except Exception:  # noqa: BLE001 - fall back to the name
+            pass
+    return ss.worksheet(tab_name())
 
 
 def cities() -> set[str]:
@@ -223,7 +241,7 @@ def sync(backend=None, lines: pd.DataFrame | None = None, m=None, today: dt.date
         lines = lines if lines is not None else indents.prepare(b.read(indents.INDENT_LINES))
         m = m if m is not None else masters.load_masters()
         new = build(lines, m, days)
-        ws = client.open_by_key(sheet_id()).worksheet(tab_name())
+        ws = _worksheet(client)
         existing = ws.get("A2:M", value_render_option="UNFORMATTED_VALUE",
                           date_time_render_option="SERIAL_NUMBER")
         p = plan(existing, new, {serial(d) for d in days}, cities())

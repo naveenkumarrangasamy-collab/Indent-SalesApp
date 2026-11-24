@@ -623,7 +623,7 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   indent orange) (`indent_actions._earlier_pos`, `indents.po_list`, `indents.po_progress`).
 - **BLR dispatch sheet sync (24 Nov 4:41 PM, user-approved)** (`core/dispatch_sync.py`, tests
   `tests/test_dispatch_sync.py`): the ops sheet "BLR FF Ops - Tracker" (secret `dispatch_sheet_id`, default
-  `12Zc6-C19dHKxrrdI1XsHn0Hl8zt-mbhxyssb9m5eVTk`), tab `dispatch_sheet_tab` (default "Copy of 03 - BLR_MTDispatch"),
+  `12Zc6-C19dHKxrrdI1XsHn0Hl8zt-mbhxyssb9m5eVTk`), tab id `dispatch_sheet_gid` (default 339596934; renamed "Auto 03 - BLR_MTDispatch" on 24 Nov, name `dispatch_sheet_tab` is the fallback),
   cities `dispatch_sheet_cities` (default PTP Bangalore), days = today − `dispatch_sync_days_back` (2) … tomorrow,
   never before `dispatch_sync_from` (default 2026-11-24, user 24 Nov 4:50 PM).
   The app writes **only A–M** (Date … Diff in Indent and PO = PO − indent); **N onwards is typed by people, never
