@@ -93,10 +93,9 @@ def _add_line(m: Masters) -> None:
     s["_item_added"] = True
 
 
-@st.fragment
 def _add_form(m: Masters) -> None:
-    """Only this box reruns while choosing parent / SKU / qty / price (fast);
-    the whole page reruns once an item is added, to show it in the table."""
+    """Part of the item-area fragment (24 Nov): choosing parent / SKU / qty / price and adding an
+    item rerun only the item area, never the whole page."""
     hdr = state.header()
     used = {x.customer_sku_name.casefold() for x in state.lines()}
     parents = m.parents(hdr.city, hdr.customer)
@@ -149,7 +148,7 @@ def _add_form(m: Masters) -> None:
         for e in s.pop("add_errors", []):
             st.error(e)
     if s.pop("_item_added", False):
-        st.rerun()
+        st.rerun(scope="fragment")
 
 
 # ------------------------------------------------------------ lines table
@@ -687,6 +686,13 @@ def _update(m: Masters, user: User) -> None:
 
 
 def render(m: Masters, user: User) -> None:
+    """24 Nov: the whole item area is a fragment, so typing a qty, picking a variety or editing a line
+    reruns only this part, not the page (day / customer / store above stay as they are)."""
+    _items_area(m, user)
+
+
+@st.fragment
+def _items_area(m: Masters, user: User) -> None:
     from pages_src.delivery import fmt_slot
 
     hdr = state.header()
@@ -768,6 +774,7 @@ def render(m: Masters, user: User) -> None:
                 s["review_open"] = True
 
     dialogs_only(m, user)
+    state.autosave()
 
 
 def dialogs_only(m: Masters, user: User) -> None:

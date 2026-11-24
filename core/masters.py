@@ -377,6 +377,29 @@ def _new_mapping_sku() -> pd.DataFrame | None:
     return mapping_sheet.sku_rows(combos, old, cities)
 
 
+def _variety_key(m: Masters) -> tuple:
+    """The Apple-style variety lists the old sheet gives (they shape the Combination match)."""
+    return tuple((p, tuple(m.varieties_for(p))) for p in config.variety_parents())
+
+
+@st.cache_data(ttl=config.master_cache_seconds(), show_spinner=False)
+def _variety_maps(key: tuple) -> tuple[dict, dict]:
+    """24 Nov: built once per master refresh, not on every click (it scans all of Combination 1)."""
+    base = {_key(p): list(v) for p, v in key}
+    pv = _parent_varieties()
+    ask = {_key(p) for p in config.ask_variety_parents()}
+
+    def vf(parent):
+        k = _key(parent)
+        return base.get(k) or (pv.get(k, []) if k in ask else [])
+    from core import mapping_sheet
+    try:
+        combos, _ = mapping_sheet.load()
+    except Exception:  # noqa: BLE001
+        return pv, {}
+    return pv, combo_varieties(combos, vf)
+
+
 def _parent_varieties() -> dict:
     from core import mapping_sheet
     try:
@@ -435,8 +458,7 @@ def load_masters() -> Masters:
     m = masters_from_frames(frames, source)
     if mapping_sheet.use_new():
         sku = _new_mapping_sku()
-        m.parent_varieties = _parent_varieties()
-        m.combo_variety = _combo_varieties(m)
+        m.parent_varieties, m.combo_variety = _variety_maps(_variety_key(m))
         if sku is not None:
             m.sku = sku
             m.sku_source = f"{source} + New Mapping (Combination 1)"
@@ -447,4 +469,5 @@ def clear_cache() -> None:
     from core import mapping_sheet
     _load_frames.clear()
     _new_mapping_sku.clear()
+    _variety_maps.clear()
     mapping_sheet.clear_cache()

@@ -660,6 +660,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 ## 7. Speed rules (16 Nov night: "make it light and fast")
 
+- **24 Nov 9:50 AM (user: every click refreshed the whole page)**: the Create indent item area (attach, add form,
+  item table, Submit / Update, dialogs) is ONE fragment `items._items_area`; adding an item reruns only it
+  (`st.rerun(scope="fragment")`); it autosaves at its end. The New Mapping variety maps are cached
+  (`masters._variety_maps`), not rebuilt from 4,862 Combination 1 rows on every rerun.
+
 - Item form (Create indent), Home, All indents and Upload PO bodies are `st.fragment`s: their toggles and filters
   rerun only that part. Adding an item reruns the whole app once (to refresh the table).
 - Downloads (PDF / Excel / CSV) are built only when clicked (`data=lambda: ...`, `on_click="ignore"`).
