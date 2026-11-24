@@ -65,8 +65,9 @@ def test_links_for_new_items(monkeypatch):
 
 def test_freeze_customers_24nov():
     from core import config
-    for c in ["Trent", "Trent Hypermarket", "Amazon", "Bigbasket", "Reliance", "More", "Metro"]:
+    for c in ["Trent", "Trent Hypermarket", "Amazon", "Bigbasket", "Reliance", "More", "Metro", "Namdhari", "Firstclub"]:
         assert config.can_freeze(c), c
-    for c in ["Namdhari", "Firstclub", "Swiggy", "Zepto", "Zomato", "Moreover"]:
+    for c in ["Swiggy", "Zepto", "Zomato", "Moreover"]:
         assert not config.can_freeze(c), c
-    assert config.po_first("Amazon") and not config.po_first("Trent")
+    assert config.po_first("Amazon") and config.po_first("Namdhari") and config.po_first("Firstclub")
+    assert not config.po_first("Trent")

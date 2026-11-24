@@ -592,8 +592,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   date first), written automatically when the page shows one delivery date and the numbers changed (that date +
   those cities replaced, other days kept; `merge_sheet`). The old snapshot button is gone from this page.
 - **Freeze instead of a PO** (24 Nov; secret `no_po_customers`, default **Amazon, Bigbasket, Reliance, Trent,
-  More, Metro** (user 24 Nov 1:46 PM; Namdhari / Firstclub back to Upload PO only; the user will send more);
-  matched on the customer's first word, `config.can_freeze`; **Amazon starts on Upload PO**, Freeze still
+  More, Metro, Namdhari, Firstclub** (user 24 Nov 1:46 / 1:49 PM; the user will send more);
+  matched on the customer's first word, `config.can_freeze`; **Amazon, Namdhari, Firstclub start on Upload PO**, Freeze still
   offered, secret `po_first_customers`): their PO dialog starts with a **PO** dropdown: **Freeze** (default; no file, quantities
   start from the indent, edited or not they are saved as the PO and the indent is frozen) or **Upload PO** (file
   needed, PDF or screenshot, as for other customers).

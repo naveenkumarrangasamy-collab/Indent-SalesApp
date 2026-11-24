@@ -179,7 +179,7 @@ def no_po_customers() -> set[str]:
     indent qty. 24 Nov: Metro and Bigbasket too; **Freeze** with no file = the PO.
     Secret `no_po_customers`, default (user 24 Nov 1:46 PM) Amazon, Bigbasket, Reliance, Trent, More,
     Metro: their PO dialog offers **Freeze** (no file) or **Upload PO**. Others: Upload PO only."""
-    v = get("no_po_customers", ["Amazon", "Bigbasket", "Reliance", "Trent", "More", "Metro"])
+    v = get("no_po_customers", ["Amazon", "Bigbasket", "Reliance", "Trent", "More", "Metro", "Namdhari", "Firstclub"])
     v = [v] if isinstance(v, str) else list(v or [])
     return {str(x).strip().casefold() for x in v if str(x).strip()}
 
@@ -197,7 +197,7 @@ def can_freeze(customer: str) -> bool:
 def po_first(customer: str) -> bool:
     """Freeze customers whose dialog starts on Upload PO (secret `po_first_customers`,
     default Amazon: upload their PO when they send one, else type the qty and Freeze)."""
-    v = get("po_first_customers", ["Amazon"])
+    v = get("po_first_customers", ["Amazon", "Namdhari", "Firstclub"])
     v = [v] if isinstance(v, str) else list(v or [])
     return _first_word_in(customer, {str(x).strip().casefold() for x in v if str(x).strip()})
 
