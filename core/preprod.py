@@ -511,7 +511,9 @@ def consolidated(dem: pd.DataFrame, opts_for, needs_variety) -> list[tuple[str, 
             "Variety · country": grade if no_var else f"{grade} · {country}", "Box": box,
             "Need": f"{fmt_num(round(g['need'], 2))} {unit}",
             "SKUs · customers": f"{len(g['skus'])} · {len(g['cust'])}",
-            "Counts": ", ".join(spec_label(sp) for sp in g["spec"] if sp != ANY_SIZE) or "-",
+            "Counts": ", ".join(spec_label(sp) for sp in sorted(
+                (x for x in g["spec"] if x != ANY_SIZE),
+                key=lambda x: (float(re.sub(r"[^\d.]", "", x) or 1e9), x))) or "-",
             "≈ Boxes": boxes, "_lo": lo, "_hi": hi, "_last": no_var})
     out = []
     for (city, parent), rows in sorted(tables.items(), key=lambda x: (x[0][0], x[0][1].casefold())):
