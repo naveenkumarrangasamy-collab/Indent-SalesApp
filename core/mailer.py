@@ -140,7 +140,9 @@ def po_recipients(header) -> list[str]:
 def file_mime(name: str) -> str:
     """The PO file's type: a PDF, or a screenshot for customers without a PO (19 Nov)."""
     ext = str(name or "").rsplit(".", 1)[-1].casefold()
-    return {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}.get(
+    return {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp",
+            "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "xls": "application/vnd.ms-excel", "csv": "text/csv"}.get(
         ext, "application/pdf")
 
 

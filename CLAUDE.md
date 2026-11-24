@@ -611,6 +611,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   ("Customer Spec", country ignored; `Masters.prod_info` falls back to `combo_spec`, built in the cached
   `_variety_maps`; '18, 20, 22' → '18C, 20C, 22C', Kiwi '33, 36' → '33mm, 36mm', '16mm+' → '16mm'). So Production
   (By spec size / Make-ready / By customer), Batching sheet and the "not mapped" warning use it.
+- **PO as Excel / CSV (24 Nov 12:45)**: Upload PO takes .xlsx / .xls / .csv too (every customer); item + qty
+  columns are read like an attached order (`order_reader._excel` / `sheet_lines`, incl. the Zepto format) and
+  then matched / checked exactly like a PDF PO (`indent_actions.read_sheet`); unreadable → type qty by hand.
+  The file is attached to the SO/PO mail with its own type (`mailer.file_mime`).
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.

@@ -107,17 +107,19 @@ def _po_dialog(indent_id: str, user: User) -> None:
     if no_po:
         files.pop(indent_id, None)
     else:
-        up = c[1].file_uploader("PO file (PDF or screenshot)" if can_freeze else "PO file (PDF)",
-                                type=["pdf"] + (["png", "jpg", "jpeg", "webp"] if can_freeze else []),
+        up = c[1].file_uploader("PO file (PDF, Excel or screenshot)" if can_freeze else "PO file (PDF or Excel)",
+                                type=["pdf", "xlsx", "xls", "csv"] + (["png", "jpg", "jpeg", "webp"] if can_freeze else []),
                                 key=f"po_file_{indent_id}")
         if up is not None:
             files[indent_id] = (up.name, up.getvalue())
         elif indent_id in files:
             c[1].caption(f"Using **{files[indent_id][0]}** chosen earlier (choose another file to replace it).")
     file_name, file_bytes = files.get(indent_id, (None, None))
-    is_pdf = bool(file_name) and file_name.casefold().endswith(".pdf")
-    read = _read(file_bytes) if file_bytes and is_pdf else None
-    if file_bytes and not is_pdf:
+    ext = (file_name or "").rsplit(".", 1)[-1].casefold()
+    is_pdf, is_sheet = ext == "pdf", ext in ("xlsx", "xls", "csv")
+    read = (_read(file_bytes) if is_pdf else _read_sheet(file_bytes, ext, cur.header.store)) \
+        if file_bytes and (is_pdf or is_sheet) else None
+    if file_bytes and not (is_pdf or is_sheet):
         with st.expander("The screenshot", expanded=False):
             st.image(file_bytes, width=360)
     no_key = f"po_no_{indent_id}"
@@ -133,7 +135,7 @@ def _po_dialog(indent_id: str, user: User) -> None:
         this_po, learned = _read_table(cur, read, po_number, indent_id, user)
     else:
         if read is not None:
-            st.warning(" ".join(read.checks) or "No item lines found in this PDF: type the quantities.")
+            st.warning(" ".join(read.checks) or "No item lines found in this file: type the quantities.")
         this_po = _manual_table(cur, pre, indent_id, multi, so_far)
     tot_i = sum(float(x.qty) for x in cur.lines)
     st.caption(f"Indent total **{fmt_num(tot_i)}** · this PO **{fmt_num(sum(this_po.values()))}**"
@@ -248,6 +250,33 @@ NOT_OURS = "— not in our list"
 @st.cache_data(show_spinner="Reading the PO…", max_entries=20)
 def _read(data: bytes):
     return po_reader.read_pdf(data)
+
+
+@st.cache_data(show_spinner="Reading the PO…", max_entries=20)
+def _read_sheet(data: bytes, ext: str, store: str = ""):
+    """24 Nov: a PO sent as Excel / CSV: item + qty columns read like an attached order (same matching
+    and checks as a PDF PO). Unreadable -> no lines, quantities typed by hand."""
+    return read_sheet(data, ext, store)
+
+
+def read_sheet(data: bytes, ext: str, store: str = ""):
+    import io
+
+    import pandas as pd
+    from core import order_reader
+    try:
+        if ext == "csv":
+            got = order_reader.sheet_lines(pd.read_csv(io.BytesIO(data), header=None, dtype=object).values.tolist())
+            text = ""
+        else:
+            got = order_reader._excel(data, store)
+            text = got.text or ""
+    except Exception as e:  # noqa: BLE001 - any unreadable file
+        return po_reader.POReadResult(lines=[], checks=[f"Could not read this file ({e}). Type the quantities."])
+    if got is None or not got.lines:
+        return po_reader.POReadResult(lines=[], checks=["No item and qty columns found in this file: "
+                                                        "type the quantities."])
+    return po_reader.POReadResult(lines=list(got.lines), po_number=po_reader._po_number(text), text=text)
 
 
 def _candidates(cur) -> list[str]:
