@@ -46,6 +46,11 @@ def cities() -> set[str]:
     return {str(x).strip().casefold() for x in v if str(x).strip()}
 
 
+def start_date() -> str:
+    """First delivery date written to the tab (user 24 Nov 4:50 PM: start from 24 Nov)."""
+    return str(config.get("dispatch_sync_from", "2026-11-24")).strip()[:10]
+
+
 def days_back() -> int:
     try:
         return int(config.get("dispatch_sync_days_back", 2))
@@ -212,6 +217,9 @@ def sync(backend=None, lines: pd.DataFrame | None = None, m=None, today: dt.date
             return "skipped: no Google connection"
         today = today or config.now_ist().date()
         days = [(today + dt.timedelta(days=k)).isoformat() for k in range(-days_back(), 2)]
+        days = [d for d in days if d >= start_date()]
+        if not days:
+            return "skipped: before the start date"
         lines = lines if lines is not None else indents.prepare(b.read(indents.INDENT_LINES))
         m = m if m is not None else masters.load_masters()
         new = build(lines, m, days)
