@@ -137,6 +137,7 @@ def _po_dialog(indent_id: str, user: User) -> None:
         if read is not None:
             st.warning(" ".join(read.checks) or "No item lines found in this file: type the quantities.")
         this_po = _manual_table(cur, pre, indent_id, multi, so_far)
+    _earlier_pos(cur, indent_id, this_po)
     tot_i = sum(float(x.qty) for x in cur.lines)
     st.caption(f"Indent total **{fmt_num(tot_i)}** · this PO **{fmt_num(sum(this_po.values()))}**"
                + (f" · earlier POs **{fmt_num(sum(so_far.values()))}**" if multi else ""))
@@ -369,6 +370,36 @@ def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[
             learned.append({"Customer": h.customer, "PO Item Code": x.code, "PO Item Name": x.name,
                             "Customer SKU Name": pick, "Updated_At": stamp})
     return this_po, learned
+
+
+def _earlier_pos(cur, indent_id: str, this_po: dict) -> None:
+    """24 Nov: POs already uploaded for this indent (Swiggy: several) and, per item, what is still pending
+    after them and this PO. Shown only when there is an earlier PO."""
+    earlier = indents.po_list(indents.read_po_freeze(), indent_id)
+    if not earlier:
+        return
+    rows = indents.po_progress(cur.lines, earlier, this_po)
+    heads = [f"PO {p['number'] or i + 1}" for i, p in enumerate(earlier)]
+    tab = []
+    for r in rows:
+        pend = r["pending"]
+        state = ("Not on indent" if r["indent"] is None else "Done" if abs(pend) < 1e-9
+                 else f"Pending {fmt_num(pend)}" if pend > 0 else f"Extra {fmt_num(-pend)}")
+        tab.append({"Customer SKU name": r["name"],
+                    "Indent": "" if r["indent"] is None else fmt_num(r["indent"]),
+                    **{h: "" if q is None else fmt_num(q) for h, q in zip(heads, r["pos"])},
+                    "This PO": "" if r["this"] is None else fmt_num(r["this"]),
+                    "Pending": "" if r["indent"] is None else fmt_num(max(pend, 0)), "Status": state})
+    df = pd.DataFrame(tab)
+    pending = sum(1 for t in tab if t["Status"].startswith("Pending"))
+    colour = {"Done": "#d8f0d8", "Not on indent": "#FFD3A1"}
+
+    def paint(r):
+        c = colour.get(r["Status"]) or ("#F8C9C9" if r["Status"].startswith("Pending") else "#FFE89A")
+        return [f"background-color: {c}; color: #1a1a1a"] * len(r)
+    with st.expander(f"Earlier POs · {len(earlier)} uploaded · {pending} item(s) still pending", expanded=True):
+        st.caption(" · ".join(f"**{h}** {p['at'][:16]} by {p['by'].split('@')[0]}" for h, p in zip(heads, earlier)))
+        st.dataframe(common.numbered(df).style.apply(paint, axis=1), hide_index=True, width="stretch")
 
 
 def _manual_table(cur, pre: dict, indent_id: str, multi: bool, so_far: dict) -> dict:

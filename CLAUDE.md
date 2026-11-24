@@ -615,6 +615,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   columns are read like an attached order (`order_reader._excel` / `sheet_lines`, incl. the Zepto format) and
   then matched / checked exactly like a PDF PO (`indent_actions.read_sheet`); unreadable → type qty by hand.
   The file is attached to the SO/PO mail with its own type (`mailer.file_mime`).
+- **Earlier POs in the PO window (24 Nov 1 PM)**: when an indent already has a PO (Swiggy's several, or a Replace PO),
+  an open box "Earlier POs · n uploaded · m item(s) still pending" lists each PO (number, time, by) and one row per
+  item: Indent, qty on each earlier PO, This PO, Pending, Status (Done green / Pending red / Extra yellow / Not on
+  indent orange) (`indent_actions._earlier_pos`, `indents.po_list`, `indents.po_progress`).
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.

@@ -703,6 +703,43 @@ def _qty_json(raw) -> dict:
         return {}
 
 
+def po_list(po: pd.DataFrame | None, indent_id: str) -> list[dict]:
+    """24 Nov: every PO uploaded for one indent, oldest first: number, at, by, qty per SKU."""
+    if po is None or po.empty or "indent_id" not in po.columns:
+        return []
+    out = []
+    for r in po[po["indent_id"].astype(str) == str(indent_id)].to_dict("records"):
+        if str(r.get("kind", "") or "").strip().lower() == PO_END:
+            continue
+        out.append({"number": str(r.get("po_number") or "").strip(), "at": str(r.get("confirmed_at") or ""),
+                    "by": str(r.get("confirmed_by") or ""), "qty": _qty_json(r.get("po_qty_json"))})
+    return out
+
+
+def po_progress(lines: list, earlier: list[dict], this_po: dict | None = None) -> list[dict]:
+    """One row per indent item (then items only on a PO): indent qty, qty on each earlier PO, this PO,
+    pending = indent − all POs (negative = more than the indent)."""
+    def k(s):
+        return " ".join(str(s).split()).casefold()
+    this = {k(a): float(b) for a, b in (this_po or {}).items()}
+    pos = [{k(a): b for a, b in p["qty"].items()} for p in earlier]
+    rows, seen = [], set()
+    names = [(x.customer_sku_name, float(x.qty)) for x in lines]
+    for p in earlier:
+        names += [(a, None) for a in p["qty"]]
+    names += [(a, None) for a in (this_po or {})]
+    for name, ind in names:
+        key = k(name)
+        if key in seen:
+            continue
+        seen.add(key)
+        got = [p.get(key) for p in pos]
+        done = sum(g or 0 for g in got) + this.get(key, 0.0)
+        pend = (ind or 0) - done
+        rows.append({"name": name, "indent": ind, "pos": got, "this": this.get(key), "done": done, "pending": pend})
+    return rows
+
+
 def po_info(po: pd.DataFrame | None, indent_id: str) -> dict:
     """POs of one indent: count, End of POs pressed?, PO qty per SKU (sum of all
     POs for multi-PO customers, else the latest PO; None when no PO has qty per

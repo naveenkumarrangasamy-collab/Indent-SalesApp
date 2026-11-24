@@ -23,3 +23,17 @@ def test_csv_po_lines_and_bad_file():
     assert r.lines[0].qty == 12
     bad = read_sheet(b"not a sheet", "xlsx")
     assert not bad.lines and bad.checks
+
+
+def test_po_progress_pending_done_extra():
+    from types import SimpleNamespace as L
+    from core import indents
+    lines = [L(customer_sku_name="2PC - Kiwi", qty=10), L(customer_sku_name="1PC - Avocado", qty=5),
+             L(customer_sku_name="125gm - Blueberry", qty=4)]
+    earlier = [{"number": "MBF1", "at": "", "by": "", "qty": {"2PC - Kiwi": 6}},
+               {"number": "MBF2", "at": "", "by": "", "qty": {"1PC - Avocado": 7, "1Kg - Plum": 2}}]
+    rows = {r["name"]: r for r in indents.po_progress(lines, earlier, {"2PC - Kiwi": 4})}
+    assert rows["2PC - Kiwi"]["pending"] == 0 and rows["2PC - Kiwi"]["pos"] == [6, None]
+    assert rows["1PC - Avocado"]["pending"] == -2          # extra 2
+    assert rows["125gm - Blueberry"]["pending"] == 4       # nothing yet
+    assert rows["1Kg - Plum"]["indent"] is None            # only on a PO
