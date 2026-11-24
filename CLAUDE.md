@@ -591,8 +591,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   The **Batching_Sheet** tab of the Google Sheet is a running table with the same columns + Updated at (newest
   date first), written automatically when the page shows one delivery date and the numbers changed (that date +
   those cities replaced, other days kept; `merge_sheet`). The old snapshot button is gone from this page.
-- **Freeze instead of a PO** (24 Nov; secret `no_po_customers`, default More, Metro, Reliance, Bigbasket,
-  Namdhari, Firstclub): their PO dialog starts with a **PO** dropdown: **Freeze** (default; no file, quantities
+- **Freeze instead of a PO** (24 Nov; secret `no_po_customers`, default **Amazon, Bigbasket, Reliance, Trent,
+  More, Metro** (user 24 Nov 1:46 PM; Namdhari / Firstclub back to Upload PO only; the user will send more);
+  matched on the customer's first word, `config.can_freeze`; **Amazon starts on Upload PO**, Freeze still
+  offered, secret `po_first_customers`): their PO dialog starts with a **PO** dropdown: **Freeze** (default; no file, quantities
   start from the indent, edited or not they are saved as the PO and the indent is frozen) or **Upload PO** (file
   needed, PDF or screenshot, as for other customers).
 - **Items on a PO that are not on the indent** (24 Nov): Batching sheet row with **Indent qty 0**, the PO qty and

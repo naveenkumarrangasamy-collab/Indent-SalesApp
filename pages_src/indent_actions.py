@@ -91,8 +91,9 @@ def _po_dialog(indent_id: str, user: User) -> None:
                 f"({info['pos']} received so far). Press **End of POs** after the last one; the indent "
                 "is then frozen and the differences are shown.", icon=":material/library_add:")
     pre = _prefill(indent_id)
-    can_freeze = cur.header.customer.strip().casefold() in config.no_po_customers() and not multi and not replacing
-    how = st.selectbox("PO", ["Freeze", "Upload PO"], key=f"po_how_{indent_id}") if can_freeze else "Upload PO"
+    can_freeze = config.can_freeze(cur.header.customer) and not multi and not replacing
+    ways = ["Upload PO", "Freeze"] if config.po_first(cur.header.customer) else ["Freeze", "Upload PO"]
+    how = st.selectbox("PO", ways, key=f"po_how_{indent_id}") if can_freeze else "Upload PO"
     no_po = how == "Freeze"
     if no_po:
         st.info("No PO file needed. The quantities below start from the indent: change only what differs, "

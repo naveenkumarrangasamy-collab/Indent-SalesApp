@@ -61,3 +61,12 @@ def test_links_for_new_items(monkeypatch):
         {"Customer SKU Name": "1Pc - Hass", "From file": "1pc - hass"}])
     assert [(r["PO Item Name"], r["Customer SKU Name"]) for r in rows] == [("Fresho Blueberry 125 g",
                                                                           "125gm - Fresho Blueberry")]
+
+
+def test_freeze_customers_24nov():
+    from core import config
+    for c in ["Trent", "Trent Hypermarket", "Amazon", "Bigbasket", "Reliance", "More", "Metro"]:
+        assert config.can_freeze(c), c
+    for c in ["Namdhari", "Firstclub", "Swiggy", "Zepto", "Zomato", "Moreover"]:
+        assert not config.can_freeze(c), c
+    assert config.po_first("Amazon") and not config.po_first("Trent")
