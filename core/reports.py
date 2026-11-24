@@ -90,7 +90,7 @@ def xlsx(sheets: dict[str, pd.DataFrame], row_fill: dict | None = None) -> bytes
             ws = xw.sheets[safe]
             for cell in ws[1]:
                 cell.font = Font(bold=True, color="FFFFFF")
-                cell.fill = PatternFill("solid", fgColor="1C6B49")
+                cell.fill = PatternFill("solid", fgColor="FF1C6B49")
             for i, col in enumerate(df.columns, start=1):
                 width = max([len(str(col))] + [len(str(v)) for v in df[col].head(300)]) + 2
                 ws.column_dimensions[ws.cell(1, i).column_letter].width = min(48, width)
@@ -99,7 +99,7 @@ def xlsx(sheets: dict[str, pd.DataFrame], row_fill: dict | None = None) -> bytes
                 for i, stv in enumerate(df["Status"], start=2):
                     if stv in row_fill:
                         for cell in ws[i]:
-                            cell.fill = PatternFill("solid", fgColor=row_fill[stv])
+                            cell.fill = PatternFill("solid", fgColor="FF" + row_fill[stv])   # FF = solid in every viewer
     return buf.getvalue()
 
 

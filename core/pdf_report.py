@@ -66,9 +66,10 @@ def _is_num(v) -> bool:
         return False
 
 
-def _table(pdf: FPDF, df: pd.DataFrame) -> None:
+def _table(pdf: FPDF, df: pd.DataFrame, row_fill: dict | None = None) -> None:
     """Crisp, readable table: 10 pt text, bold green header, bold Total rows,
-    numbers right-aligned (sized for reading on a phone as well as print)."""
+    numbers right-aligned (sized for reading on a phone as well as print).
+    row_fill {Status value: hex}: rows with that Status get that background (24 Nov, batching)."""
     cols = list(df.columns)
     widths = [_WEIGHTS.get(c, 1.0) for c in cols]
     num = {c for c in cols if c in _NUMERIC or (len(df) and all(_is_num(v) for v in df[c]))}
@@ -85,11 +86,15 @@ def _table(pdf: FPDF, df: pd.DataFrame) -> None:
         row = table.row()
         for c in cols:
             row.cell(_t(c))
+        si = cols.index("Status") if row_fill and "Status" in cols else None
+        fills = {k: FontFace(fill_color=tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)))
+                 for k, h in (row_fill or {}).items()}
         for rec in df.itertuples(index=False):
             total = str(rec[0]).strip().casefold() == "total"
+            st = bold if total else fills.get(rec[si]) if si is not None else None
             row = table.row()
             for v in rec:
-                row.cell(_t(v), style=bold if total else None)
+                row.cell(_t(v), style=st)
 
 
 def _lot_totals(pdf: FPDF, df: pd.DataFrame) -> None:
@@ -115,7 +120,7 @@ def table_pdf(title: str, subtitle: list[str], df: pd.DataFrame, footer: str = "
 
 
 def sections_pdf(title: str, subtitle: list[str], sections: list[tuple[str, str, pd.DataFrame]],
-                 footer: str = "", page_each: bool = False) -> bytes:
+                 footer: str = "", page_each: bool = False, row_fill: dict | None = None) -> bytes:
     """One PDF with a heading + table per section (e.g. one per customer / store).
     page_each: every section starts on a new page (one customer per page)."""
     pdf = _new_pdf(title, subtitle, footer)
@@ -140,7 +145,7 @@ def sections_pdf(title: str, subtitle: list[str], sections: list[tuple[str, str,
             pdf.set_font("Helvetica", "", 9)
             pdf.cell(0, 6, "No items.", new_x="LMARGIN", new_y="NEXT")
             continue
-        _table(pdf, df)
+        _table(pdf, df, row_fill)
         _lot_totals(pdf, df)
     return bytes(pdf.output())
 

@@ -404,7 +404,8 @@ def render_batching(user: User) -> None:
     from core.reports import xlsx
     c = st.columns([1, 1, 1, 3])
     c[0].download_button("PDF", lambda: sections_pdf("Batching sheet", sub, sections,
-                                                     footer="MT Indent - Batching sheet"), on_click="ignore",
+                                                     footer="MT Indent - Batching sheet",
+                                                     row_fill=STATUS_COLOURS), on_click="ignore",
                          file_name=f"batching_{label}.pdf", mime="application/pdf",
                          icon=":material/picture_as_pdf:", width="stretch")
     c[1].download_button("Excel", lambda: xlsx({"Batching": bat}, row_fill=STATUS_COLOURS), on_click="ignore", file_name=f"batching_{label}.xlsx",
