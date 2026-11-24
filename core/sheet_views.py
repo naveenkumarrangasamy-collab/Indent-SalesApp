@@ -197,6 +197,11 @@ def refresh_soon() -> None:
                 refresh(b)
             except Exception:  # noqa: BLE001 - a view; the next save tries again
                 pass
+            try:                # 24 Nov: the ops team's BLR dispatch sheet, columns A-M
+                from core import dispatch_sync
+                dispatch_sync.sync(b)
+            except Exception:  # noqa: BLE001
+                pass
             if not _again.is_set():
                 return
 

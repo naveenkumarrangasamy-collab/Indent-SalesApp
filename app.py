@@ -67,7 +67,9 @@ if st.query_params.get("hourly") == "run":
         _txt = "; ".join(f"{r['status']} {r['to']} {r.get('detail', '')}".strip() for r in _res)
     except Exception as _e:  # noqa: BLE001 - reported back to the workflow log
         _txt = f"error {type(_e).__name__}: {_e}"
-    st.text(f"HOURLY-RESULT: {_txt or 'nothing to do'}")
+    from core import dispatch_sync as _ds
+    _txt = (_txt or "nothing to do") + f" | dispatch sheet: {_ds.sync()}"
+    st.text(f"HOURLY-RESULT: {_txt}")
     st.stop()
 
 common.inject_css()

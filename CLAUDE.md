@@ -621,6 +621,15 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   an open box "Earlier POs · n uploaded · m item(s) still pending" lists each PO (number, time, by) and one row per
   item: Indent, qty on each earlier PO, This PO, Pending, Status (Done green / Pending red / Extra yellow / Not on
   indent orange) (`indent_actions._earlier_pos`, `indents.po_list`, `indents.po_progress`).
+- **BLR dispatch sheet sync (24 Nov 4:41 PM, user-approved)** (`core/dispatch_sync.py`, tests
+  `tests/test_dispatch_sync.py`): the ops sheet "BLR FF Ops - Tracker" (secret `dispatch_sheet_id`, default
+  `12Zc6-C19dHKxrrdI1XsHn0Hl8zt-mbhxyssb9m5eVTk`), tab `dispatch_sheet_tab` (default "Copy of 03 - BLR_MTDispatch"),
+  cities `dispatch_sheet_cities` (default PTP Bangalore), days = today − `dispatch_sync_days_back` (2) … tomorrow.
+  The app writes **only A–M** (Date … Diff in Indent and PO = PO − indent); **N onwards is typed by people, never
+  touched**. Rows are matched by Date + Customer + Delivery point + SKU + Variety and only updated; new lines are
+  written under the last row used in A–M; nothing is moved or deleted; an item that left the indent keeps its row
+  with Indent Qty 0. Colours as the Batching sheet. Runs on the server after every save / PO / freeze (with
+  `sheet_views.refresh_soon`), after a redeploy and on every `?hourly=run`. Needs the service account as **Editor**.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.
