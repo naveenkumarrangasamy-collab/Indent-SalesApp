@@ -26,16 +26,15 @@ def _opts(r):
     return {"Peru": {"spec": ["Any size"], "unit": "Tray", "box_kg": None, "country": "Peru", "grade": ""}}
 
 
-def test_clubbed_per_count_and_variety_missing_apart():
-    out = dict(preprod.consolidated(_dem(), _opts, lambda p: p == "Apple"))
-    apple = out["Apple · PTP Bangalore"]
+def test_clubbed_range_and_variety_missing_apart():
+    out = {(c, p): df for c, p, df in preprod.consolidated(_dem(), _opts, lambda p: p == "Apple")}
+    apple = out[("PTP Bangalore", "Apple")]
     gala = apple.iloc[0]
     assert gala["Variety · country"] == "Gala · NewZealand"
-    assert gala["Boxes at each count"] == "90C · 6 | 100C · 5"     # 500 pcs at each count
-    assert gala["Total"] == "11 Box" and gala["SKUs · customers"] == "2 · 2"
+    assert gala["≈ Boxes"] == "≈ 10–12 Box"            # 1000 pcs: at 100C 10 boxes, at 90C 12
+    assert gala["SKUs · customers"] == "2 · 2" and gala["Counts"] == "90C, 100C"
     assert apple.iloc[-1]["Variety · country"] == preprod.NO_VARIETY
-    blue = out["Blueberry · PTP Bangalore"].iloc[0]
-    assert blue["Total"] == "3 Tray"
+    assert out[("PTP Bangalore", "Blueberry")].iloc[0]["≈ Boxes"] == "≈ 3 Tray"
 
 
 def test_demand_by_variety_splits_rows():

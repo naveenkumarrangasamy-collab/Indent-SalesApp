@@ -246,7 +246,10 @@ def next_day_customers() -> dict[str, list[str]]:
     section on the Production page (today's order + the next day's order) and left
     out of the main production tables. Secret `next_day_customers`, e.g.
     {Zepto = ["Bangalore"]} (a word of the city name; [] = every city).
-    Default: Zepto in Bangalore. Each customer / city can be added later."""
+    24 Nov (user): OFF — Zepto is shown like every customer (today's orders under today, tomorrow's under
+    tomorrow). Only used again when secret `next_day_on = true`."""
+    if not get("next_day_on", False):
+        return {}
     v = get("next_day_customers", {"Zepto": ["Bangalore"]})
     if isinstance(v, str):
         v = {v: []}

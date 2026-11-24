@@ -231,8 +231,13 @@ def _estimate_new(lines: pd.DataFrame, m, label: str) -> None:
                                                       for i, (h, df) in enumerate(blocks)}),
                        file_name=f"estimate_new_{label}.xlsx", mime=reports.XLSX, icon=":material/download:",
                        key="est_xlsx", on_click="ignore")
+    last = None
     for head, df in blocks:
-        st.markdown(f"**{head}**")
+        who, _, city = head.rpartition(" · ")
+        if city != last:
+            st.markdown(f"### {city}")
+            last = city
+        st.markdown(f"**{who}**")
         st.dataframe(df, hide_index=True, width="stretch")
 
 
@@ -255,24 +260,28 @@ def _estimate_consolidated(lines: pd.DataFrame, m, label: str) -> None:
         st.info("No items with a quantity for this date.")
         return
     blocks = preprod.consolidated(dem, lambda r: _opts(m, data, r), m.needs_variety)
-    total = sum(int(df["_n"].sum()) for _, df in blocks)
-    rows = sum(len(df) for _, df in blocks)
-    missing = sum(int((df["Variety · country"] == preprod.NO_VARIETY).sum()) for _, df in blocks)
+    lo = sum(int(df["_lo"].sum()) for _, _, df in blocks)
+    hi = sum(int(df["_hi"].sum()) for _, _, df in blocks)
+    rows = sum(len(df) for _, _, df in blocks)
+    missing = sum(int((df["Variety · country"] == preprod.NO_VARIETY).sum()) for _, _, df in blocks)
     c = st.columns(3)
-    c[0].metric("Boxes / trays from primary", f"≈ {total}")
-    c[1].metric("Fruits · rows", f"{len(blocks)} · {rows}")
+    c[0].metric("Boxes / trays from primary", f"≈ {lo}" if lo == hi else f"≈ {lo}–{hi}")
+    c[1].metric("Fruits · rows", f"{len({(ct, p) for ct, p, _ in blocks})} · {rows}")
     c[2].metric("Variety not chosen", missing)
     st.caption("Trial, owners only. All customers together, no names. Each SKU uses its first country "
-               "(Combination 1) and its allowed counts; its pieces are shared evenly over those counts and "
-               "boxes are rounded up per count after clubbing. Exact boxes are entered on "
-               "**Pre-production actual**.")
-    show = [(h, common.numbered(df.drop(columns=["_n"]))) for h, df in blocks]
-    st.download_button("Excel", lambda: reports.xlsx({f"{i + 1} {h.split(' · ')[0]}"[:31]: df
-                                                      for i, (h, df) in enumerate(show)}),
+               "(Combination 1) and its allowed counts. ≈ Boxes = all at the biggest count … all at the "
+               "smallest count. Exact boxes are entered on **Pre-production actual**.")
+    show = [(city, parent, common.numbered(df.drop(columns=["_lo", "_hi"]))) for city, parent, df in blocks]
+    st.download_button("Excel", lambda: reports.xlsx({f"{i + 1} {p} {ct.replace('PTP ', '')}"[:31]: df
+                                                      for i, (ct, p, df) in enumerate(show)}),
                        file_name=f"estimate_consolidated_{label}.xlsx", mime=reports.XLSX,
                        icon=":material/download:", key="estc_xlsx", on_click="ignore")
-    for head, df in show:
-        st.markdown(f"**{head}**")
+    last = None
+    for city, parent, df in show:
+        if city != last:
+            st.markdown(f"### {city}")
+            last = city
+        st.markdown(f"**{parent}**")
         st.dataframe(df, hide_index=True, width="stretch")
 
 

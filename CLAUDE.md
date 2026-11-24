@@ -600,6 +600,12 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   All Cux City + New (`indent_actions._name_new_items`); the indent itself is not changed.
 - Swiggy (multi-PO): a later PO may carry an item that is not on the indent ("Items on the PO that are not in
   this indent" / read from the PDF) → shown as Not on indent; after **End of POs** nothing more is added.
+- **24 Nov 10 AM**: **Zepto like everyone** (D+1 section off: `config.next_day_customers()` returns {} unless
+  secret `next_day_on = true`); today's Zepto orders under today, tomorrow's under tomorrow.
+  **Estimate (consolidated)**: ≈ Boxes is a **range** (all at the biggest allowed count … all at the smallest),
+  column Counts instead of per-count boxes; tile ≈ lo–hi. Both estimate tabs: **city is its own header**
+  ("### PTP Bangalore"), then one table per fruit (consolidated) / per customer (new sheet), no city in the
+  table titles.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.
