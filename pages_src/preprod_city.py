@@ -58,7 +58,7 @@ def _pick_city(lines: pd.DataFrame, key: str) -> str:
     cities = sorted(lines["city"].unique(), key=lambda c: (0 if "bangalore" in c.casefold() else 1, c))
     if len(cities) == 1:
         return cities[0]
-    return st.pills("City", cities, default=cities[0], key=key) or cities[0]
+    return st.pills("Pre-production for", cities, default=cities[0], key=key) or cities[0]
 
 
 # ------------------------------------------------------------------ the page
@@ -110,7 +110,7 @@ def _body(user: User, day: str, city: str, rows: list[dict], data, parent_df) ->
             st.markdown(f"#### {r['parent']}")
             last_parent = r["parent"]
         with st.container(border=True):
-            c = st.columns([3.0, 1.6, 4.6, 1.6])
+            c = st.columns([2.6, 1.4, 5.4, 1.4])
             title = r["variety"] or r["parent"]
             c[0].markdown(f"**{title}** · {fmt_num(round(r['need'], 1))} {_unit(r['unit'])}")
             c[0].caption(f"{r['skus']} SKU(s) · {', '.join(r['customers'])}")
@@ -121,16 +121,17 @@ def _body(user: User, day: str, city: str, rows: list[dict], data, parent_df) ->
                 c[0].markdown(f"<span style='font-size:.78rem;color:#7A4F00'>⚠ {note}</span>",
                               unsafe_allow_html=True)
             c[1].markdown("**Suggested**")
-            c[1].markdown(sug)
+            c[1].markdown(sug if sug != "-" else "— (no count asked)")
             if mine:
                 c[2].caption("Taken so far: " + " · ".join(f"{k} × {fmt_num(v)}" for k, v in mine.items()))
             if not frozen:
                 ed = c[2].data_editor(
                     pd.DataFrame({COL_OPT: [None, None], COL_BOX: [None, None]}),
                     key=f"{base}_{i}", num_rows="dynamic", hide_index=True, width="stretch",
-                    column_config={COL_OPT: st.column_config.SelectboxColumn(COL_OPT, options=labels, width="large"),
+                    column_config={COL_OPT: st.column_config.SelectboxColumn(COL_OPT, options=labels, width="medium",
+                                                                              required=False),
                                    COL_BOX: st.column_config.NumberColumn(COL_BOX, min_value=0, step=1,
-                                                                          format="%d")})
+                                                                          format="%d", width="small")})
                 by = {o["label"]: o for o in opts}
                 for rec in ed.to_dict("records"):
                     n = rec.get(COL_BOX)
