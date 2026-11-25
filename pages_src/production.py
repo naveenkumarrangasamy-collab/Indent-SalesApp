@@ -606,7 +606,8 @@ def _tracking(label: str) -> None:
     def _colour(val):
         rgb = ts.eff_rgb(val)
         return "" if rgb is None else "background-color:rgb({},{},{})".format(*[int(c * 255) for c in rgb])
-    st.dataframe(df.style.map(_colour, subset=[eff]), hide_index=True, width="stretch")
+    shown = df.map(lambda v: f"{v:g}" if isinstance(v, float) else v)
+    st.dataframe(shown.style.map(_colour, subset=[eff]), hide_index=True, width="stretch")
     c = st.columns([1, 2, 4])
     c[0].download_button("CSV", data=lambda: df.to_csv(index=False).encode(),
                          file_name=f"production_tracking_{label}.csv", mime="text/csv", key="tr_csv",
