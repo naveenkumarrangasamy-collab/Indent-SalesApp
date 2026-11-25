@@ -97,7 +97,7 @@ def packs_for(lines: pd.DataFrame, parent: str, day: str, city: str) -> dict[str
     return {k: v for k, v in sorted(out.items()) if v > 0}
 
 
-def row(lot: dict, pack: str, vals: dict, day: str, city: str) -> dict:
+def row(lot: dict, pack: str, vals: dict, day: str, city: str, comment: str = "") -> dict:
     r = compute(lot.get("box_kg"), lot.get("pcs_per_box"), lot.get("boxes_moved"), pack, vals)
     return {"production_date": day, "city": city, "parent_sku": lot.get("parent_sku", ""),
             "table_no": lot.get("table_no", ""), "lot_id": lot.get("entry_id", ""), "size": lot.get("size", ""),
@@ -110,7 +110,8 @@ def row(lot: dict, pack: str, vals: dict, day: str, city: str) -> dict:
             "lotting_kg": round(r["lotting"], 3),
             "efficiency": round(r["efficiency"], 4) if r["efficiency"] is not None else "",
             "non_mt": round(r["non_mt"], 4) if r["non_mt"] is not None else "",
-            "dump_pct": round(r["dump_pct"], 4) if r["dump_pct"] is not None else ""}
+            "dump_pct": round(r["dump_pct"], 4) if r["dump_pct"] is not None else "",
+            "comment": str(comment or "").strip()}
 
 
 def save(backend, rows: list[dict], user: str) -> int:

@@ -85,7 +85,7 @@ def build(lots: pd.DataFrame, done: pd.DataFrame) -> list[list]:
                 _r(c["taken_kg"]), _r(c["left_kg_total"]), _r(j), _r(c["mt_kg"]), _r(c["gt_kg_total"]),
                 _r(c["dump_kg_total"]), _r(c["lotting"]),
                 _pct(c["efficiency"]), _pct(c["non_mt"]), _pct(c["dump_pct"]),
-                _pct(sum(p for p in parts if p is not None)) if j > 0 else "", ""])
+                _pct(sum(p for p in parts if p is not None)) if j > 0 else "", str(o.get("comment") or "")])
     rows.sort(key=lambda r: (r[0], str(r[9]).zfill(3), str(r[2])), reverse=False)
     rows.sort(key=lambda r: r[0], reverse=True)
     return rows

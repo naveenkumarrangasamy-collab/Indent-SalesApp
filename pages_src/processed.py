@@ -247,6 +247,8 @@ def _grid_row(lot: dict, pack: str = "", vals: dict | None = None, saved: bool =
     for col, k in G_COLS.items():
         v = vals.get(k)
         r[col] = None if _blank(v) or pr._f(v) == 0 and not saved else pr._f(v)
+    c = vals.get("comment")
+    r["Comments"] = "" if _blank(c) else str(c)
     r["_saved"] = saved
     return _with_result(r)
 
@@ -257,7 +259,7 @@ def _vals(r: dict) -> dict:
 
 def _with_result(r: dict) -> dict:
     vals = _vals(r)
-    if not r.get("Cux Lot") or not any(v for v in vals.values()):
+    if not r.get("Cux Lot") or not (any(v for v in vals.values()) or r.get("Comments")):
         r["Efficiency"], r["Status"] = "", "Saved" if r.get("_saved") else "Not entered"
         return r
     c = pr.compute(r["Box kg (A)"], r["Pcs/box"], r["Boxes (B)"], r["Cux Lot"], vals)
@@ -315,23 +317,43 @@ def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
         packs += [p for p in pr.packs_for(lines, fruit, day, city) if p not in packs]
     packs += [p for p in DEFAULT_PACKS if p not in packs]
     entered = sum(1 for r in base if r["Status"] != "Not entered")
-    st.caption(f"{len(base)} line(s) · {entered} entered · type only the white columns; the rest is worked out "
-               "and goes to **Production Tracking**.")
+    st.caption(f"{len(base)} line(s) · {entered} entered · the rest is worked out and goes to "
+               "**Production Tracking**.")
+    st.markdown(
+        "<div style='font-size:0.82rem;margin:-4px 0 6px 0'>"
+        "<span style='background:#F1F4F7;border-radius:6px;padding:2px 8px'>🔒 filled for you</span> &nbsp;"
+        "<span style='background:#FFF4D6;border-radius:6px;padding:2px 8px'>▼ pick from the list</span> &nbsp;"
+        "<span style='background:#E6F4EA;border-radius:6px;padding:2px 8px'>✏️ type the number</span> &nbsp;"
+        "<span style='background:#EDE7FB;border-radius:6px;padding:2px 8px'>💬 type a note</span> &nbsp;"
+        "· double-click a cell (or tap it) to type · scroll sideways for more columns</div>",
+        unsafe_allow_html=True)
 
     df = pd.DataFrame([{"#": i + 1, **{k: v for k, v in r.items() if k not in ("lot_id", "_saved")}}
                        for i, r in enumerate(base)])
-    num = {col: st.column_config.NumberColumn(col, min_value=0, format="%g", width="medium") for col in G_COLS}
-    cfg = {"#": st.column_config.NumberColumn("#", width="small"),
-           "Variety": st.column_config.TextColumn("Variety", width="small"),
-           "Cux Lot": st.column_config.SelectboxColumn("Cux Lot", options=packs, width="small"),
-           "Boxes (B)": st.column_config.NumberColumn(format="%g", width="small"),
-           "Box kg (A)": st.column_config.NumberColumn(format="%g", width="small"),
-           "Pcs/box": st.column_config.NumberColumn(format="%g", width="small"),
-           "Efficiency": st.column_config.TextColumn("Efficiency", width="small"),
-           "Status": st.column_config.TextColumn("Status", width="small"), **num}
+    tips = {"MT Ready (D1)": "Customer packs made (in the Cux Lot chosen)",
+            "MT Ready kg (D2)": "Loose MT kg, only for kg packs",
+            "Left over box (E1)": "Full MT boxes not used", "Left over kg (E2)": "Loose MT kg not used",
+            "Left over pcs (E3)": "Loose MT pieces not used", "GT Ready box (F1)": "Boxes to GT",
+            "GT Ready kg (F2)": "Loose kg to GT", "GT Ready pcs (F3)": "Loose pieces to GT",
+            "Dump kg (G1)": "Dump in kg", "Dump pcs (G2)": "Dump in pieces"}
+    cfg = {col: st.column_config.NumberColumn(f"✏️ {col}", min_value=0, step=1, format="%g", width="medium",
+                                              help=tips[col]) for col in G_COLS}
+    lock = {"#": ("#", "small"), "Fruit": ("🔒 Fruit", "small"), "Variety": ("🔒 Variety", "small"),
+            "Size": ("🔒 Size", "small"), "Table": ("🔒 Table", "small"), "Boxes (B)": ("🔒 Boxes (B)", "small"),
+            "Box kg (A)": ("🔒 Box kg (A)", "small"), "Pcs/box": ("🔒 Pcs/box", "small")}
+    for col, (lab, w) in lock.items():
+        cfg[col] = (st.column_config.NumberColumn(lab, format="%g", width=w, pinned=col in ("#", "Fruit", "Variety"))
+                    if col in ("#", "Boxes (B)", "Box kg (A)", "Pcs/box")
+                    else st.column_config.TextColumn(lab, width=w, pinned=col in ("Fruit", "Variety")))
+    cfg["Cux Lot"] = st.column_config.SelectboxColumn("▼ Cux Lot", options=packs, width="small", required=False,
+                                                      help="Pick the customer pack made from this lot")
+    cfg["Comments"] = st.column_config.TextColumn("💬 Comments", width="large", max_chars=200,
+                                                  help="Operations note, e.g. loose box, returns mixed")
+    cfg["Efficiency"] = st.column_config.TextColumn("Efficiency", width="small", help="MT kg ÷ used kg")
+    cfg["Status"] = st.column_config.TextColumn("Status", width="small")
     st.data_editor(df, key=ekey, hide_index=True, width="stretch", column_config=cfg, num_rows="fixed",
-                   disabled=LOCKED + ["Efficiency", "Status"], on_change=_grid_edit, args=(key, ekey),
-                   column_order=LOCKED + ["Cux Lot"] + list(G_COLS) + ["Efficiency", "Status"])
+                   disabled=list(lock) + ["Efficiency", "Status"], on_change=_grid_edit, args=(key, ekey),
+                   column_order=list(lock) + ["Cux Lot"] + list(G_COLS) + ["Comments", "Efficiency", "Status"])
 
     c = st.columns([2, 1, 1])
     labels = [f"#{i + 1} · {r['Fruit']} · table {r['Table']} · {r['Size']}" for i, r in enumerate(base)]
@@ -348,7 +370,8 @@ def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
     todo = [r for r in base if r["Status"] == "Not saved"]
     if c[2].button(f"Save {len(todo)} line(s)" if todo else "Save", type="primary", icon=":material/save:",
                    width="stretch", key="pg_save", disabled=not todo):
-        rows = [pr.row(lots[r["lot_id"]], r["Cux Lot"], _vals(r), day, city) for r in todo if r["lot_id"] in lots]
+        rows = [pr.row(lots[r["lot_id"]], r["Cux Lot"], _vals(r), day, city, r.get("Comments") or "")
+                for r in todo if r["lot_id"] in lots]
         _grid_confirm(rows, todo, user)
     bad = [i + 1 for i, r in enumerate(base) if r["Efficiency"] == "check"]
     if bad:

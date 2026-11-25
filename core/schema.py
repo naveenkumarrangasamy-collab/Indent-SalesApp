@@ -74,7 +74,7 @@ TABS: dict[str, list[str]] = {
                 "size", "variety", "box_kg", "pcs_per_box", "boxes_moved", "cux_lot", "pack_kg", "mt_packs",
                 "mt_loose_kg", "left_box", "left_kg", "left_pcs", "gt_box", "gt_kg", "gt_pcs", "dump_kg", "dump_pcs",
                 "taken_kg", "used_kg", "mt_kg", "gt_kg_total", "dump_kg_total", "lotting_kg", "efficiency", "non_mt",
-                "dump_pct"],
+                "dump_pct", "comment"],
     PREPROD_FREEZE: ["delivery_date", "city", "group", "action", "at", "by"],
     PREPROD_ENTRIES: ["entry_id", "saved_at", "saved_by", "production_date", "city", "parent_sku", "origin",
                       "variety", "brand", "size", "box_kg", "pcs_per_box", "table_no", "boxes_moved",
