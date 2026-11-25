@@ -23,6 +23,8 @@ CSS = """<style>
 .pr-res div {border-radius:8px; padding:6px 4px; text-align:center; background:#F1F4F7; font-size:0.75rem; color:#4A5562;}
 .pr-res b {display:block; font-size:1.05rem; color:#1F2933;}
 .pr-kg {font-size:0.78rem; color:#4A5562; margin-top:-2px;}
+.pr-var {display:inline-block; background:#EDE7FB; color:#4B2A9E; font-weight:700; border-radius:999px;
+         padding:1px 10px; margin:0 2px; font-size:0.85rem;}
 @media (max-width: 640px) { .pr-res {grid-template-columns:repeat(2,minmax(0,1fr));} }
 </style>"""
 
@@ -121,7 +123,11 @@ def _card(fruit: str, table: str, t_lots: list[dict], lines, day: str, city: str
         lot = t_lots[i]
         a, pcs, b = pr._f(lot.get("box_kg")), pr._f(lot.get("pcs_per_box")), pr._f(lot.get("boxes_moved"))
         x = a / pcs if a and pcs else 0
-        st.markdown(f"<div class='pr-info'><b>{fruit}</b> · table {table} · {_lot_label(lot)} × {a:g} kg = "
+        from html import escape
+        var = str(lot.get("variety") or "").strip()
+        var_html = f"<span class='pr-var'>{escape(var)}</span> · " if var else ""
+        st.markdown(f"<div class='pr-info'><b>{escape(fruit)}</b> {var_html}table {escape(table)} · "
+                    f"{escape(str(lot.get('size') or ''))} · {b:g} box × {a:g} kg = "
                     f"<b>{a * b:g} kg</b>{f' · {x:.3f} kg/pc' if x else ''}</div>", unsafe_allow_html=True)
 
         needs = pr.packs_for(lines, fruit, day, city)
