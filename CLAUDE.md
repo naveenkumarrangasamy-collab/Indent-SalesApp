@@ -645,8 +645,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   {customer: [city word]}, default {Swiggy = ["Bangalore"]}): a PO line not matched by saved link / exact name to an
   indent item, whose name contains a fruit of the indent ("Bulk Semiripe Imported Avocado", "Unripe Avocado"), is
   put on that fruit's indent line (most shared words, then biggest qty; `indent_actions.same_fruit`), shown
-  "🟡 same fruit · confirm" with a **Vs indent** column ("136 ≤ 186 ✓" / "⚠ 200 > 186") and a **Confirm** tick;
-  the upload waits until every 🟡 line is confirmed (or another SKU picked). Other customers: names as before.
+  "🟡 same fruit · confirm" with a **Vs indent** column ("136 ≤ 186 ✓" / "⚠ 200 > 186") and a **Check** dropdown:
+  **Confirm** (used, and the PO name is saved to PO_Item_Map so the same name matches by itself next time) or
+  **Cancel** (kept as "not on indent"); the upload waits until every 🟡 line is checked. Any fruit of the indent
+  (Avocado, Blueberry "Bulk PP Blueberry" → "1Box - Imported Blueberry", …). Other customers: names as before.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.

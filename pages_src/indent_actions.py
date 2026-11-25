@@ -165,7 +165,7 @@ def _po_dialog(indent_id: str, user: User) -> None:
     unconfirmed = st.session_state.get(f"po_unconfirmed_{indent_id}", 0) if read and read.lines else 0
     need = [w for w, ok in (("choose the PO file", file_bytes or no_po), ("type the PO qty of at least one item",
                                                                 this_po),
-                            ("tick Confirm on the 🟡 same-fruit line(s)", not unconfirmed)) if not ok]
+                            ("Confirm or Cancel the 🟡 same-fruit line(s)", not unconfirmed)) if not ok]
     if need:
         st.caption("To upload: " + " and ".join(need) + ".")
     if b[0].button(label, icon=":material/upload_file:", type="primary", width="stretch",
@@ -348,7 +348,7 @@ def same_fruit(po_name: str, indent_lines: list, taken: set[str]) -> str | None:
     n = _norm(po_name)
     fruits = sorted({(x.parent_sku or "").strip() for x in indent_lines if (x.parent_sku or "").strip()},
                     key=len, reverse=True)
-    fruit = next((f for f in fruits if _norm(f) in n), None)
+    fruit = next((f for f in fruits if _norm(f)[:-1 if _norm(f).endswith("y") else None] in n), None)   # berries
     if not fruit:
         return None
     pool = [x for x in indent_lines if _norm(x.parent_sku) == _norm(fruit)]
@@ -392,25 +392,30 @@ def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[
     base = pd.DataFrame([{"#": i + 1, "On the PO": x.name, "Code": x.code, "Qty": fmt_num(x.qty),
                           "Our SKU": x.sku or None, "Match": HOW.get(x.how, "") + (" · ⚠ hard to read" if x.unsure else ""),
                           "Vs indent": _vs_indent(x, own),
-                          **({"Confirm": False} if any(y.how == "fruit" for y in lines) else {}),
+                          **({"Check": None} if any(y.how == "fruit" for y in lines) else {}),
                           **({"Approve": False} if owner else {})} for i, x in enumerate(lines)])
     ed = st.data_editor(base, key=f"po_read_{indent_id}_{hash(read.po_number)}_{len(lines)}",
                         hide_index=True, width="stretch",
                         disabled=["#", "On the PO", "Code", "Qty", "Match", "Vs indent"],
                         column_config={"#": st.column_config.NumberColumn("#", width=40, format="%d"),"Our SKU": st.column_config.SelectboxColumn(
                             options=cands + [NOT_OURS], width="large"),
-                            "Confirm": st.column_config.CheckboxColumn(
-                                "Confirm", help="🟡 lines: this PO item really is our SKU for this order"),
+                            "Check": st.column_config.SelectboxColumn(
+                                "Check", options=["Confirm", "Cancel"],
+                                help="🟡 lines: Confirm = it is this item (remembered for next time); "
+                                     "Cancel = not this item (kept as 'not on indent')"),
                             "Approve": st.column_config.CheckboxColumn(
                                 "Approve", help="Same item: remember this PO name for next time")})
     picks = [p if isinstance(p, str) and p.strip() else None for p in ed["Our SKU"]]
     approved = list(ed["Approve"]) if owner else [False] * len(lines)
-    confirmed = list(ed["Confirm"]) if "Confirm" in ed.columns else [True] * len(lines)
-    waiting = [x.name for x, p, c in zip(lines, picks, confirmed) if x.how == "fruit" and p == x.sku and not c]
+    checks = list(ed["Check"]) if "Check" in ed.columns else [None] * len(lines)
+    for i, (x, p, c) in enumerate(zip(lines, picks, checks)):
+        if x.how == "fruit" and p == x.sku and c == "Cancel":
+            picks[i] = NOT_OURS            # not this item: the PO line stays 'not on indent'
+    waiting = [x.name for x, p, c in zip(lines, picks, checks) if x.how == "fruit" and p == x.sku and c != "Confirm"]
     st.session_state[f"po_unconfirmed_{indent_id}"] = len(waiting)
     if waiting:
         st.warning("🟡 **Check:** " + "; ".join(f"“{n}” is matched to the indent's same fruit" for n in waiting)
-                   + ". Is it exactly that item for this order? Tick **Confirm** (or pick another SKU).")
+                   + ". Is it exactly that item for this order? Choose **Confirm** or **Cancel** in Check (or pick another SKU).")
     if any(p is None for p in picks):
         st.caption("✗ lines: pick **Our SKU** (or “not in our list”).")
     if any(x.how in ("close", "guess", "") for x in lines):
@@ -419,9 +424,10 @@ def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[
     this_po: dict[str, float] = {}
     learned = []
     stamp = config.now_iso()
-    for x, pick, ok in zip(lines, picks, approved):
+    for x, pick, ok, chk in zip(lines, picks, approved, checks):
         key = pick if pick and pick != NOT_OURS else x.name
         this_po[key] = this_po.get(key, 0.0) + x.qty
+        ok = ok or (x.how == "fruit" and chk == "Confirm" and pick == x.sku)   # confirmed: same name next time
         if ok and pick and pick != NOT_OURS and x.how != "map" and _norm(pick) != _norm(x.name):
             learned.append({"Customer": h.customer, "PO Item Code": x.code, "PO Item Name": x.name,
                             "Customer SKU Name": pick, "Updated_At": stamp})

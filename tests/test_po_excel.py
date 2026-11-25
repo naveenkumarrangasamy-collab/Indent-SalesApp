@@ -51,3 +51,11 @@ def test_swiggy_bangalore_same_fruit_match():
     assert same_fruit("Unripe Avocado", lines, set()) == "1PC - Nectar Avocado"          # no word shared: biggest
     assert same_fruit("Unripe Avocado", lines, {"1pc - nectar avocado"}) == "1Pc - Imported Avocado"
     assert same_fruit("Longan 100 g", lines, set()) is None
+
+
+def test_same_fruit_blueberry_plural():
+    from types import SimpleNamespace as N
+    from pages_src.indent_actions import same_fruit
+    lines = [N(parent_sku="Blueberry", customer_sku_name="1Box - Imported Blueberry", qty=120)]
+    assert same_fruit("Bulk PP Blueberry 1 Box", lines, set()) == "1Box - Imported Blueberry"
+    assert same_fruit("Imported Blueberries 125 g", lines, set()) == "1Box - Imported Blueberry"
