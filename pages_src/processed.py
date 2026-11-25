@@ -93,6 +93,9 @@ def render(user: User) -> None:
         _preview(user)
         return
 
+    if not st.toggle("Phone view", key="pr_phone", help="One lot at a time (cards), easier on a phone"):
+        _grid(raw, lines, day, city, user)
+        return
     fruits = sorted({str(x) for x in raw["parent_sku"] if str(x).strip()}, key=str.casefold)
     fruit = st.pills("Fruit", fruits, key=f"pr_fruit_{day}")
     if fruit:
@@ -217,3 +220,155 @@ def _saved(day: str, city: str) -> None:
         return
     st.markdown(f"#### Saved · {len(v)}")
     st.dataframe(common.numbered(pr.view(v)), hide_index=True, width="stretch")
+
+
+# ------------------------------------------------------------------ grid (sheet-like) view, 25 Nov
+
+G_COLS = {  # grid column -> processed input key
+    "MT Ready (D1)": "mt_packs", "MT Ready kg (D2)": "mt_loose_kg",
+    "Left over box (E1)": "left_box", "Left over kg (E2)": "left_kg", "Left over pcs (E3)": "left_pcs",
+    "GT Ready box (F1)": "gt_box", "GT Ready kg (F2)": "gt_kg", "GT Ready pcs (F3)": "gt_pcs",
+    "Dump kg (G1)": "dump_kg", "Dump pcs (G2)": "dump_pcs",
+}
+LOCKED = ["#", "Fruit", "Variety", "Size", "Table", "Boxes (B)", "Box kg (A)", "Pcs/box"]
+DEFAULT_PACKS = ["1PC", "2PC", "3PC", "1Kg"]
+
+
+def _blank(v) -> bool:
+    return v is None or (isinstance(v, float) and v != v) or str(v).strip() == ""
+
+
+def _grid_row(lot: dict, pack: str = "", vals: dict | None = None, saved: bool = False) -> dict:
+    vals = vals or {}
+    r = {"lot_id": str(lot.get("entry_id")), "Fruit": lot.get("parent_sku", ""), "Variety": lot.get("variety", ""),
+         "Size": lot.get("size", ""), "Table": str(lot.get("table_no", "")),
+         "Boxes (B)": pr._f(lot.get("boxes_moved")), "Box kg (A)": pr._f(lot.get("box_kg")),
+         "Pcs/box": pr._f(lot.get("pcs_per_box")) or None, "Cux Lot": pack or None}
+    for col, k in G_COLS.items():
+        v = vals.get(k)
+        r[col] = None if _blank(v) or pr._f(v) == 0 and not saved else pr._f(v)
+    r["_saved"] = saved
+    return _with_result(r)
+
+
+def _vals(r: dict) -> dict:
+    return {k: (None if _blank(r.get(col)) else pr._f(r.get(col))) for col, k in G_COLS.items()}
+
+
+def _with_result(r: dict) -> dict:
+    vals = _vals(r)
+    if not r.get("Cux Lot") or not any(v for v in vals.values()):
+        r["Efficiency"], r["Status"] = "", "Saved" if r.get("_saved") else "Not entered"
+        return r
+    c = pr.compute(r["Box kg (A)"], r["Pcs/box"], r["Boxes (B)"], r["Cux Lot"], vals)
+    r["Efficiency"] = pr.pct(c["efficiency"]) if c["used_kg"] > 0 else "check"
+    r["Status"] = "Saved" if r.get("_saved") else "Not saved"
+    return r
+
+
+def _grid_base(raw: pd.DataFrame, day: str, city: str, key: str) -> list[dict]:
+    """Rows kept in the session: saved entries first, every lot of the day at least once."""
+    lots = raw.drop_duplicates("entry_id", keep="last")
+    lots = lots.assign(_t=lots["table_no"].astype(str).str.zfill(3)).sort_values(["_t", "parent_sku"])
+    ids = list(lots["entry_id"].astype(str))
+    base = st.session_state.get(key)
+    if base is not None and {r["lot_id"] for r in base} >= set(ids):
+        return base
+    done = pr.latest(pr.read(), day, city)
+    by_lot: dict[str, list[dict]] = {}
+    for r in done.to_dict("records") if not done.empty else []:
+        by_lot.setdefault(str(r.get("lot_id")), []).append(r)
+    keep = {r["lot_id"]: r for r in base or []}
+    rows = []
+    for lot in lots.to_dict("records"):
+        lid = str(lot["entry_id"])
+        if base is not None and lid in keep:
+            rows += [r for r in base if r["lot_id"] == lid]
+            continue
+        saved = by_lot.get(lid, [])
+        if saved:
+            rows += [_grid_row(lot, o.get("cux_lot", ""), o, saved=True) for o in saved]
+        else:
+            rows.append(_grid_row(lot))
+    st.session_state[key] = rows
+    return rows
+
+
+def _grid_edit(key: str, ekey: str) -> None:
+    """data_editor on_change: copy the edits into the session rows and work out the result again."""
+    base = st.session_state.get(key, [])
+    for i, ch in (st.session_state.get(ekey) or {}).get("edited_rows", {}).items():
+        r = base[int(i)]
+        for col, v in ch.items():
+            r[col] = v
+        r["_saved"] = False
+        _with_result(r)
+    st.session_state.pop(ekey, None)
+
+
+def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
+    key, ekey = f"pg_rows_{day}_{city}", f"pg_ed_{day}_{city}"
+    lots = {str(r["entry_id"]): r for r in raw.to_dict("records")}
+    base = _grid_base(raw, day, city, key)
+    packs = []
+    for fruit in {r["Fruit"] for r in base}:
+        packs += [p for p in pr.packs_for(lines, fruit, day, city) if p not in packs]
+    packs += [p for p in DEFAULT_PACKS if p not in packs]
+    entered = sum(1 for r in base if r["Status"] != "Not entered")
+    st.caption(f"{len(base)} line(s) · {entered} entered · type only the white columns; the rest is worked out "
+               "and goes to **Production Tracking**.")
+
+    df = pd.DataFrame([{"#": i + 1, **{k: v for k, v in r.items() if k not in ("lot_id", "_saved")}}
+                       for i, r in enumerate(base)])
+    num = {col: st.column_config.NumberColumn(col, min_value=0, format="%g", width="small") for col in G_COLS}
+    cfg = {"#": st.column_config.NumberColumn("#", width="small"),
+           "Variety": st.column_config.TextColumn("Variety", width="small"),
+           "Cux Lot": st.column_config.SelectboxColumn("Cux Lot", options=packs, width="small"),
+           "Boxes (B)": st.column_config.NumberColumn(format="%g", width="small"),
+           "Box kg (A)": st.column_config.NumberColumn(format="%g", width="small"),
+           "Pcs/box": st.column_config.NumberColumn(format="%g", width="small"),
+           "Efficiency": st.column_config.TextColumn("Efficiency", width="small"),
+           "Status": st.column_config.TextColumn("Status", width="small"), **num}
+    st.data_editor(df, key=ekey, hide_index=True, width="stretch", column_config=cfg, num_rows="fixed",
+                   disabled=LOCKED + ["Efficiency", "Status"], on_change=_grid_edit, args=(key, ekey),
+                   column_order=LOCKED + ["Cux Lot"] + list(G_COLS) + ["Efficiency", "Status"])
+
+    c = st.columns([2, 1, 1])
+    labels = [f"#{i + 1} · {r['Fruit']} · table {r['Table']} · {r['Size']}" for i, r in enumerate(base)]
+    with c[0]:
+        pick = st.selectbox("Another pack from", range(len(base)), format_func=lambda i: labels[i],
+                            index=None, placeholder="Another pack from line…", key=f"pg_dup_{day}",
+                            label_visibility="collapsed")
+    if c[1].button("＋ Add line", width="stretch", key="pg_add", disabled=pick is None):
+        src = base[pick]
+        base.insert(pick + 1, _grid_row(lots.get(src["lot_id"], {}) or {"entry_id": src["lot_id"]}))
+        st.session_state.pop(ekey, None)
+        st.session_state.pop(f"pg_dup_{day}", None)
+        st.rerun()
+    todo = [r for r in base if r["Status"] == "Not saved"]
+    if c[2].button(f"Save {len(todo)} line(s)" if todo else "Save", type="primary", icon=":material/save:",
+                   width="stretch", key="pg_save", disabled=not todo):
+        rows = [pr.row(lots[r["lot_id"]], r["Cux Lot"], _vals(r), day, city) for r in todo if r["lot_id"] in lots]
+        _grid_confirm(rows, todo, user)
+    bad = [i + 1 for i, r in enumerate(base) if r["Efficiency"] == "check"]
+    if bad:
+        st.warning("Line " + ", ".join(f"#{b}" for b in bad) + ": leftover is more than what went on the table.")
+
+
+@st.dialog("Save these lines?", width="large")
+def _grid_confirm(rows: list[dict], todo: list[dict], user: User) -> None:
+    st.dataframe(common.numbered(pr.view(rows)), hide_index=True, width="stretch")
+    c1, c2 = st.columns(2)
+    if c1.button("Save", type="primary", icon=":material/save:", width="stretch", key="pg_ok"):
+        try:
+            n = pr.save(get_backend(), rows, user.email)
+        except SheetError as e:
+            st.error(f"Not saved. {e}")
+            return
+        for r in todo:
+            r["_saved"] = True
+            _with_result(r)
+        common.flash("success", f"{n} line(s) saved · see Production Tracking.")
+        st.rerun()
+    if c2.button("Back", width="stretch", key="pg_back"):
+        st.rerun()
