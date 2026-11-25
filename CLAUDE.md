@@ -638,7 +638,12 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   PO-only items count), else indent qty, × pcs/kg per pack. "Asked" = need split by the customers' spec; notes for
   POs much lower than the indent. Option dropdown "Country · Grade · Count · Box kg" from the New Mapping **Parent**
   tab (Apple: grades of its variety); boxes typed per option (rows can be added); rounds add up in Preprod_Actual
-  with group **"All customers"**; Freeze the city. **Production sheet → "Estimate actual" tab, Creator only**: need,
+  with group **"All customers"**; Freeze the city. **Look (25 Nov, user-approved preview)**: one calm card per row
+  (title · need + status chip, info line with Suggested in blue, ✓ saved take-outs), entry lines = dropdown
+  "Choose…" + same-size Boxes/Trays box (thin amber outline, `st-key-pcnum*`, `PC_CSS`) + "= n pcs", "＋ Add another
+  count" / ✕, thin progress bar. Round 1 is always "First take-out" (no reason asked); from round 2 the reason
+  dropdown (grading loss / short / other). **Freeze 🔒** only after the first take-out is saved, with an "are you
+  sure" step. **Production sheet → "Estimate actual" tab, Creator only**: need,
   estimate, taken, fruit in boxes, extra/short per city. Batching plan / Dispatch still expect per-customer freezes
   (next step: move them to the city freeze).
 - **Same-fruit PO match with a check (25 Nov 10 AM, user)**: only **Swiggy Bangalore** (secret `fruit_match`
