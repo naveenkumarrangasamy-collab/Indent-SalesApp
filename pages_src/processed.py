@@ -28,7 +28,7 @@ CSS = """<style>
 
 
 def _num(label: str, key: str, step: float = 1.0):
-    return st.number_input(label, min_value=0.0, step=step, value=None, key=key, placeholder="0")
+    return st.number_input(label, min_value=0.0, step=step, value=None, key=key, placeholder="0", format="%g")
 
 
 def _pending() -> list[dict]:
