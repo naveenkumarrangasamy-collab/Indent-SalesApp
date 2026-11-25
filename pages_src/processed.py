@@ -320,7 +320,7 @@ def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
 
     df = pd.DataFrame([{"#": i + 1, **{k: v for k, v in r.items() if k not in ("lot_id", "_saved")}}
                        for i, r in enumerate(base)])
-    num = {col: st.column_config.NumberColumn(col, min_value=0, format="%g", width="small") for col in G_COLS}
+    num = {col: st.column_config.NumberColumn(col, min_value=0, format="%g", width="medium") for col in G_COLS}
     cfg = {"#": st.column_config.NumberColumn("#", width="small"),
            "Variety": st.column_config.TextColumn("Variety", width="small"),
            "Cux Lot": st.column_config.SelectboxColumn("Cux Lot", options=packs, width="small"),
