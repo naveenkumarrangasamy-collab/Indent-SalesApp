@@ -222,177 +222,240 @@ def _saved(day: str, city: str) -> None:
     st.dataframe(common.numbered(pr.view(v)), hide_index=True, width="stretch")
 
 
-# ------------------------------------------------------------------ grid (sheet-like) view, 25 Nov
+# ------------------------------------------------------------------ line view (sheet-like), 25 Nov
+# One line per lot of the day, exact BLR_ProdTracking headers, real dropdowns / boxes, scrolls sideways.
 
-G_COLS = {  # grid column -> processed input key
-    "MT Ready (D1)": "mt_packs", "MT Ready kg (D2)": "mt_loose_kg",
-    "Left over box (E1)": "left_box", "Left over kg (E2)": "left_kg", "Left over pcs (E3)": "left_pcs",
-    "GT Ready box (F1)": "gt_box", "GT Ready kg (F2)": "gt_kg", "GT Ready pcs (F3)": "gt_pcs",
-    "Dump kg (G1)": "dump_kg", "Dump pcs (G2)": "dump_pcs",
-}
-LOCKED = ["#", "Fruit", "Variety", "Size", "Table", "Boxes (B)", "Box kg (A)", "Pcs/box"]
+import uuid  # noqa: E402
+
+PICK = "Choose…"
 DEFAULT_PACKS = ["1PC", "2PC", "3PC", "1Kg"]
-PICK = "pick ▼"
-NUM_RE = r"^\s*\d*(\.\d+)?\s*$"
+# (field, sheet header, width px, kind): lock = from Pre-Production Actual, pack, num, out, note, btn
+COLS = [
+    ("n", "#", 34, "lock"), ("parent_sku", "Parent SKU Name", 110, "lock"), ("variety", "Variety", 92, "lock"),
+    ("size", "Size Spec", 80, "lock"), ("table_no", "Table #", 60, "lock"),
+    ("box_kg", "Purchase Lot weight in Kgs (A)", 92, "lock"), ("pcs_per_box", "# of Pcs in Purchase lot", 86, "lock"),
+    ("boxes_moved", "# Qty Moved to Grading table (Vendor Lots / Boxes) (B)", 120, "lock"),
+    ("stock_type", "Production prod Classification", 130, "lock"),
+    ("pack", "Cux Lot", 120, "pack"),
+    ("mt_packs", "MT Ready (Dispatch) (Cux Lots) (D1)", 112, "num"),
+    ("mt_loose_kg", "MT Ready (Disptach) (Loose Kg) (D2)", 112, "num"),
+    ("left_box", "Left over MT Ready (Vendor Lots) (E1)", 112, "num"),
+    ("left_kg", "Left over MT Ready (Loose Kgs) (E2)", 112, "num"),
+    ("left_pcs", "Left over MT Ready (Loose PCs) (E3)", 112, "num"),
+    ("gt_box", "GT Stock (Vendor Lots / Box) (F1)", 112, "num"),
+    ("gt_kg", "GT Stock (Loose Kg) (F2)", 112, "num"),
+    ("gt_pcs", "GT Stock (Loose 1 PCs) (F3)", 112, "num"),
+    ("dump_kg", "Dump (in Kgs) (G1)", 100, "num"),
+    ("dump_pcs", "Dump (in Pcs) (G2)", 100, "num"),
+    ("eff", "Category Efficiency% (K / J)", 100, "out"), ("status", "Status", 96, "out"),
+    ("comment", "Operations team Comments", 200, "note"), ("add", "", 70, "btn"),
+]
+NUMS = [c[0] for c in COLS if c[3] == "num"]
+WIDTHS = [c[2] for c in COLS]
 
-
-def _cell(v) -> str:
-    """Number cells are text (empty, not 'None'): '700', '2.5' or ''."""
-    return "" if _blank(v) else f"{pr._f(v):g}"
-
-
-def _pack(r: dict) -> str:
-    p = r.get("Cux Lot")
-    return "" if _blank(p) or p == PICK else str(p)
+GRID_CSS = """<style>
+.st-key-pg_grid {overflow-x:auto; padding-bottom:8px;}
+.st-key-pg_grid [data-testid="stHorizontalBlock"] {min-width:%dpx; flex-wrap:nowrap !important; gap:6px;}
+.st-key-pg_grid [data-testid="stColumn"] {min-width:0 !important;}
+.st-key-pg_grid [data-testid="stElementContainer"] {margin-bottom:0;}
+.st-key-pg_grid button[data-testid="stNumberInputStepUp"],
+.st-key-pg_grid button[data-testid="stNumberInputStepDown"] {display:none;}
+.st-key-pg_grid input {font-size:0.85rem; text-align:center;}
+.st-key-pg_grid [data-baseweb="select"] > div {min-height:36px; border-color:#9AA5B1; background:#FFFFFF;}
+.st-key-pg_grid [data-testid="stNumberInputContainer"], .st-key-pg_grid [data-testid="stTextInputRootElement"]
+  {border:1px solid #9AA5B1; border-radius:8px; background:#FFFFFF;}
+.pg-h {font-size:0.72rem; font-weight:700; color:#2F3B48; line-height:1.2; background:#E4F0FB;
+       border-radius:6px; padding:6px 6px; min-height:58px; display:flex; align-items:flex-end;}
+.pg-lk {font-size:0.82rem; background:#F1F4F7; color:#1F2933; border-radius:6px; padding:8px 6px;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:36px;}
+.pg-na {font-size:0.8rem; color:#9AA5B1; background:#F6F7F9; border-radius:8px; min-height:36px;
+        display:flex; align-items:center; justify-content:center;}
+.pg-var {background:#EDE7FB; color:#4B2A9E; font-weight:700; border-radius:999px; padding:1px 8px;}
+.pg-ef {border-radius:8px; min-height:36px; display:flex; align-items:center; justify-content:center;
+        font-weight:700; font-size:0.9rem;}
+.pg-st {font-size:0.78rem; font-weight:600; min-height:36px; display:flex; align-items:center;}
+.pg-rowline {border-top:1px solid #E5E9EE; margin:4px 0 6px 0;}
+</style>""" % (sum(WIDTHS) + 6 * len(WIDTHS))
 
 
 def _blank(v) -> bool:
     return v is None or (isinstance(v, float) and v != v) or str(v).strip() == ""
 
 
-def _grid_row(lot: dict, pack: str = "", vals: dict | None = None, saved: bool = False) -> dict:
-    vals = vals or {}
-    r = {"lot_id": str(lot.get("entry_id")), "Fruit": lot.get("parent_sku", ""), "Variety": lot.get("variety", ""),
-         "Size": lot.get("size", ""), "Table": str(lot.get("table_no", "")),
-         "Boxes (B)": pr._f(lot.get("boxes_moved")), "Box kg (A)": pr._f(lot.get("box_kg")),
-         "Pcs/box": pr._f(lot.get("pcs_per_box")) or None, "Cux Lot": pack or PICK}
-    for col, k in G_COLS.items():
-        v = vals.get(k)
-        r[col] = "" if _blank(v) or pr._f(v) == 0 and not saved else _cell(v)
-    c = vals.get("comment")
-    r["Comments"] = "" if _blank(c) else str(c)
-    r["_saved"] = saved
-    return _with_result(r)
-
-
-def _vals(r: dict) -> dict:
-    return {k: (None if _blank(r.get(col)) else pr._f(r.get(col))) for col, k in G_COLS.items()}
-
-
-def _with_result(r: dict) -> dict:
-    vals = _vals(r)
-    if not _pack(r) or not (any(v for v in vals.values()) or r.get("Comments")):
-        r["Efficiency"], r["Status"] = "", "Saved" if r.get("_saved") else "Not entered"
-        return r
-    c = pr.compute(r["Box kg (A)"], r["Pcs/box"], r["Boxes (B)"], _pack(r), vals)
-    r["Efficiency"] = pr.pct(c["efficiency"]) if c["used_kg"] > 0 else "check"
-    r["Status"] = "Saved" if r.get("_saved") else "Not saved"
-    return r
-
-
-def _grid_base(raw: pd.DataFrame, day: str, city: str, key: str) -> list[dict]:
-    """Rows kept in the session: saved entries first, every lot of the day at least once."""
+def _lines(raw: pd.DataFrame, day: str, city: str, key: str) -> list[dict]:
+    """Session lines: saved entries first, every lot of the day at least once."""
     lots = raw.drop_duplicates("entry_id", keep="last")
     lots = lots.assign(_t=lots["table_no"].astype(str).str.zfill(3)).sort_values(["_t", "parent_sku"])
     ids = list(lots["entry_id"].astype(str))
-    base = st.session_state.get(key)
-    if base is not None and {r["lot_id"] for r in base} >= set(ids):
-        return base
+    have = st.session_state.get(key)
+    if have is not None and {ln["lot_id"] for ln in have} >= set(ids):
+        return have
     done = pr.latest(pr.read(), day, city)
     by_lot: dict[str, list[dict]] = {}
     for r in done.to_dict("records") if not done.empty else []:
         by_lot.setdefault(str(r.get("lot_id")), []).append(r)
-    keep = {r["lot_id"]: r for r in base or []}
-    rows = []
-    for lot in lots.to_dict("records"):
-        lid = str(lot["entry_id"])
-        if base is not None and lid in keep:
-            rows += [r for r in base if r["lot_id"] == lid]
+    out = []
+    for lid in ids:
+        old = [ln for ln in have or [] if ln["lot_id"] == lid]
+        if old:
+            out += old
             continue
-        saved = by_lot.get(lid, [])
-        if saved:
-            rows += [_grid_row(lot, o.get("cux_lot", ""), o, saved=True) for o in saved]
-        else:
-            rows.append(_grid_row(lot))
-    st.session_state[key] = rows
-    return rows
+        saved = by_lot.get(lid) or [None]
+        for o in saved:
+            ln = {"id": uuid.uuid4().hex[:8], "lot_id": lid, "saved": None}
+            if o is not None:
+                ln["saved"] = {"pack": o.get("cux_lot", ""), "comment": str(o.get("comment") or ""),
+                               **{f: (None if _blank(o.get(f)) else pr._f(o.get(f))) for f in NUMS}}
+                st.session_state.setdefault(f"pg_{ln['id']}_pack", ln["saved"]["pack"] or PICK)
+                st.session_state.setdefault(f"pg_{ln['id']}_comment", ln["saved"]["comment"])
+                for f in NUMS:
+                    st.session_state.setdefault(f"pg_{ln['id']}_{f}", ln["saved"][f])
+            out.append(ln)
+    st.session_state[key] = out
+    return out
 
 
-def _grid_edit(key: str, ekey: str) -> None:
-    """data_editor on_change: copy the edits into the session rows and work out the result again."""
-    base = st.session_state.get(key, [])
-    for i, ch in (st.session_state.get(ekey) or {}).get("edited_rows", {}).items():
-        r = base[int(i)]
-        for col, v in ch.items():
-            r[col] = v
-        r["_saved"] = False
-        _with_result(r)
-    st.session_state.pop(ekey, None)
+def _applies(field: str, unit: str, piece: bool) -> bool:
+    """Which boxes a line needs for its pack (unit 'PC' / 'Kg')."""
+    if not unit:
+        return False
+    if field in ("mt_packs", "left_box", "gt_box", "dump_kg"):
+        return True
+    if field in ("mt_loose_kg", "left_kg", "gt_kg"):
+        return unit == "Kg" or not piece
+    if field in ("left_pcs", "gt_pcs", "dump_pcs"):
+        return unit == "PC" and piece
+    return False
+
+
+def _state(ln: dict, lot: dict) -> dict:
+    """Current values of a line from its widgets + what it needs."""
+    g = st.session_state.get
+    pack = g(f"pg_{ln['id']}_pack") or PICK
+    pack = "" if pack == PICK else pack
+    a, pcs = pr._f(lot.get("box_kg")), pr._f(lot.get("pcs_per_box"))
+    x = a / pcs if a and pcs else 0
+    _, unit = pr.pack_kg(pack, x or None)
+    piece = bool(x)
+    need = [f for f in NUMS if _applies(f, unit, piece)]
+    vals = {f: g(f"pg_{ln['id']}_{f}") for f in NUMS}
+    vals = {f: (vals[f] if f in need else None) for f in NUMS}
+    comment = str(g(f"pg_{ln['id']}_comment") or "").strip()
+    touched = bool(pack) or any(v is not None for v in vals.values()) or bool(comment)
+    missing = ([] if pack else ["Cux Lot"]) + [f for f in need if vals[f] is None]
+    if pack and unit == "PC" and not piece:
+        missing.append("# of Pcs in Purchase lot (fix on Pre-Production Actual)")
+    cur = {"pack": pack, "comment": comment, **{f: vals[f] for f in NUMS}}
+    saved = ln.get("saved")
+    same = saved is not None and all((saved.get(k) or None) == (cur.get(k) or None) for k in cur)
+    return {"pack": pack, "unit": unit, "need": need, "vals": vals, "comment": comment, "touched": touched,
+            "missing": missing, "same": same}
+
+
+def _eff_cell(s: dict, lot: dict) -> tuple[str, str, str]:
+    if not s["pack"] or s["vals"].get("mt_packs") is None:
+        return "–", "#F6F7F9", "#9AA5B1"
+    c = pr.compute(lot.get("box_kg"), lot.get("pcs_per_box"), lot.get("boxes_moved"), s["pack"], s["vals"])
+    if c["used_kg"] <= 0:
+        return "check", "#FDECEC", "#B42318"
+    bg, fg = _eff_colour(c["efficiency"])
+    return pr.pct(c["efficiency"]), bg, fg
 
 
 def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
-    key, ekey = f"pg_rows_{day}_{city}", f"pg_ed_{day}_{city}"
+    st.markdown(GRID_CSS, unsafe_allow_html=True)
+    key = f"pg_lines_{day}_{city}"
     lots = {str(r["entry_id"]): r for r in raw.to_dict("records")}
-    base = _grid_base(raw, day, city, key)
+    rows = _lines(raw, day, city, key)
     packs = []
-    for fruit in {r["Fruit"] for r in base}:
+    for fruit in {str(lots[ln["lot_id"]].get("parent_sku")) for ln in rows if ln["lot_id"] in lots}:
         packs += [p for p in pr.packs_for(lines, fruit, day, city) if p not in packs]
     packs += [p for p in DEFAULT_PACKS if p not in packs]
-    entered = sum(1 for r in base if r["Status"] != "Not entered")
-    st.caption(f"{len(base)} line(s) · {entered} entered · the rest is worked out and goes to "
-               "**Production Tracking**.")
-    st.markdown(
-        "<div style='font-size:0.82rem;margin:-4px 0 6px 0'>"
-        "<span style='background:#F1F4F7;border-radius:6px;padding:2px 8px'>🔒 filled for you</span> &nbsp;"
-        "<span style='background:#FFF4D6;border-radius:6px;padding:2px 8px'>▼ pick from the list</span> &nbsp;"
-        "<span style='background:#E6F4EA;border-radius:6px;padding:2px 8px'>✏️ type the number</span> &nbsp;"
-        "<span style='background:#EDE7FB;border-radius:6px;padding:2px 8px'>💬 type a note</span> &nbsp;"
-        "· double-click a cell (or tap it) to type · scroll sideways for more columns</div>",
-        unsafe_allow_html=True)
+    _grid_body(rows, lots, packs, day, city, user, key)
 
-    df = pd.DataFrame([{"#": i + 1, **{k: v for k, v in r.items() if k not in ("lot_id", "_saved")}}
-                       for i, r in enumerate(base)])
-    tips = {"MT Ready (D1)": "Customer packs made (in the Cux Lot chosen)",
-            "MT Ready kg (D2)": "Loose MT kg, only for kg packs",
-            "Left over box (E1)": "Full MT boxes not used", "Left over kg (E2)": "Loose MT kg not used",
-            "Left over pcs (E3)": "Loose MT pieces not used", "GT Ready box (F1)": "Boxes to GT",
-            "GT Ready kg (F2)": "Loose kg to GT", "GT Ready pcs (F3)": "Loose pieces to GT",
-            "Dump kg (G1)": "Dump in kg", "Dump pcs (G2)": "Dump in pieces"}
-    cfg = {col: st.column_config.TextColumn(f"✏️ {col}", width="medium", validate=NUM_RE,
-                                            help=tips[col] + " · numbers only") for col in G_COLS}
-    lock = {"#": ("#", "small"), "Fruit": ("🔒 Fruit", "small"), "Variety": ("🔒 Variety", "small"),
-            "Size": ("🔒 Size", "small"), "Table": ("🔒 Table", "small"), "Boxes (B)": ("🔒 Boxes (B)", "small"),
-            "Box kg (A)": ("🔒 Box kg (A)", "small"), "Pcs/box": ("🔒 Pcs/box", "small")}
-    for col, (lab, w) in lock.items():
-        cfg[col] = (st.column_config.NumberColumn(lab, format="%g", width=w, pinned=col in ("#", "Fruit", "Variety"))
-                    if col in ("#", "Boxes (B)", "Box kg (A)", "Pcs/box")
-                    else st.column_config.TextColumn(lab, width=w, pinned=col in ("Fruit", "Variety")))
-    cfg["Cux Lot"] = st.column_config.SelectboxColumn("▼ Cux Lot", options=[PICK] + packs, width="medium",
-                                                      required=True,
-                                                      help="Pick the customer pack made from this lot")
-    cfg["Comments"] = st.column_config.TextColumn("💬 Comments", width="large", max_chars=200,
-                                                  help="Operations note, e.g. loose box, returns mixed")
-    cfg["Efficiency"] = st.column_config.TextColumn("Efficiency", width="small", help="MT kg ÷ used kg")
-    cfg["Status"] = st.column_config.TextColumn("Status", width="small")
-    st.data_editor(df, key=ekey, hide_index=True, width="stretch", column_config=cfg, num_rows="fixed",
-                   disabled=list(lock) + ["Efficiency", "Status"], on_change=_grid_edit, args=(key, ekey),
-                   column_order=list(lock) + ["Cux Lot"] + list(G_COLS) + ["Comments", "Efficiency", "Status"])
 
-    c = st.columns([2, 1, 1])
-    labels = [f"#{i + 1} · {r['Fruit']} · table {r['Table']} · {r['Size']}" for i, r in enumerate(base)]
-    with c[0]:
-        pick = st.selectbox("Another pack from", range(len(base)), format_func=lambda i: labels[i],
-                            index=None, placeholder="Another pack from line…", key=f"pg_dup_{day}",
-                            label_visibility="collapsed")
-    if c[1].button("＋ Add line", width="stretch", key="pg_add", disabled=pick is None):
-        src = base[pick]
-        base.insert(pick + 1, _grid_row(lots.get(src["lot_id"], {}) or {"entry_id": src["lot_id"]}))
-        st.session_state.pop(ekey, None)
-        st.session_state.pop(f"pg_dup_{day}", None)
-        st.rerun()
-    todo = [r for r in base if r["Status"] == "Not saved"]
-    if c[2].button(f"Save {len(todo)} line(s)" if todo else "Save", type="primary", icon=":material/save:",
-                   width="stretch", key="pg_save", disabled=not todo):
-        rows = [pr.row(lots[r["lot_id"]], _pack(r), _vals(r), day, city, r.get("Comments") or "")
-                for r in todo if r["lot_id"] in lots]
-        _grid_confirm(rows, todo, user)
-    bad = [i + 1 for i, r in enumerate(base) if r["Efficiency"] == "check"]
+@st.fragment
+def _grid_body(rows, lots, packs, day, city, user, key) -> None:
+    bad = st.session_state.get("pg_bad", set())
     if bad:
-        st.warning("Line " + ", ".join(f"#{b}" for b in bad) + ": leftover is more than what went on the table.")
+        st.markdown("<style>" + "".join(
+            f".st-key-{k} [data-baseweb], .st-key-{k} [data-testid=\"stNumberInputContainer\"]"
+            f"{{border:2px solid #D92D20 !important; background:#FFF5F5 !important;}}" for k in bad) + "</style>",
+            unsafe_allow_html=True)
+    states = {ln["id"]: _state(ln, lots[ln["lot_id"]]) for ln in rows if ln["lot_id"] in lots}
+    done = sum(1 for s in states.values() if s["same"])
+    st.caption(f"{len(rows)} line(s) · {done} saved · grey comes from Pre-Production Actual · fill the white "
+               "boxes · scroll sideways for more columns →")
+    with st.container(key="pg_grid"):
+        head = st.columns(WIDTHS)
+        for col, (_, title, _, _) in zip(head, COLS):
+            col.markdown(f"<div class='pg-h'>{title}</div>" if title else "", unsafe_allow_html=True)
+        for i, ln in enumerate(rows):
+            lot = lots.get(ln["lot_id"])
+            if lot is None:
+                continue
+            s = states[ln["id"]]
+            cells = st.columns(WIDTHS)
+            for col, (field, title, _, kind) in zip(cells, COLS):
+                k = f"pg_{ln['id']}_{field}"
+                with col:
+                    if kind == "lock":
+                        v = i + 1 if field == "n" else lot.get(field, "")
+                        if field in ("box_kg", "pcs_per_box", "boxes_moved"):
+                            v = f"{pr._f(v):g}" if pr._f(v) else ""
+                        if field == "variety" and v:
+                            v = f"<span class='pg-var'>{v}</span>"
+                        st.markdown(f"<div class='pg-lk'>{v or '&nbsp;'}</div>", unsafe_allow_html=True)
+                    elif kind == "pack":
+                        if st.session_state.get(k) not in [PICK] + packs:
+                            st.session_state[k] = PICK
+                        st.selectbox(title, [PICK] + packs, key=k, label_visibility="collapsed")
+                    elif kind == "num":
+                        if field in s["need"]:
+                            st.number_input(title, min_value=0.0, step=1.0, value=None, key=k, format="%g",
+                                            placeholder="", label_visibility="collapsed")
+                        else:
+                            st.markdown("<div class='pg-na'>–</div>", unsafe_allow_html=True)
+                    elif field == "eff":
+                        txt, bg, fg = _eff_cell(s, lot)
+                        st.markdown(f"<div class='pg-ef' style='background:{bg};color:{fg}'>{txt}</div>",
+                                    unsafe_allow_html=True)
+                    elif field == "status":
+                        stt, colr = (("Saved", "#1E7B34") if s["same"] else ("Not saved", "#8A5A00")
+                                     if s["touched"] else ("Not entered", "#9AA5B1"))
+                        st.markdown(f"<div class='pg-st' style='color:{colr}'>{stt}</div>", unsafe_allow_html=True)
+                    elif kind == "note":
+                        st.text_input(title, key=k, label_visibility="collapsed", placeholder="Type a note")
+                    elif kind == "btn":
+                        if st.button("＋ pack", key=f"pg_{ln['id']}_add", help="Another pack from this lot"):
+                            rows.insert(i + 1, {"id": uuid.uuid4().hex[:8], "lot_id": ln["lot_id"], "saved": None})
+                            st.rerun(scope="fragment")
+
+    todo = [(ln, states[ln["id"]]) for ln in rows if ln["id"] in states
+            and states[ln["id"]]["touched"] and not states[ln["id"]]["same"]]
+    if st.button(f"Save {len(todo)} line(s)" if todo else "Save", type="primary", icon=":material/save:",
+                 key="pg_save", disabled=not todo):
+        miss, keys = [], set()
+        for ln, s in todo:
+            n = rows.index(ln) + 1
+            if s["missing"]:
+                names = [dict((c[0], c[1]) for c in COLS).get(m, m) for m in s["missing"]]
+                miss.append(f"**Line {n}** ({lots[ln['lot_id']].get('parent_sku')}): " + ", ".join(names))
+                keys |= {f"pg_{ln['id']}_{'pack' if m == 'Cux Lot' else m}" for m in s["missing"]}
+        if miss:
+            st.session_state["pg_bad"] = keys
+            st.session_state["pg_miss"] = miss
+            st.rerun(scope="fragment")
+        st.session_state.pop("pg_bad", None)
+        st.session_state.pop("pg_miss", None)
+        out = [pr.row(lots[ln["lot_id"]], s["pack"], s["vals"], day, city, s["comment"]) for ln, s in todo]
+        _grid_confirm(out, todo, user)
+    for m in st.session_state.get("pg_miss", []):
+        st.error("Fill before saving · " + m, icon=":material/error:")
 
 
 @st.dialog("Save these lines?", width="large")
-def _grid_confirm(rows: list[dict], todo: list[dict], user: User) -> None:
+def _grid_confirm(rows: list[dict], todo: list, user: User) -> None:
     st.dataframe(common.numbered(pr.view(rows)), hide_index=True, width="stretch")
     c1, c2 = st.columns(2)
     if c1.button("Save", type="primary", icon=":material/save:", width="stretch", key="pg_ok"):
@@ -401,9 +464,8 @@ def _grid_confirm(rows: list[dict], todo: list[dict], user: User) -> None:
         except SheetError as e:
             st.error(f"Not saved. {e}")
             return
-        for r in todo:
-            r["_saved"] = True
-            _with_result(r)
+        for ln, s in todo:
+            ln["saved"] = {"pack": s["pack"], "comment": s["comment"], **s["vals"]}
         common.flash("success", f"{n} line(s) saved · see Production Tracking.")
         st.rerun()
     if c2.button("Back", width="stretch", key="pg_back"):
