@@ -118,6 +118,8 @@ def save(backend, rows: list[dict], user: str) -> int:
     out = [{"entry_id": uuid.uuid4().hex[:10], "saved_at": stamp, "saved_by": user, **r} for r in rows]
     if out:
         backend.append_dicts(PROCESSED, out)
+        from core import tracking_sheet
+        tracking_sheet.publish(backend)
         from core import indents
         try:
             indents.clear_cache()
