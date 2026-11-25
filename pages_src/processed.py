@@ -254,7 +254,12 @@ NUMS = [c[0] for c in COLS if c[3] == "num"]
 WIDTHS = [c[2] for c in COLS]
 
 GRID_CSS = """<style>
-.st-key-pg_grid {overflow-x:auto; padding-bottom:8px;}
+.st-key-pg_grid {overflow-x:auto; padding-bottom:8px; -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain;}
+@media (max-width: 640px) {
+  .st-key-pg_grid [data-testid="stHorizontalBlock"] {flex-direction:row !important;}
+  .st-key-pg_grid [data-testid="stColumn"] {flex:1 1 0 !important; width:auto !important; min-width:0 !important;}
+  .st-key-pg_grid input {font-size:16px;}
+}
 .st-key-pg_grid [data-testid="stHorizontalBlock"] {min-width:%dpx; flex-wrap:nowrap !important; gap:6px;}
 .st-key-pg_grid [data-testid="stColumn"] {min-width:0 !important;}
 .st-key-pg_grid [data-testid="stElementContainer"] {margin-bottom:0;}
