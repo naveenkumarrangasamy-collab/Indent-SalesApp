@@ -641,6 +641,12 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   with group **"All customers"**; Freeze the city. **Production sheet → "Estimate actual" tab, Creator only**: need,
   estimate, taken, fruit in boxes, extra/short per city. Batching plan / Dispatch still expect per-customer freezes
   (next step: move them to the city freeze).
+- **Same-fruit PO match with a check (25 Nov 10 AM, user)**: only **Swiggy Bangalore** (secret `fruit_match`
+  {customer: [city word]}, default {Swiggy = ["Bangalore"]}): a PO line not matched by saved link / exact name to an
+  indent item, whose name contains a fruit of the indent ("Bulk Semiripe Imported Avocado", "Unripe Avocado"), is
+  put on that fruit's indent line (most shared words, then biggest qty; `indent_actions.same_fruit`), shown
+  "🟡 same fruit · confirm" with a **Vs indent** column ("136 ≤ 186 ✓" / "⚠ 200 > 186") and a **Confirm** tick;
+  the upload waits until every 🟡 line is confirmed (or another SKU picked). Other customers: names as before.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.

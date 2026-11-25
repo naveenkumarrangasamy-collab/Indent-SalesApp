@@ -3,6 +3,8 @@ Upload PO, End of POs (multi-PO customers), Lock (processing started) and
 Delete (marks it Cancelled)."""
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 import streamlit as st
 
@@ -160,8 +162,10 @@ def _po_dialog(indent_id: str, user: User) -> None:
     if no_po:
         label = "Freeze with differences" if diffs else "Freeze"
         file_name = "No PO file (frozen in the app)"
+    unconfirmed = st.session_state.get(f"po_unconfirmed_{indent_id}", 0) if read and read.lines else 0
     need = [w for w, ok in (("choose the PO file", file_bytes or no_po), ("type the PO qty of at least one item",
-                                                                this_po)) if not ok]
+                                                                this_po),
+                            ("tick Confirm on the 🟡 same-fruit line(s)", not unconfirmed)) if not ok]
     if need:
         st.caption("To upload: " + " and ".join(need) + ".")
     if b[0].button(label, icon=":material/upload_file:", type="primary", width="stretch",
@@ -324,7 +328,37 @@ def _learn(rows: list[dict]) -> None:
 
 
 HOW = {"map": "✓ saved match", "name": "✓ same name", "close": "✓ close name", "guess": "? best guess",
-       "": "✗ pick SKU"}
+       "fruit": "🟡 same fruit · confirm", "": "✗ pick SKU"}
+
+
+def fruit_match_on(customer: str, city: str) -> bool:
+    """25 Nov (user): only Swiggy Bangalore POs are matched by fruit ('Bulk Semiripe Imported Avocado' ->
+    the indent's avocado), with a confirm tick. Secret `fruit_match` {customer: [city word]}."""
+    rules = config.get("fruit_match", {"Swiggy": ["Bangalore"]}) or {}
+    for cust, words in dict(rules).items():
+        if _norm(customer).startswith(_norm(cust)):
+            words = [words] if isinstance(words, str) else list(words or [])
+            return not words or any(_norm(w) in _norm(city) for w in words)
+    return False
+
+
+def same_fruit(po_name: str, indent_lines: list, taken: set[str]) -> str | None:
+    """The indent line of the fruit named in the PO line (most shared words, then the biggest qty; lines already
+    matched by name on this PO skipped). None when the PO names no fruit of the indent."""
+    n = _norm(po_name)
+    fruits = sorted({(x.parent_sku or "").strip() for x in indent_lines if (x.parent_sku or "").strip()},
+                    key=len, reverse=True)
+    fruit = next((f for f in fruits if _norm(f) in n), None)
+    if not fruit:
+        return None
+    pool = [x for x in indent_lines if _norm(x.parent_sku) == _norm(fruit)]
+    free = [x for x in pool if _norm(x.customer_sku_name) not in taken] or pool
+    words = set(re.findall(r"[a-z]+", n)) - {_norm(fruit), "pc", "pcs", "piece", "pieces", "kg", "g", "gm", "box",
+                                              "bulk", "pack"}
+
+    def score(x):
+        return (len(words & set(re.findall(r"[a-z]+", _norm(x.customer_sku_name)))), float(x.qty or 0))
+    return max(free, key=score).customer_sku_name
 
 
 def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[dict, list[dict]]:
@@ -335,6 +369,17 @@ def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[
     cands = _candidates(cur)
     lines = po_reader.match(read.lines, cands, _item_map(h.customer),
                             prefer=[x.customer_sku_name for x in cur.lines])
+    by_fruit = fruit_match_on(h.customer, h.city)
+    own = {_norm(x.customer_sku_name): x for x in cur.lines}
+    if by_fruit:
+        taken = {_norm(x.sku) for x in lines if x.how in ("map", "name") and _norm(x.sku) in own}
+        for x in lines:
+            if x.how in ("map", "name") and _norm(x.sku) in own:
+                continue
+            pick = same_fruit(x.name, cur.lines, taken)
+            if pick:
+                x.sku, x.how = pick, "fruit"
+                taken.add(_norm(pick))
     ok = not read.checks
     msg = (f"**Read from the PDF:** {len(lines)} line(s) · qty **{fmt_num(read.total_qty)}**"
            + (f" · PO value ₹{read.total:,.2f}" if read.total else "")
@@ -346,16 +391,26 @@ def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[
     owner = bool(getattr(user, "is_owner", False))
     base = pd.DataFrame([{"#": i + 1, "On the PO": x.name, "Code": x.code, "Qty": fmt_num(x.qty),
                           "Our SKU": x.sku or None, "Match": HOW.get(x.how, "") + (" · ⚠ hard to read" if x.unsure else ""),
+                          "Vs indent": _vs_indent(x, own),
+                          **({"Confirm": False} if any(y.how == "fruit" for y in lines) else {}),
                           **({"Approve": False} if owner else {})} for i, x in enumerate(lines)])
     ed = st.data_editor(base, key=f"po_read_{indent_id}_{hash(read.po_number)}_{len(lines)}",
                         hide_index=True, width="stretch",
-                        disabled=["#", "On the PO", "Code", "Qty", "Match"],
+                        disabled=["#", "On the PO", "Code", "Qty", "Match", "Vs indent"],
                         column_config={"#": st.column_config.NumberColumn("#", width=40, format="%d"),"Our SKU": st.column_config.SelectboxColumn(
                             options=cands + [NOT_OURS], width="large"),
+                            "Confirm": st.column_config.CheckboxColumn(
+                                "Confirm", help="🟡 lines: this PO item really is our SKU for this order"),
                             "Approve": st.column_config.CheckboxColumn(
                                 "Approve", help="Same item: remember this PO name for next time")})
     picks = [p if isinstance(p, str) and p.strip() else None for p in ed["Our SKU"]]
     approved = list(ed["Approve"]) if owner else [False] * len(lines)
+    confirmed = list(ed["Confirm"]) if "Confirm" in ed.columns else [True] * len(lines)
+    waiting = [x.name for x, p, c in zip(lines, picks, confirmed) if x.how == "fruit" and p == x.sku and not c]
+    st.session_state[f"po_unconfirmed_{indent_id}"] = len(waiting)
+    if waiting:
+        st.warning("🟡 **Check:** " + "; ".join(f"“{n}” is matched to the indent's same fruit" for n in waiting)
+                   + ". Is it exactly that item for this order? Tick **Confirm** (or pick another SKU).")
     if any(p is None for p in picks):
         st.caption("✗ lines: pick **Our SKU** (or “not in our list”).")
     if any(x.how in ("close", "guess", "") for x in lines):
@@ -371,6 +426,14 @@ def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[
             learned.append({"Customer": h.customer, "PO Item Code": x.code, "PO Item Name": x.name,
                             "Customer SKU Name": pick, "Updated_At": stamp})
     return this_po, learned
+
+
+def _vs_indent(x, own: dict) -> str:
+    line = own.get(_norm(x.sku))
+    if line is None:
+        return "not on indent" if x.sku else ""
+    ind = float(line.qty or 0)
+    return f"{fmt_num(x.qty)} ≤ {fmt_num(ind)} ✓" if x.qty <= ind + 1e-9 else f"⚠ {fmt_num(x.qty)} > {fmt_num(ind)}"
 
 
 def _earlier_pos(cur, indent_id: str, this_po: dict) -> None:

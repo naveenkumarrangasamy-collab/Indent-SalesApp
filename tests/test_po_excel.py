@@ -37,3 +37,17 @@ def test_po_progress_pending_done_extra():
     assert rows["1PC - Avocado"]["pending"] == -2          # extra 2
     assert rows["125gm - Blueberry"]["pending"] == 4       # nothing yet
     assert rows["1Kg - Plum"]["indent"] is None            # only on a PO
+
+
+def test_swiggy_bangalore_same_fruit_match():
+    from types import SimpleNamespace as N
+    from pages_src.indent_actions import fruit_match_on, same_fruit
+    lines = [N(parent_sku="Avocado", customer_sku_name="1Pc - Imported Avocado", qty=186),
+             N(parent_sku="Avocado", customer_sku_name="1PC - Nectar Avocado", qty=400),
+             N(parent_sku="Blueberry", customer_sku_name="1Box - Imported Blueberry", qty=120)]
+    assert fruit_match_on("Swiggy", "PTP Bangalore") and not fruit_match_on("Swiggy", "PTP Hyderabad")
+    assert not fruit_match_on("Zepto", "PTP Bangalore")
+    assert same_fruit("Bulk Semiripe Imported Avocado 1.00 Piece", lines, set()) == "1Pc - Imported Avocado"
+    assert same_fruit("Unripe Avocado", lines, set()) == "1PC - Nectar Avocado"          # no word shared: biggest
+    assert same_fruit("Unripe Avocado", lines, {"1pc - nectar avocado"}) == "1Pc - Imported Avocado"
+    assert same_fruit("Longan 100 g", lines, set()) is None
