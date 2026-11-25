@@ -156,10 +156,10 @@ def render(user: User) -> None:
     if d1.any():
         st.caption(f"{' / '.join(config.next_day_customers())} orders are not in these tables: "
                    "see their own section at the bottom.")
-    names = ["By spec size", "Make-ready list", "By customer", "Production Actual", "Processed", "Tracking"]
+    names = ["By spec size", "Make-ready list", "By customer", "Production Actual", "Processed"]
     if user.is_owner:
         names += ["Estimate (new sheet)", "Estimate (consolidated)"]
-    v1, v2, v3, v_pa, v_pr, v_tr, *v4 = st.tabs(names)
+    v1, v2, v3, v_pa, v_pr, *v4 = st.tabs(names)
     with v1:
         show = common.numbered(prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"]))
         st.dataframe(show, hide_index=True, width="stretch",
@@ -190,8 +190,6 @@ def render(user: User) -> None:
         _production_actual(label)
     with v_pr:
         _processed(label)
-    with v_tr:
-        _tracking(label)
     if v4:
         with v4[0]:
             _estimate_new(all_lines, m, label)
@@ -582,37 +580,3 @@ def _processed(label: str) -> None:
     st.dataframe(common.numbered(show).style.map(_colour, subset=["Efficiency"]), hide_index=True, width="stretch")
     st.download_button("CSV", data=lambda: v.to_csv(index=False).encode(), file_name=f"processed_{label}.csv",
                        mime="text/csv", key="pr_csv", on_click="ignore", icon=":material/download:")
-
-
-def _tracking(label: str) -> None:
-    """25 Nov: Pre-Production Actual + Processed in one table, laid out like the team's
-    BLR_ProdTracking sheet (also written to the Production_Tracking tab after every save)."""
-    from core import prod_actual as pa
-    from core import processed as pr
-    from core import tracking_sheet as ts
-    _, d, city = st.session_state.get("ps_ctx", (None, ALL_DATES, None))
-    lots = pa.read()
-    if city and not lots.empty and "city" in lots.columns:
-        lots = lots[lots["city"].astype(str) == city]
-    df = ts.frame(ts.build(lots, pr.read()), None if d == ALL_DATES else d)
-    if df.empty:
-        st.info("Nothing on the tables for this date yet. Start on **Pre-Production Actual**.")
-        return
-    pending = int((df["Cux Lot"] == "").sum())
-    st.caption(f"{len(df)} row(s){f' · {pending} lot(s) not processed yet' if pending else ''} · same columns as "
-               "BLR_ProdTracking · also in the **Production_Tracking** tab of the Google Sheet.")
-    eff = ts.HEADERS[ts.EFF_COL]
-
-    def _colour(val):
-        rgb = ts.eff_rgb(val)
-        return "" if rgb is None else "background-color:rgb({},{},{})".format(*[int(c * 255) for c in rgb])
-    shown = df.map(lambda v: f"{v:g}" if isinstance(v, float) else v)
-    st.dataframe(shown.style.map(_colour, subset=[eff]), hide_index=True, width="stretch")
-    c = st.columns([1, 2, 4])
-    c[0].download_button("CSV", data=lambda: df.to_csv(index=False).encode(),
-                         file_name=f"production_tracking_{label}.csv", mime="text/csv", key="tr_csv",
-                         on_click="ignore", icon=":material/download:")
-    if c[1].button("Update sheet tab", icon=":material/sync:", key="tr_pub",
-                   help="Rewrites the Production_Tracking tab now (it also updates after every save)"):
-        n = ts.publish()
-        st.toast("Production_Tracking tab updated" if n >= 0 else "Could not update the sheet tab")
