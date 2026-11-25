@@ -227,6 +227,8 @@ def write(ws, p: dict) -> int:
 
 def sync(backend=None, lines: pd.DataFrame | None = None, m=None, today: dt.date | None = None) -> str:
     """Bring the tab up to date for the last `days_back()` days, today and tomorrow. Never raises."""
+    if config.trial_copy():
+        return "skipped: trial copy"
     try:
         from core import indents, masters
         b = backend or indents.get_backend()

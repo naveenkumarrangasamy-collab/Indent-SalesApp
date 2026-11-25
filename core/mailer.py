@@ -69,6 +69,8 @@ def deliver(msg: EmailMessage) -> tuple[bool, str]:
     """Send with automatic fallback between 587/STARTTLS and 465/SSL.
     Returns (sent, explanation)."""
     s = settings()
+    if config.trial_copy():
+        return False, "trial copy: e-mails are switched off."
     if not configured():
         return False, ("e-mail is not set up: add smtp_user and smtp_password (a Gmail App password) "
                        "to the app secrets.")

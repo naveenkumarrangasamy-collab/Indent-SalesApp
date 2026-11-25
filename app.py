@@ -50,6 +50,16 @@ _drop_stale_modules()
 
 st.set_page_config(page_title="MT Indent", page_icon="🧾", layout="wide")
 
+from core import config as _config  # noqa: E402
+if _config.trial_copy():
+    if _config.sheet_id() == _config.LIVE_SHEET_ID:
+        st.error("Trial copy is pointing at the LIVE Google Sheet. Change sheet_id in the secrets "
+                 "to the trial sheet. Nothing runs until then.")
+        st.stop()
+    st.markdown("<div style='background:#FFF4D6;border:1px solid #E8C25A;border-radius:6px;"
+                "padding:4px 10px;font-size:0.85rem'>🧪 <b>TRIAL COPY</b> · separate sheet · "
+                "no e-mails · no dispatch-sheet sync</div>", unsafe_allow_html=True)
+
 from pages_src import access, common, home, indent, login, my_indents, po_upload, production, tracker  # noqa: E402
 from pages_src import delivery_times  # noqa: E402   (Bulk indents page removed 21 Nov)
 from pages_src import preprod_actual  # noqa: E402   (22 Nov: owners only while being tried)

@@ -25,6 +25,15 @@ def get(key: str, default=None):
     return _secrets().get(key, default)
 
 
+LIVE_SHEET_ID = "1cxOtb4Q4CQsgkYzdnCgetsQsibKFlpmzsKeV6yUoTuA"
+
+
+def trial_copy() -> bool:
+    """Secret `trial_copy = true`: the trial app (branch sheet-logic-rebuild). E-mails and the
+    BLR dispatch-sheet sync are switched off, and it refuses to run on the live Google Sheet."""
+    return str(get("trial_copy", "") or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def sheet_id() -> str:
     """Accepts either `sheet_id` or a full `sheet_url` in secrets."""
     conn = dict(get("connections") or {}).get("gsheets") or {}
