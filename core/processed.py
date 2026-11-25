@@ -161,8 +161,8 @@ def view(rows: pd.DataFrame | list[dict]) -> pd.DataFrame:
         "Fruit": df["parent_sku"], "Table": df["table_no"], "Size": df["size"], "Cux lot": df["cux_lot"],
         "Taken kg": df["taken_kg"].map(_f).round(2), "MT packs": df["mt_packs"].map(_f),
         "Used kg": df["used_kg"].map(_f).round(2), "MT kg": df["mt_kg"].map(_f).round(2),
-        "GT kg": df["gt_kg_total"].map(_f).round(2), "Dump kg": df["dump_kg_total"].map(_f).round(2),
+        "GT Ready kg": df["gt_kg_total"].map(_f).round(2), "Dump kg": df["dump_kg_total"].map(_f).round(2),
         "Lotting": df["lotting_kg"].map(_f).round(2),
-        "Efficiency": df["efficiency"].map(pct), "Non MT": df["non_mt"].map(pct), "Dump %": df["dump_pct"].map(pct),
+        "Efficiency": df["efficiency"].map(pct), "GT Ready %": df["non_mt"].map(pct), "Dump %": df["dump_pct"].map(pct),
     })
     return out

@@ -146,7 +146,7 @@ def _card(fruit: str, table: str, t_lots: list[dict], lines, day: str, city: str
             d2 = _num("Loose kg", f"{k}_d2", 0.1) if unit == "Kg" else None
 
         vals = {"mt_packs": d1, "mt_loose_kg": d2}
-        for title, pre in (("MT leftover", "left"), ("GT", "gt")):
+        for title, pre in (("MT leftover", "left"), ("GT Ready", "gt")):
             st.markdown(f"<div class='pr-grp'>{title}</div>", unsafe_allow_html=True)
             c = st.columns(2)
             with c[0]:
@@ -183,9 +183,9 @@ def _result(r: dict) -> None:
     st.markdown(
         f"<div class='pr-res'><div>{loss_txt}</div>"
         f"<div style='background:{bg};color:{fg}'>Efficiency<b style='color:{fg}'>{pr.pct(r['efficiency'])}</b></div>"
-        f"<div>Non MT<b>{pr.pct(r['non_mt'])}</b></div><div>Dump<b>{pr.pct(r['dump_pct'])}</b></div></div>"
+        f"<div>GT Ready<b>{pr.pct(r['non_mt'])}</b></div><div>Dump<b>{pr.pct(r['dump_pct'])}</b></div></div>"
         f"<div class='pr-kg'>Taken {r['taken_kg']:.2f} · Leftover {r['left_kg_total']:.2f} · Used {j:.2f} · "
-        f"MT {r['mt_kg']:.2f} · GT {r['gt_kg_total']:.2f} · Dump {r['dump_kg_total']:.2f} kg</div>",
+        f"MT {r['mt_kg']:.2f} · GT Ready {r['gt_kg_total']:.2f} · Dump {r['dump_kg_total']:.2f} kg</div>",
         unsafe_allow_html=True)
 
 
