@@ -127,7 +127,6 @@ def _card(fruit: str, table: str, t_lots: list[dict], lines, day: str, city: str
         needs = pr.packs_for(lines, fruit, day, city)
         options = list(needs) or ["1PC", "2PC", "3PC", "1Kg"]
         pack = st.pills("Cux lot", options, key=f"pr_pack_{lot.get('entry_id')}",
-                        format_func=lambda p: f"{p} · need {needs[p]:g}" if p in needs else p,
                         default=options[0] if len(options) == 1 else None)
         if not pack:
             st.caption("Pick the customer lot made from this lot.")
