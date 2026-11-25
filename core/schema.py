@@ -28,6 +28,8 @@ PREPROD_FREEZE = "Preprod_Freeze"    # customer frozen / unfrozen for a day (las
 DISPATCH_LINES = "Dispatch_Lines"    # what was loaded per indent + SKU (Delivery Order); last doc per indent wins
 RETURN_LINES = "Return_Lines"        # returned per indent + SKU at the store (final invoice); last save wins
 RETURN_GRADING = "Return_Grading"    # returns of day D graded MT / GT / Dump (last row per indent + SKU wins)
+CITY_GRADING = "City_Grading"        # 25 Nov: MT / GT / Dump per city + fruit + take-out option (last row wins)
+DISPATCH_LOCKS = "Dispatch_Locks"    # 25 Nov: owner unlocks of a dispatched indent (doc_no unlocked)
 RETURN_USE = "Return_Use"            # MT stock used per SKU in Pre-production (last row per day + group + SKU)
 BATCHING_PLAN = "Batching_Plan"      # pieces (kg) used from those boxes (last row per SKU + spec wins)
 
@@ -72,7 +74,10 @@ TABS: dict[str, list[str]] = {
                     "variety"],
     DISPATCH_LINES: ["saved_at", "saved_by", "doc_no", "indent_id", "delivery_date", "city", "customer", "store",
                      "customer_sku_name", "lot", "indent_qty", "dispatch_qty", "price", "reason", "vehicle",
-                     "driver", "dispatched_at"],
+                     "driver", "dispatched_at", "club_key", "per", "from_mt", "unit"],
+    CITY_GRADING: ["saved_at", "saved_by", "delivery_date", "city", "club_key", "parent_sku", "variety", "unit",
+                   "option", "boxes", "fruit", "mt", "gt", "dump"],
+    DISPATCH_LOCKS: ["at", "by", "indent_id", "doc_no", "action", "reason"],
     RETURN_LINES: ["saved_at", "saved_by", "invoice_no", "indent_id", "doc_no", "customer_sku_name", "lot",
                    "dispatched", "returned", "reason", "billed", "price", "sample"],
     RETURN_GRADING: ["saved_at", "saved_by", "return_date", "pool_date", "indent_id", "city", "customer",

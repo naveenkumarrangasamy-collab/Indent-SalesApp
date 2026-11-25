@@ -53,6 +53,7 @@ st.set_page_config(page_title="MT Indent", page_icon="🧾", layout="wide")
 from pages_src import access, common, home, indent, login, my_indents, po_upload, production, tracker  # noqa: E402
 from pages_src import delivery_times  # noqa: E402   (Bulk indents page removed 21 Nov)
 from pages_src import preprod_actual  # noqa: E402   (22 Nov: owners only while being tried)
+from pages_src import batch_city  # noqa: E402   (25 Nov: city-level Batching plan + Actual dispatch)
 from pages_src import preprod_city  # noqa: E402   (24 Nov evening: city-level pre-production, trial)
 from pages_src import dispatch as dispatch_page  # noqa: E402   (23 Nov: owners only while being tried)
 
@@ -130,9 +131,9 @@ if user.is_owner:
     # 22 Nov: new pre-production pages, owners only until they are tried out (no change for others)
     pages["preprod"] = st.Page(lambda: preprod_city.render(user), title="Pre-production actual",
                                icon="📥", url_path="preprod-actual")
-    pages["plan"] = st.Page(lambda: preprod_actual.render_plan(user), title="Batching plan", icon="🧮",
+    pages["plan"] = st.Page(lambda: batch_city.render_plan(user), title="Batching plan", icon="🧮",
                             url_path="batching-plan")
-    pages["dispatch"] = st.Page(lambda: dispatch_page.render_dispatch(user), title="Dispatch", icon="🚚",
+    pages["dispatch"] = st.Page(lambda: batch_city.render_dispatch(user), title="Actual dispatch", icon="🚚",
                                 url_path="dispatch")
     pages["returns"] = st.Page(lambda: dispatch_page.render_returns(user), title="Returns", icon="↩️",
                                url_path="returns")

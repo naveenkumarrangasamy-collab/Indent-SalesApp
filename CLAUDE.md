@@ -661,6 +661,22 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   go to the same variety, then shared words, then the **qty closest to the PO qty** (`same_fruit(..., po_qty)`).
   Master 25 Nov: PTP Bangalore Swiggy "1Pc - Apple Fuji" (Fuji) and Trent "1Kg - Apple Red Delicious" (RD) added to
   All Cux City + New (filled, not yellow); IN-064 / IN-065 got Fuji 232 / 174 and IN-066 Apple RD 1000 kg (v2).
+- **Batching plan + Actual dispatch = city level (25 Nov 11:30, user-approved preview; owners, trial)**
+  (`core/batch_city.py`, `pages_src/batch_city.py`, tests `tests/test_batch_city.py`; the per-customer pages' code
+  stays in `preprod_actual.render_plan` / `dispatch.render_dispatch`). **Batching plan** (`/batching-plan`): same date
+  + city clubbing as Pre-production actual; per fruit row, one line per take-out option (boxes + fruit in them read
+  only) with amber **MT / GT / Dump** boxes; Left = fruit − MT − GT − Dump; Save grading per row (blocked when Left
+  < 0); editable any time, last row wins (tab **City_Grading**). Tiles + **End of day check** table (fruit taken =
+  MT + GT + Dump + not graded; MT = dispatched + MT left; red when it doesn't balance or more was sent than MT).
+  **Actual dispatch** (`/dispatch`, menu "Actual dispatch"): MT pool chips per fruit; pills per customer · delivery
+  point · indent; one line per item: Asked (PO qty, else indent; not-on-PO left out, PO-only added), yellow
+  Dispatch in the SKU's unit ("packs of 2 pcs", kg, punnets), = from MT, status Same / short / +extra. More than
+  asked needs the **Send extra** tick, up to `dispatch_extra_pct` (default 10, number or {customer: pct,
+  default}); at least +1 pack always allowed. More than the MT left is allowed but warned and red at day end.
+  **Dispatch · lock** (are-you-sure popover) writes Dispatch_Lines (new cols club_key, per, from_mt, unit; Returns /
+  invoice unchanged) and locks; **Unlock** (owner, reason) → tab **Dispatch_Locks**; the unlocked doc still counts
+  until a new dispatch replaces it. Delivery Order PDF on the locked card. Returns from the day before
+  (Return_Use) are not in the MT pool yet.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.
