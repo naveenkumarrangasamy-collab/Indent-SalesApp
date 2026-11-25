@@ -677,6 +677,13 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   invoice unchanged) and locks; **Unlock** (owner, reason) → tab **Dispatch_Locks**; the unlocked doc still counts
   until a new dispatch replaces it. Delivery Order PDF on the locked card. Returns from the day before
   (Return_Use) are not in the MT pool yet.
+- **Mumbai start (25 Nov 8:46 PM, user-approved preview)**: on Create indent, cities in secret
+  `typed_store_cities` (default ["PTP Mumbai"]) show only the customers in `typed_store_customers`
+  ({"PTP Mumbai": ["Zepto", "Swiggy", "Zomato"]}) and a **Store / delivery point** box the user types into
+  (selectbox with new options; stores typed before are offered, the "<Customer> - Mumbai" placeholders never).
+  A new name goes through `NEW_PARTY` → added to the Customer List (+ its time to Delivery_Times) on Submit
+  (`delivery.typed_store`, `_typed_store_box`, `_on_typed_store`, `_placeholder`). SKUs from the existing
+  Mumbai mapping.
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.

@@ -199,6 +199,9 @@ def new_party() -> dict | None:
 def _my_customers(m: Masters, city: str) -> list[str]:
     """Customers that have at least one store this user may use (all, if unrestricted)."""
     customers = m.customers(city) if city else []
+    only = config.typed_store_customers(city) if typed_store(city) else []
+    if only:   # Mumbai: just these customers, in this order
+        customers = [next((c for c in customers if _same(c, x)), x) for x in only]
     u = st.session_state.get("user") or {}
     if u.get("role") not in ("owner", "owner_full") and u.get("stores"):
         customers = [c for c in customers if _my_stores(m, city, c)]
@@ -220,6 +223,50 @@ def _new_party_box(hdr) -> None:
             state.set_header_field("store", " ".join(store.split()))
             _bump()
             st.rerun()
+
+
+def typed_store(city: str) -> bool:
+    """Mumbai (25 Nov): the store is typed, not picked from the Customer List."""
+    return " ".join(str(city or "").split()).casefold() in config.typed_store_cities()
+
+
+def _placeholder(store: str, customer: str, city: str) -> bool:
+    """'Zepto - Mumbai': the stand-in stores added on 18 Nov, never offered."""
+    word = str(city or "").replace("PTP", "").strip()
+    return _same(store, f"{customer} - {word}") or _same(store, f"{customer} - {city}")
+
+
+def _on_typed_store(key: str, stores: list[str]) -> None:
+    hdr = state.header()
+    val = " ".join(str(st.session_state.get(key) or "").split())
+    if not val or _same(val, hdr.store):
+        return
+    new = new_party()
+    typed_before = new and _same(new["city"], hdr.city) and _same(new["customer"], hdr.customer) \
+        and _same(new["store"], val)
+    known = next((x for x in stores if _same(x, val)), None)
+    if known and not typed_before:
+        st.session_state.pop(NEW_PARTY, None)     # a store already in the Customer List
+        state.set_header_field("store", known)
+    else:   # new name: saved to the Customer List on Submit (items._add_new_party)
+        st.session_state[NEW_PARTY] = {"city": hdr.city, "customer": hdr.customer, "store": val}
+        state.set_header_field("store", val)
+    _bump()
+
+
+def _typed_store_box(m: Masters, hdr, stores: list[str], label) -> None:
+    """Store typed by the user; names saved before are offered."""
+    opts = [x for x in stores if not _placeholder(x, hdr.customer, hdr.city)]
+    if hdr.store and hdr.store not in opts:
+        opts = opts + [hdr.store]
+    k = _k("store_typed")
+    st.selectbox("Store / delivery point", opts, index=_index(opts, hdr.store), key=k,
+                 format_func=label, accept_new_options=True,
+                 placeholder="Type the store name, or pick one used before",
+                 on_change=_on_typed_store, args=(k, opts))
+    if not opts:
+        st.caption("Type the store name and press Enter. It is saved when you submit, "
+                   "and offered here next time.")
 
 
 def _date_options() -> list[str]:
@@ -362,7 +409,9 @@ def render(m: Masters) -> bool:
                         return x
                     return f"{x}  ✓ {'PO done' if info[1] == 'Frozen' else 'placed'}"
 
-                if stores:
+                if typed_store(hdr.city):
+                    _typed_store_box(m, hdr, stores, store_label)
+                elif stores:
                     k = _k("store")
                     st.pills("Store", stores, default=hdr.store or None, key=k, format_func=store_label,
                              on_change=_on_pick, args=(k, "store"))

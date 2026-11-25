@@ -173,6 +173,28 @@ def multi_po_customers() -> set[str]:
     return {str(x).strip().casefold() for x in v if str(x).strip()}
 
 
+def typed_store_cities() -> set[str]:
+    """Cities where Create indent shows only the customers and the store is typed by
+    the user (25 Nov: Mumbai start). A typed store is saved to the Customer List on
+    Submit and offered next time. Secret `typed_store_cities`, default ["PTP Mumbai"]."""
+    v = get("typed_store_cities", ["PTP Mumbai"])
+    v = [v] if isinstance(v, str) else list(v or [])
+    return {" ".join(str(x).split()).casefold() for x in v if str(x).strip()}
+
+
+def typed_store_customers(city: str) -> list[str]:
+    """Customers offered on Create indent in a typed-store city (25 Nov, user: Mumbai =
+    Zepto, Swiggy, Zomato). Empty = every customer of the city. Secret
+    `typed_store_customers` {city: [customers]}."""
+    v = get("typed_store_customers", {"PTP Mumbai": ["Zepto", "Swiggy", "Zomato"]}) or {}
+    key = " ".join(str(city or "").split()).casefold()
+    for c, names in dict(v).items():
+        if " ".join(str(c).split()).casefold() == key:
+            names = [names] if isinstance(names, str) else list(names or [])
+            return [" ".join(str(x).split()) for x in names if str(x).strip()]
+    return []
+
+
 def no_po_customers() -> set[str]:
     """Customers that send no PO / PO number (19 Nov: More; orders come in WhatsApp
     groups). Their 'PO' can be a screenshot (PNG/JPG) and the PO qty starts from the
