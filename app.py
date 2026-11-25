@@ -62,10 +62,6 @@ if _config.trial_copy():
 
 from pages_src import access, common, home, indent, login, my_indents, po_upload, production, tracker  # noqa: E402
 from pages_src import delivery_times  # noqa: E402   (Bulk indents page removed 21 Nov)
-from pages_src import preprod_actual  # noqa: E402   (22 Nov: owners only while being tried)
-from pages_src import batch_city  # noqa: E402   (25 Nov: city-level Batching plan + Actual dispatch)
-from pages_src import preprod_city  # noqa: E402   (24 Nov evening: city-level pre-production, trial)
-from pages_src import dispatch as dispatch_page  # noqa: E402   (23 Nov: owners only while being tried)
 
 _remember_modules()
 
@@ -138,19 +134,6 @@ if user.opens_access:
 if user.is_owner:
     pages["times"] = st.Page(lambda: delivery_times.render(user), title="Delivery times", icon="🕒",
                              url_path="delivery-times")
-    # 22 Nov: new pre-production pages, owners only until they are tried out (no change for others)
-    pages["preprod"] = st.Page(lambda: preprod_city.render(user), title="Pre-production actual",
-                               icon="📥", url_path="preprod-actual")
-    pages["plan"] = st.Page(lambda: batch_city.render_plan(user), title="Batching plan", icon="🧮",
-                            url_path="batching-plan")
-    pages["dispatch"] = st.Page(lambda: batch_city.render_dispatch(user), title="Actual dispatch", icon="🚚",
-                                url_path="dispatch")
-    pages["returns"] = st.Page(lambda: dispatch_page.render_returns(user), title="Returns", icon="↩️",
-                               url_path="returns")
-    pages["dcheck"] = st.Page(lambda: dispatch_page.render_check(user), title="Dispatch check", icon="🧭",
-                              url_path="dispatch-check")
-    pages["grading"] = st.Page(lambda: dispatch_page.render_grading(user), title="Return grading", icon="🧺",
-                               url_path="return-grading")
 common.PAGES.clear()
 common.PAGES.update(pages)
 
@@ -161,16 +144,11 @@ if makes_indents:
 if sees_production:   # owner and warehouse; sales do not get production or the hourly tracker
     sections["Production"] = [pages["production"], pages["batching"], pages["tracker"]]
 if user.is_owner:
-    sections["Pre-production (owners, trial)"] = [pages["preprod"], pages["plan"]]
-    sections["Dispatch (owners, trial)"] = [pages["dispatch"], pages["returns"], pages["grading"],
-                                                 pages["dcheck"]]
     sections["Admin"] = ([pages["access"]] if "access" in pages else []) + [pages["times"]]
 landing = pages["home"] if makes_indents else pages["production"]
 URLS = {"home": "home", "indent": "indent", "my_indents": "indents", "po": "upload-po",
         "tracker": "tracker", "production": "production", "batching": "batching", "access": "access",
-        "times": "delivery-times", "preprod": "preprod-actual", "plan": "batching-plan",
-        "dispatch": "dispatch", "returns": "returns", "dcheck": "dispatch-check",
-        "grading": "return-grading"}
+        "times": "delivery-times"}
 in_menu = [pg for group in sections.values() for pg in group]
 shown = {URLS[k] for k, pg in pages.items() if any(pg is q for q in in_menu)}   # addresses the menu already uses
 _away = [x for x in ("signin", "login") + GATE_PATHS if x not in shown]

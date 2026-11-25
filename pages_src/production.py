@@ -159,8 +159,6 @@ def render(user: User) -> None:
     names = ["By spec size", "Make-ready list", "By customer"]
     if user.is_owner:
         names += ["Estimate (new sheet)", "Estimate (consolidated)"]
-    if user.is_full_owner:            # 24 Nov evening: Creator only while being tried
-        names += ["Pre-production actual"]
     v1, v2, v3, *v4 = st.tabs(names)
     with v1:
         show = common.numbered(prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"]))
@@ -193,14 +191,6 @@ def render(user: User) -> None:
             _estimate_new(all_lines, m, label)
         with v4[1]:
             _estimate_consolidated(all_lines, m, label)
-        if len(v4) > 2:
-            with v4[2]:
-                _day = st.session_state.get("ps_ctx", (None, ALL_DATES))[1]
-                if _day == ALL_DATES:
-                    st.info("Pick one delivery date.")
-                else:
-                    from pages_src import preprod_city
-                    preprod_city.render_estimate_actual(all_lines, m, _day)
     _next_day(m)
     gaps = not_in_base(all_lines, m)
     if not gaps.empty:
@@ -219,7 +209,6 @@ def _estimate_new(lines: pd.DataFrame, m, label: str) -> None:
     (firm) and a rough box range over the counts each country may be used at (customer spec ∩
     country spec). Exact boxes come on Pre-production actual once a country is picked."""
     from core import mapping_sheet, preprod
-    from pages_src.preprod_actual import _opts
     if st.session_state.get("ps_ctx", (None, ALL_DATES))[1] == ALL_DATES:
         st.info("Pick one delivery date.")
         return
@@ -255,7 +244,6 @@ def _estimate_consolidated(lines: pd.DataFrame, m, label: str) -> None:
     """Owners' trial (24 Nov): every customer clubbed, no names. Per fruit -> variety · country · box:
     the boxes to take out of primary at each count and in total."""
     from core import mapping_sheet, preprod
-    from pages_src.preprod_actual import _opts
     if st.session_state.get("ps_ctx", (None, ALL_DATES))[1] == ALL_DATES:
         st.info("Pick one delivery date.")
         return
@@ -525,3 +513,15 @@ def _publish(title: str, tab: str, table: pd.DataFrame, lines: pd.DataFrame, use
         c[1].success(f"'{tab}' tab updated ({len(table)} rows).")
 
 
+def _opts(m, data, r) -> dict:
+    """Countries for one SKU (estimate tabs): the New Mapping sheet first (Combination 1, then its
+    Parent tab), else the old masters (Batching_Master / New tab / Mapping Whole)."""
+    from core import config, mapping_sheet, preprod
+    unit = "Tray" if str(r["parent_sku"]).casefold() in {p.casefold() for p in config.tray_parents()} else "Box"
+    combos, parent = data.get("_mapping", (None, None)) if mapping_sheet.use_new() else (None, None)
+    o = mapping_sheet.options(combos, parent, r["city"], r["customer"], r["customer_sku_name"], r["parent_sku"],
+                              r.get("variety", ""), unit)
+    if not o:
+        o = preprod.country_options(m, data[preprod.BATCHING_MASTER], r["city"], r["customer"],
+                                    r["customer_sku_name"], r["parent_sku"])
+    return o or {preprod.ANY: {"spec": [], "unit": "Box", "box_kg": None, "source": "none"}}
