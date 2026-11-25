@@ -232,6 +232,18 @@ G_COLS = {  # grid column -> processed input key
 }
 LOCKED = ["#", "Fruit", "Variety", "Size", "Table", "Boxes (B)", "Box kg (A)", "Pcs/box"]
 DEFAULT_PACKS = ["1PC", "2PC", "3PC", "1Kg"]
+PICK = "pick ▼"
+NUM_RE = r"^\s*\d*(\.\d+)?\s*$"
+
+
+def _cell(v) -> str:
+    """Number cells are text (empty, not 'None'): '700', '2.5' or ''."""
+    return "" if _blank(v) else f"{pr._f(v):g}"
+
+
+def _pack(r: dict) -> str:
+    p = r.get("Cux Lot")
+    return "" if _blank(p) or p == PICK else str(p)
 
 
 def _blank(v) -> bool:
@@ -243,10 +255,10 @@ def _grid_row(lot: dict, pack: str = "", vals: dict | None = None, saved: bool =
     r = {"lot_id": str(lot.get("entry_id")), "Fruit": lot.get("parent_sku", ""), "Variety": lot.get("variety", ""),
          "Size": lot.get("size", ""), "Table": str(lot.get("table_no", "")),
          "Boxes (B)": pr._f(lot.get("boxes_moved")), "Box kg (A)": pr._f(lot.get("box_kg")),
-         "Pcs/box": pr._f(lot.get("pcs_per_box")) or None, "Cux Lot": pack or None}
+         "Pcs/box": pr._f(lot.get("pcs_per_box")) or None, "Cux Lot": pack or PICK}
     for col, k in G_COLS.items():
         v = vals.get(k)
-        r[col] = None if _blank(v) or pr._f(v) == 0 and not saved else pr._f(v)
+        r[col] = "" if _blank(v) or pr._f(v) == 0 and not saved else _cell(v)
     c = vals.get("comment")
     r["Comments"] = "" if _blank(c) else str(c)
     r["_saved"] = saved
@@ -259,10 +271,10 @@ def _vals(r: dict) -> dict:
 
 def _with_result(r: dict) -> dict:
     vals = _vals(r)
-    if not r.get("Cux Lot") or not (any(v for v in vals.values()) or r.get("Comments")):
+    if not _pack(r) or not (any(v for v in vals.values()) or r.get("Comments")):
         r["Efficiency"], r["Status"] = "", "Saved" if r.get("_saved") else "Not entered"
         return r
-    c = pr.compute(r["Box kg (A)"], r["Pcs/box"], r["Boxes (B)"], r["Cux Lot"], vals)
+    c = pr.compute(r["Box kg (A)"], r["Pcs/box"], r["Boxes (B)"], _pack(r), vals)
     r["Efficiency"] = pr.pct(c["efficiency"]) if c["used_kg"] > 0 else "check"
     r["Status"] = "Saved" if r.get("_saved") else "Not saved"
     return r
@@ -336,8 +348,8 @@ def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
             "Left over pcs (E3)": "Loose MT pieces not used", "GT Ready box (F1)": "Boxes to GT",
             "GT Ready kg (F2)": "Loose kg to GT", "GT Ready pcs (F3)": "Loose pieces to GT",
             "Dump kg (G1)": "Dump in kg", "Dump pcs (G2)": "Dump in pieces"}
-    cfg = {col: st.column_config.NumberColumn(f"✏️ {col}", min_value=0, step=1, format="%g", width="medium",
-                                              help=tips[col]) for col in G_COLS}
+    cfg = {col: st.column_config.TextColumn(f"✏️ {col}", width="medium", validate=NUM_RE,
+                                            help=tips[col] + " · numbers only") for col in G_COLS}
     lock = {"#": ("#", "small"), "Fruit": ("🔒 Fruit", "small"), "Variety": ("🔒 Variety", "small"),
             "Size": ("🔒 Size", "small"), "Table": ("🔒 Table", "small"), "Boxes (B)": ("🔒 Boxes (B)", "small"),
             "Box kg (A)": ("🔒 Box kg (A)", "small"), "Pcs/box": ("🔒 Pcs/box", "small")}
@@ -345,7 +357,8 @@ def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
         cfg[col] = (st.column_config.NumberColumn(lab, format="%g", width=w, pinned=col in ("#", "Fruit", "Variety"))
                     if col in ("#", "Boxes (B)", "Box kg (A)", "Pcs/box")
                     else st.column_config.TextColumn(lab, width=w, pinned=col in ("Fruit", "Variety")))
-    cfg["Cux Lot"] = st.column_config.SelectboxColumn("▼ Cux Lot", options=packs, width="small", required=False,
+    cfg["Cux Lot"] = st.column_config.SelectboxColumn("▼ Cux Lot", options=[PICK] + packs, width="medium",
+                                                      required=True,
                                                       help="Pick the customer pack made from this lot")
     cfg["Comments"] = st.column_config.TextColumn("💬 Comments", width="large", max_chars=200,
                                                   help="Operations note, e.g. loose box, returns mixed")
@@ -370,7 +383,7 @@ def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
     todo = [r for r in base if r["Status"] == "Not saved"]
     if c[2].button(f"Save {len(todo)} line(s)" if todo else "Save", type="primary", icon=":material/save:",
                    width="stretch", key="pg_save", disabled=not todo):
-        rows = [pr.row(lots[r["lot_id"]], r["Cux Lot"], _vals(r), day, city, r.get("Comments") or "")
+        rows = [pr.row(lots[r["lot_id"]], _pack(r), _vals(r), day, city, r.get("Comments") or "")
                 for r in todo if r["lot_id"] in lots]
         _grid_confirm(rows, todo, user)
     bad = [i + 1 for i, r in enumerate(base) if r["Efficiency"] == "check"]
