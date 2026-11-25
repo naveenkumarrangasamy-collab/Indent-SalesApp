@@ -31,3 +31,12 @@ def test_entry_errors():
           "stock_type": "Returns"}
     assert pa.entry_errors(ok) == []
     assert pa.entry_errors({**ok, "boxes_moved": 0, "table_no": ""}) == ["Table", "Boxes"]
+
+
+def test_defaults_with_missing_numbers():
+    parent_tab = pd.DataFrame([{"parent": "Blueberry", "grade": "Blueberry", "country": "Peru", "spec": "18mm",
+                                "lot": "", "box_kg": float("nan")}])
+    df = pa.option_rows("Blueberry", parent_tab, None)
+    kg, pcs = pa.defaults(df, origin="Peru", variety="Blueberry", size="18mm")
+    assert (kg, pcs) == (None, None)     # nothing known for this size: left blank, no crash
+    assert pa.defaults(pa.option_rows("Garlic", None, None), size="X") == (None, None)

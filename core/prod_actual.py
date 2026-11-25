@@ -75,8 +75,12 @@ def count_of(size: str) -> int | None:
 
 
 def _num(v):
-    n = to_number(v)
-    return n if n and n > 0 else None
+    """A positive number, else None (blank, text, NaN)."""
+    try:
+        n = float(to_number(v))
+    except (TypeError, ValueError):
+        return None
+    return n if n == n and n > 0 else None
 
 
 def option_rows(parent: str, parent_tab: pd.DataFrame | None, saved: pd.DataFrame | None) -> pd.DataFrame:
@@ -125,8 +129,8 @@ def choices(df: pd.DataFrame, col: str, **picked) -> list[str]:
 def defaults(df: pd.DataFrame, **picked) -> tuple[float | None, int | None]:
     """Box kg and pieces per box for the picked origin / variety / size."""
     sub = _match(df, **picked)
-    kg = next((x for x in sub["box_kg"] if x), None)
-    pcs = count_of(picked.get("size", "")) or next((int(x) for x in sub["pcs"] if x), None)
+    kg = next((float(x) for x in sub["box_kg"] if _num(x)), None)
+    pcs = count_of(picked.get("size", "")) or next((int(float(x)) for x in sub["pcs"] if _num(x)), None)
     return kg, pcs
 
 
