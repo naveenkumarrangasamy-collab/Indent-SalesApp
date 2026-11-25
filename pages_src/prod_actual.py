@@ -127,14 +127,20 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved) -> None:
             size = _pick("Size", pa.choices(opts, "size", origin=origin, variety=variety), f"{k}_s", blank=False)
 
         kg0, pcs0 = pa.defaults(opts, origin=origin, variety=variety, size=size) if size else (None, None)
-        r2 = st.columns([1, 1, 1, 1, 1.5])
+        only_box = pa.box_only(parent)
+        r2 = st.columns([1, 1, 1, 1.5]) if only_box else st.columns([1, 1, 1, 1, 1.5])
         box_kg = r2[0].number_input("Box kg", min_value=0.0, step=0.5, value=float(kg0 or 0),
                                     key=f"{k}_kg_{size}_{origin}_{variety}")
-        pcs = r2[1].number_input("Pcs/box", min_value=0, step=1, value=int(pcs0 or 0),
-                                 key=f"{k}_pcs_{size}_{origin}_{variety}")
-        table = r2[2].selectbox("Table", TABLES, index=None, placeholder="Choose…", key=f"{k}_t")
-        boxes = r2[3].number_input("Boxes", min_value=0.0, step=1.0, value=0.0, key=f"{k}_n")
-        stock = r2[4].selectbox("Stock", pa.STOCK_TYPES, index=0, key=f"{k}_st")
+        if only_box:
+            pcs, rest = 0, r2[1:]
+        else:
+            pcs = r2[1].number_input("Pcs/box", min_value=0, step=1, value=int(pcs0 or 0),
+                                     key=f"{k}_pcs_{size}_{origin}_{variety}")
+            rest = r2[2:]
+        table = rest[0].selectbox("Table", TABLES, index=None, placeholder="Choose…", key=f"{k}_t")
+        boxes = rest[1].number_input("Box/Tray" if only_box else "Boxes", min_value=0.0, step=1.0, value=0.0,
+                                     key=f"{k}_n")
+        stock = rest[2].selectbox("Stock", pa.STOCK_TYPES, index=0, key=f"{k}_st")
 
         if boxes and box_kg:
             st.markdown(f"<div class='pa-sub'>= {boxes * box_kg:g} kg on table "

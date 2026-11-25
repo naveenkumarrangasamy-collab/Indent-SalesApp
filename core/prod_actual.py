@@ -46,6 +46,13 @@ _ALIASES = {"bb": "blueberry", "blueberries": "blueberry", "mandrin": "mandarin"
             "kiwi gold": "kiwi", "kiwi green": "kiwi", "kiwi sungold": "kiwi", "c.r grapes": "grapes"}
 
 
+BOX_ONLY = {"blueberry"}   # counted only in boxes / trays: no pieces per box (user 25 Nov)
+
+
+def box_only(parent) -> bool:
+    return pkey(parent) in BOX_ONLY
+
+
 def pkey(parent) -> str:
     s = re.sub(r"\s+", " ", str(parent or "").strip().lower())
     return _ALIASES.get(s, s)

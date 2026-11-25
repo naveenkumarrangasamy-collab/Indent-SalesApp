@@ -40,3 +40,7 @@ def test_defaults_with_missing_numbers():
     kg, pcs = pa.defaults(df, origin="Peru", variety="Blueberry", size="18mm")
     assert (kg, pcs) == (None, None)     # nothing known for this size: left blank, no crash
     assert pa.defaults(pa.option_rows("Garlic", None, None), size="X") == (None, None)
+
+
+def test_blueberry_box_only():
+    assert pa.box_only("Blueberry") and pa.box_only("BB") and not pa.box_only("Apple")
