@@ -126,8 +126,8 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved) -> None:
         with r1[3]:
             size = _pick("Size", pa.choices(opts, "size", origin=origin, variety=variety), f"{k}_s", blank=False)
 
-        kg0, pcs0 = pa.defaults(opts, origin=origin, variety=variety, size=size)
-        r2 = st.columns(5)
+        kg0, pcs0 = pa.defaults(opts, origin=origin, variety=variety, size=size) if size else (None, None)
+        r2 = st.columns([1, 1, 1, 1, 1.5])
         box_kg = r2[0].number_input("Box kg", min_value=0.0, step=0.5, value=float(kg0 or 0),
                                     key=f"{k}_kg_{size}_{origin}_{variety}")
         pcs = r2[1].number_input("Pcs/box", min_value=0, step=1, value=int(pcs0 or 0),
