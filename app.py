@@ -61,6 +61,7 @@ if _config.trial_copy():
                 "no e-mails · no dispatch-sheet sync</div>", unsafe_allow_html=True)
 
 from pages_src import access, common, home, indent, login, my_indents, po_upload, production, tracker  # noqa: E402
+from pages_src import prod_actual  # noqa: E402   (25 Nov: Pre-Production Actual, trial)
 from pages_src import delivery_times  # noqa: E402   (Bulk indents page removed 21 Nov)
 
 _remember_modules()
@@ -128,6 +129,8 @@ pages = {
                           url_path="production", default=not makes_indents),
     "batching": st.Page(lambda: production.render_batching(user), title="Batching sheet", icon="📦",
                         url_path="batching"),
+    "preprod": st.Page(lambda: prod_actual.render(user), title="Pre-Production Actual", icon="📥",
+                       url_path="preprod-actual"),
 }
 if user.opens_access:
     pages["access"] = st.Page(lambda: access.render(user), title="Access", icon="🔑", url_path="access")
@@ -143,12 +146,13 @@ if makes_indents:
     sections["Indents"] = [pages["home"], pages["indent"], pages["my_indents"], pages["po"]]
 if sees_production:   # owner and warehouse; sales do not get production or the hourly tracker
     sections["Production"] = [pages["production"], pages["batching"], pages["tracker"]]
+    sections["Pre-production"] = [pages["preprod"]]
 if user.is_owner:
     sections["Admin"] = ([pages["access"]] if "access" in pages else []) + [pages["times"]]
 landing = pages["home"] if makes_indents else pages["production"]
 URLS = {"home": "home", "indent": "indent", "my_indents": "indents", "po": "upload-po",
         "tracker": "tracker", "production": "production", "batching": "batching", "access": "access",
-        "times": "delivery-times"}
+        "times": "delivery-times", "preprod": "preprod-actual"}
 in_menu = [pg for group in sections.values() for pg in group]
 shown = {URLS[k] for k, pg in pages.items() if any(pg is q for q in in_menu)}   # addresses the menu already uses
 _away = [x for x in ("signin", "login") + GATE_PATHS if x not in shown]

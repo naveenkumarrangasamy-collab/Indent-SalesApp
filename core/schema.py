@@ -31,6 +31,7 @@ RETURN_GRADING = "Return_Grading"    # returns of day D graded MT / GT / Dump (l
 CITY_GRADING = "City_Grading"        # 25 Nov: MT / GT / Dump per city + fruit + take-out option (last row wins)
 DISPATCH_LOCKS = "Dispatch_Locks"    # 25 Nov: owner unlocks of a dispatched indent (doc_no unlocked)
 RETURN_USE = "Return_Use"            # MT stock used per SKU in Pre-production (last row per day + group + SKU)
+PREPROD_ENTRIES = "PreProd_Actual"     # 25 Nov: lots put on grading tables (Pre-Production Actual page)
 BATCHING_PLAN = "Batching_Plan"      # pieces (kg) used from those boxes (last row per SKU + spec wins)
 
 TABS: dict[str, list[str]] = {
@@ -69,6 +70,9 @@ TABS: dict[str, list[str]] = {
     PREPROD_ACTUAL: ["round_id", "saved_at", "saved_by", "delivery_date", "city", "group", "customer_sku_name",
                      "parent_sku", "country", "spec", "boxes", "reason"],
     PREPROD_FREEZE: ["delivery_date", "city", "group", "action", "at", "by"],
+    PREPROD_ENTRIES: ["entry_id", "saved_at", "saved_by", "production_date", "city", "parent_sku", "origin",
+                      "variety", "brand", "size", "box_kg", "pcs_per_box", "table_no", "boxes_moved",
+                      "stock_type"],
     BATCHING_PLAN: ["saved_at", "saved_by", "delivery_date", "city", "group", "customer_sku_name", "country",
                     "spec", "boxes", "used", "unit", "gt_qty", "dump", "mt_grade", "sample", "parent_sku",
                     "variety"],
