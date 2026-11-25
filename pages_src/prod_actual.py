@@ -74,7 +74,7 @@ def render(user: User) -> None:
 
     cities = [c for c in m.cities() if user.sees_all_cities or user.in_my_cities(c)]
     top = st.columns([1, 3])
-    day = top[0].date_input("Date", value=config.now_ist().date(), key="pa_day", format="DD MMM YYYY")
+    day = top[0].date_input("Date", value=config.now_ist().date(), key="pa_day", format="DD/MM/YYYY")
     city = cities[0] if cities else ""
     if len(cities) > 1:
         with top[1]:
