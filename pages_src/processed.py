@@ -274,8 +274,17 @@ GRID_CSS = """<style>
 .pg-ef {border-radius:8px; min-height:36px; display:flex; align-items:center; justify-content:center;
         font-weight:700; font-size:0.9rem;}
 .pg-st {font-size:0.78rem; font-weight:600; min-height:36px; display:flex; align-items:center;}
-.pg-rowline {border-top:1px solid #E5E9EE; margin:4px 0 6px 0;}
-</style>""" % (sum(WIDTHS) + 6 * len(WIDTHS))
+.pg-hint {font-size:0.8rem; color:#6B7684; padding:2px 4px 4px 4px;}
+.pg-band {border-radius:8px; min-height:36px; margin-top:18px; display:flex; flex-direction:column;
+          justify-content:center; padding:4px 10px; font-weight:700; font-size:0.9rem;}
+.pg-band span {font-weight:500; font-size:0.75rem;}
+.pg-lab {font-size:0.72rem; color:#4A5562; line-height:1.2; min-height:2.4em; display:flex; align-items:flex-end;
+         margin-bottom:3px;}
+.st-key-pg_grid [data-testid="stWidgetLabel"] p {font-size:0.72rem; color:#4A5562; line-height:1.2;}
+.st-key-pg_grid [data-testid="stWidgetLabel"] {min-height:2.4em; align-items:flex-end;}
+[class*="st-key-pg_lot_"] {border:1px solid #D5DCE4; border-radius:12px; padding:8px; margin-bottom:8px;
+                           min-width:%dpx; background:#FFFFFF;}
+</style>""" % (1280, 1300)
 
 
 def _blank(v) -> bool:
@@ -362,6 +371,47 @@ def _eff_cell(s: dict, lot: dict) -> tuple[str, str, str]:
     return pr.pct(c["efficiency"]), bg, fg
 
 
+HEAD = ["n", "parent_sku", "variety", "size", "table_no", "box_kg", "pcs_per_box", "boxes_moved", "stock_type",
+        "pack"]
+ROW_W = [124] + [122] * 9
+BANDS = [
+    ("MT", ["mt_packs", "mt_loose_kg", "left_box", "left_kg", "left_pcs", "eff", "status"], ("#E6F4EA", "#1E7B34")),
+    ("GT", ["gt_box", "gt_kg", "gt_pcs"], ("#FFF4D6", "#8A5A00")),
+    ("Dump", ["dump_kg", "dump_pcs", "comment", "add"], ("#FDECEC", "#B42318")),
+]
+
+
+def _band_kg(s: dict, lot: dict) -> dict:
+    c = pr.compute(lot.get("box_kg"), lot.get("pcs_per_box"), lot.get("boxes_moved"), s["pack"], s["vals"])
+    return {"MT": f"{c['mt_kg']:.1f} kg", "GT": f"{c['gt_kg_total']:.1f} kg", "Dump": f"{c['dump_kg_total']:.1f} kg"}
+
+
+def _band_cell(f: str, ln: dict, s: dict, lot: dict, title: dict, i: int, rows: list) -> None:
+    k = f"pg_{ln['id']}_{f}"
+    lab = title.get(f, "")
+    if f in NUMS:
+        if f in s["need"]:
+            st.number_input(lab, min_value=0.0, step=1.0, value=None, key=k, format="%g", placeholder="")
+        else:
+            st.markdown(f"<div class='pg-lab'>{lab}</div><div class='pg-na'>–</div>", unsafe_allow_html=True)
+    elif f == "eff":
+        txt, bg, fg = _eff_cell(s, lot)
+        st.markdown(f"<div class='pg-lab'>{lab}</div><div class='pg-ef' style='background:{bg};color:{fg}'>{txt}"
+                    "</div>", unsafe_allow_html=True)
+    elif f == "status":
+        stt, colr = (("Saved", "#1E7B34") if s["same"] else ("Not saved", "#8A5A00") if s["touched"]
+                     else ("Not entered", "#9AA5B1"))
+        st.markdown(f"<div class='pg-lab'>Status</div><div class='pg-st' style='color:{colr}'>{stt}</div>",
+                    unsafe_allow_html=True)
+    elif f == "comment":
+        st.text_input(lab, key=k, placeholder="Type a note")
+    elif f == "add":
+        st.markdown("<div class='pg-lab'>&nbsp;</div>", unsafe_allow_html=True)
+        if st.button("＋ pack", key=f"pg_{ln['id']}_add", help="Another pack from this lot", width="stretch"):
+            rows.insert(i + 1, {"id": uuid.uuid4().hex[:8], "lot_id": ln["lot_id"], "saved": None})
+            st.rerun(scope="fragment")
+
+
 def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
     st.markdown(GRID_CSS, unsafe_allow_html=True)
     key = f"pg_lines_{day}_{city}"
@@ -386,50 +436,45 @@ def _grid_body(rows, lots, packs, day, city, user, key) -> None:
     done = sum(1 for s in states.values() if s["same"])
     st.caption(f"{len(rows)} line(s) · {done} saved · grey comes from Pre-Production Actual · fill the white "
                "boxes · scroll sideways for more columns →")
+    title = {c[0]: c[1] for c in COLS}
     with st.container(key="pg_grid"):
-        head = st.columns(WIDTHS)
-        for col, (_, title, _, _) in zip(head, COLS):
-            col.markdown(f"<div class='pg-h'>{title}</div>" if title else "", unsafe_allow_html=True)
+        head = st.columns(ROW_W)
+        for col, f in zip(head, HEAD):
+            col.markdown(f"<div class='pg-h'>{title[f]}</div>", unsafe_allow_html=True)
         for i, ln in enumerate(rows):
             lot = lots.get(ln["lot_id"])
             if lot is None:
                 continue
             s = states[ln["id"]]
-            cells = st.columns(WIDTHS)
-            for col, (field, title, _, kind) in zip(cells, COLS):
-                k = f"pg_{ln['id']}_{field}"
-                with col:
-                    if kind == "lock":
-                        v = i + 1 if field == "n" else lot.get(field, "")
-                        if field in ("box_kg", "pcs_per_box", "boxes_moved"):
+            with st.container(key=f"pg_lot_{ln['id']}"):
+                cells = st.columns(ROW_W)
+                for col, f in zip(cells, HEAD):
+                    with col:
+                        if f == "pack":
+                            k = f"pg_{ln['id']}_pack"
+                            if st.session_state.get(k) not in [PICK] + packs:
+                                st.session_state[k] = PICK
+                            st.selectbox("Cux Lot", [PICK] + packs, key=k, label_visibility="collapsed")
+                            continue
+                        v = i + 1 if f == "n" else lot.get(f, "")
+                        if f in ("box_kg", "pcs_per_box", "boxes_moved"):
                             v = f"{pr._f(v):g}" if pr._f(v) else ""
-                        if field == "variety" and v:
+                        if f == "variety" and v:
                             v = f"<span class='pg-var'>{v}</span>"
                         st.markdown(f"<div class='pg-lk'>{v or '&nbsp;'}</div>", unsafe_allow_html=True)
-                    elif kind == "pack":
-                        if st.session_state.get(k) not in [PICK] + packs:
-                            st.session_state[k] = PICK
-                        st.selectbox(title, [PICK] + packs, key=k, label_visibility="collapsed")
-                    elif kind == "num":
-                        if field in s["need"]:
-                            st.number_input(title, min_value=0.0, step=1.0, value=None, key=k, format="%g",
-                                            placeholder="", label_visibility="collapsed")
-                        else:
-                            st.markdown("<div class='pg-na'>–</div>", unsafe_allow_html=True)
-                    elif field == "eff":
-                        txt, bg, fg = _eff_cell(s, lot)
-                        st.markdown(f"<div class='pg-ef' style='background:{bg};color:{fg}'>{txt}</div>",
-                                    unsafe_allow_html=True)
-                    elif field == "status":
-                        stt, colr = (("Saved", "#1E7B34") if s["same"] else ("Not saved", "#8A5A00")
-                                     if s["touched"] else ("Not entered", "#9AA5B1"))
-                        st.markdown(f"<div class='pg-st' style='color:{colr}'>{stt}</div>", unsafe_allow_html=True)
-                    elif kind == "note":
-                        st.text_input(title, key=k, label_visibility="collapsed", placeholder="Type a note")
-                    elif kind == "btn":
-                        if st.button("＋ pack", key=f"pg_{ln['id']}_add", help="Another pack from this lot"):
-                            rows.insert(i + 1, {"id": uuid.uuid4().hex[:8], "lot_id": ln["lot_id"], "saved": None})
-                            st.rerun(scope="fragment")
+                if not s["pack"]:
+                    st.markdown("<div class='pg-hint'>Pick the Cux Lot to open MT, GT and Dump.</div>",
+                                unsafe_allow_html=True)
+                    continue
+                kg = _band_kg(s, lot)
+                for band, fields, colr in BANDS:
+                    cells = st.columns(ROW_W)
+                    bg, fg = colr
+                    cells[0].markdown(f"<div class='pg-band' style='background:{bg};color:{fg}'>{band}"
+                                      f"<span>{kg.get(band, '')}</span></div>", unsafe_allow_html=True)
+                    for col, f in zip(cells[1:], fields):
+                        with col:
+                            _band_cell(f, ln, s, lot, title, i, rows)
 
     todo = [(ln, states[ln["id"]]) for ln in rows if ln["id"] in states
             and states[ln["id"]]["touched"] and not states[ln["id"]]["same"]]
