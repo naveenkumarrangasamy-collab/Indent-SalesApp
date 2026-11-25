@@ -657,6 +657,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   **Confirm** (used, and the PO name is saved to PO_Item_Map so the same name matches by itself next time) or
   **Cancel** (kept as "not on indent"); the upload waits until every 🟡 line is checked. Any fruit of the indent
   (Avocado, Blueberry "Bulk PP Blueberry" → "1Box - Imported Blueberry", …). Other customers: names as before.
+  **25 Nov 11:30**: the PO line may name only the variety ("Fuji 1 Pc") → the indent line of that variety; ties
+  go to the same variety, then shared words, then the **qty closest to the PO qty** (`same_fruit(..., po_qty)`).
+  Master 25 Nov: PTP Bangalore Swiggy "1Pc - Apple Fuji" (Fuji) and Trent "1Kg - Apple Red Delicious" (RD) added to
+  All Cux City + New (filled, not yellow); IN-064 / IN-065 got Fuji 232 / 174 and IN-066 Apple RD 1000 kg (v2).
 - SKU list check (24 Nov): All Cux City holds 470 names; every Combination 1 name is already in it
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.

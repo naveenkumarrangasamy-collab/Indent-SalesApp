@@ -59,3 +59,17 @@ def test_same_fruit_blueberry_plural():
     lines = [N(parent_sku="Blueberry", customer_sku_name="1Box - Imported Blueberry", qty=120)]
     assert same_fruit("Bulk PP Blueberry 1 Box", lines, set()) == "1Box - Imported Blueberry"
     assert same_fruit("Imported Blueberries 125 g", lines, set()) == "1Box - Imported Blueberry"
+
+
+def test_same_fruit_variety_and_qty():
+    """25 Nov: Swiggy BLR PO gives 'Fuji' (no 'Apple') or an apple name close to the Fuji qty."""
+    from types import SimpleNamespace as N
+    from pages_src.indent_actions import same_fruit
+    lines = [N(parent_sku="Apple", customer_sku_name="1Pc - Apple Fuji", variety="Fuji", qty=232),
+             N(parent_sku="Apple", customer_sku_name="1Kg - Nectr Royal Gala", variety="Gala", qty=600),
+             N(parent_sku="Kiwi", customer_sku_name="1Pc - Green Kiwi", variety="", qty=300)]
+    assert same_fruit("Fuji 1 Pc", lines, set()) == "1Pc - Apple Fuji"
+    assert same_fruit("Bulk Imported Apple Fuji 1.00 Piece", lines, set(), 232) == "1Pc - Apple Fuji"
+    assert same_fruit("Imported Apple 1 Piece", lines, set(), 230) == "1Pc - Apple Fuji"      # qty closest
+    assert same_fruit("Imported Apple 1 Kg", lines, set(), 590) == "1Kg - Nectr Royal Gala"
+    assert same_fruit("Longan 100 g", lines, set(), 232) is None

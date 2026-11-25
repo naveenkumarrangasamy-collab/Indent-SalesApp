@@ -342,22 +342,32 @@ def fruit_match_on(customer: str, city: str) -> bool:
     return False
 
 
-def same_fruit(po_name: str, indent_lines: list, taken: set[str]) -> str | None:
-    """The indent line of the fruit named in the PO line (most shared words, then the biggest qty; lines already
-    matched by name on this PO skipped). None when the PO names no fruit of the indent."""
+def same_fruit(po_name: str, indent_lines: list, taken: set[str], po_qty: float | None = None) -> str | None:
+    """The indent line of the fruit named in the PO line (lines already matched by name on this PO skipped).
+    The fruit is a Parent SKU of the indent ('Avocado', 'Blueberries') or, when the PO gives only the variety
+    ('Fuji 1 Pc'), the variety of an indent line. Best line: same variety, then most shared words, then the
+    qty closest to the PO qty (biggest qty when the PO qty is not known). None = the PO names no fruit of it."""
     n = _norm(po_name)
+    pwords = set(re.findall(r"[a-z]+", n))
     fruits = sorted({(x.parent_sku or "").strip() for x in indent_lines if (x.parent_sku or "").strip()},
                     key=len, reverse=True)
     fruit = next((f for f in fruits if _norm(f)[:-1 if _norm(f).endswith("y") else None] in n), None)   # berries
-    if not fruit:
-        return None
+
+    def variety_of(x) -> set[str]:
+        return {w for w in re.findall(r"[a-z]+", _norm(getattr(x, "variety", "") or "")) if len(w) > 2}
+    if not fruit:                                          # 'Fuji 1 Pc': the variety names the fruit
+        hit = [x for x in indent_lines if variety_of(x) & pwords]
+        if not hit:
+            return None
+        fruit = hit[0].parent_sku
     pool = [x for x in indent_lines if _norm(x.parent_sku) == _norm(fruit)]
     free = [x for x in pool if _norm(x.customer_sku_name) not in taken] or pool
-    words = set(re.findall(r"[a-z]+", n)) - {_norm(fruit), "pc", "pcs", "piece", "pieces", "kg", "g", "gm", "box",
-                                              "bulk", "pack"}
+    words = pwords - {_norm(fruit), "pc", "pcs", "piece", "pieces", "kg", "g", "gm", "box", "bulk", "pack"}
 
     def score(x):
-        return (len(words & set(re.findall(r"[a-z]+", _norm(x.customer_sku_name)))), float(x.qty or 0))
+        q = float(x.qty or 0)
+        return (len(variety_of(x) & pwords), len(words & set(re.findall(r"[a-z]+", _norm(x.customer_sku_name)))),
+                -abs(q - po_qty) if po_qty else q)
     return max(free, key=score).customer_sku_name
 
 
@@ -376,7 +386,7 @@ def _read_table(cur, read, po_number: str, indent_id: str, user: User) -> tuple[
         for x in lines:
             if x.how in ("map", "name") and _norm(x.sku) in own:
                 continue
-            pick = same_fruit(x.name, cur.lines, taken)
+            pick = same_fruit(x.name, cur.lines, taken, x.qty)
             if pick:
                 x.sku, x.how = pick, "fruit"
                 taken.add(_norm(pick))
