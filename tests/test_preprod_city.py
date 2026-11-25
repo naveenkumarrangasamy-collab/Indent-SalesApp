@@ -73,3 +73,13 @@ def test_taken_sums_rounds_for_the_city_group():
                        {"delivery_date": "2026-11-24", "city": "PTP Bangalore", "group": "Zepto",
                         "customer_sku_name": "Apple|Gala|pcs", "country": "A", "boxes": "9"}])
     assert pc.taken(df, "2026-11-24", "PTP Bangalore") == {"Apple|Gala|pcs": {"A": 5.0}}
+
+
+def test_by_customer_and_more_green_avocado_note():
+    view = pd.DataFrame([v("More", "Avocado", "1Pc - Avocado Imported Ea (Hass)", "", "Pcs", "22C, 24C", 398, 398, "Match"),
+                         v("Zepto", "Avocado", "1Pc - Avocado Hass Imported", "", "Pcs", "18C, 20C", 131, 131, "Match")])
+    rows = pc.demand(view, lambda p: False)
+    assert rows[0]["by_customer"] == {"More": 398, "Zepto": 131}
+    assert pc.customer_notes(rows, None, "PTP Bangalore") == {"Avocado||pcs": ["More: green colour"]}
+    extra = pd.DataFrame([{"City": "PTP Bangalore", "Customer": "Zepto", "Parent SKU": "Avocado", "Note": "ripe"}])
+    assert pc.customer_notes(rows, extra, "PTP Bangalore")["Avocado||pcs"] == ["More: green colour", "Zepto: ripe"]

@@ -94,6 +94,7 @@ PC_CSS = """<style>
 .pc-taken{background:#EEF0F4;color:#444}
 .pc-info{font-size:.8rem;color:#6B6F7B;margin:.2rem 0 .5rem;line-height:1.6}.pc-sug{color:#0C447C}
 .pc-note{font-size:.78rem;color:#7A4F00}
+.pc-need-note{font-size:.8rem;color:#3C3489;background:#EEEDFE;border-radius:6px;padding:.1rem .5rem;display:inline-block;margin:0 .3rem .3rem 0}
 .pc-done{font-size:.8rem;color:#27500A;margin:.1rem 0}
 .pc-eq{font-size:.82rem;color:#6B6F7B;padding-top:.55rem}
 .pc-bar{height:5px;border-radius:3px;background:#EEF0F4;overflow:hidden;margin:.35rem 0 .2rem}
@@ -115,6 +116,7 @@ def _body(user: User, day: str, city: str, rows: list[dict], data, parent_df) ->
         st.success(f"🔒 {city} frozen by {f_by} at {f_at[11:16] or f_at}. No more take-outs.")
     entries, n_ok, n_bad = [], 0, 0
     last_parent = None
+    needs = pc.customer_notes(rows, preprod._read(pc.CUSTOMER_NOTES), city)
     for i, r in enumerate(rows):
         opts = pc.options(parent_df, r["parent"], r["variety"])
         if not opts:
@@ -133,6 +135,10 @@ def _body(user: User, day: str, city: str, rows: list[dict], data, parent_df) ->
                                sorted(r["asked"].items(), key=lambda kv: (kv[0] == pc.NO_SPEC, kv[0])))
             st.markdown(f"<div class='pc-info'>{', '.join(r['customers'])} · {r['skus']} SKU(s) · Asked {asked}"
                         + (f" · <span class='pc-sug'>Suggested {sug}</span>" if sug != "-" else "") + "</div>"
+                        + ("<div class='pc-info' style='margin-top:-.3rem'>By customer: " + " · ".join(
+                            f"{k} {fmt_num(round(v, 1))}" for k, v in sorted(r["by_customer"].items())) + "</div>"
+                           if len(r["by_customer"]) > 1 else "")
+                        + "".join(f"<div class='pc-need-note'>● {n}</div>" for n in needs.get(r["key"], []))
                         + "".join(f"<div class='pc-note'>⚠ {n}</div>" for n in r["notes"][:3]),
                         unsafe_allow_html=True)
             for label, n in mine.items():
@@ -239,7 +245,7 @@ def _freeze(day: str, city: str, frozen: bool, user: User) -> None:
 
 # ------------------------------------------------------------------ Production sheet tab (Creator only)
 
-def actual_table(rows: list[dict], took: dict, parent_df) -> pd.DataFrame:
+def actual_table(rows: list[dict], took: dict, parent_df, needs: dict | None = None) -> pd.DataFrame:
     out = []
     for r in rows:
         opts = pc.options(parent_df, r["parent"], r["variety"])
@@ -254,7 +260,8 @@ def actual_table(rows: list[dict], took: dict, parent_df) -> pd.DataFrame:
                                        + f" = {fmt_num(sum(mine.values()))} {word}") if mine else "-",
                     "Fruit in boxes": f"{fmt_num(round(total, 1))} {_unit(r['unit'])}" if mine else "-",
                     "Extra / short": (f"{'+' if total >= r['need'] else ''}{fmt_num(round(total - r['need'], 1))}"
-                                      if mine and known else stt)})
+                                      if mine and known else stt),
+                    "Customer needs": "; ".join((needs or {}).get(r["key"], []))})
     return pd.DataFrame(out)
 
 
@@ -273,7 +280,7 @@ def render_estimate_actual(all_lines: pd.DataFrame, m, day: str) -> None:
         if not rows:
             continue
         took = pc.taken(data[preprod.PREPROD_ACTUAL], day, city)
-        df = actual_table(rows, took, parent_df)
+        df = actual_table(rows, took, parent_df, pc.customer_notes(rows, preprod._read(pc.CUSTOMER_NOTES), city))
         frozen = preprod.freeze_state(data[preprod.PREPROD_FREEZE], day, city, pc.CITY_GROUP)[0]
         st.markdown(f"### {city}" + (" · 🔒 frozen" if frozen else ""))
         boxes = sum(sum(v.values()) for v in took.values())

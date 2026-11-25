@@ -160,7 +160,7 @@ def render(user: User) -> None:
     if user.is_owner:
         names += ["Estimate (new sheet)", "Estimate (consolidated)"]
     if user.is_full_owner:            # 24 Nov evening: Creator only while being tried
-        names += ["Estimate actual"]
+        names += ["Pre-production actual"]
     v1, v2, v3, *v4 = st.tabs(names)
     with v1:
         show = common.numbered(prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"]))

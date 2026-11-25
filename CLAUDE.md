@@ -643,7 +643,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   "Choose…" + same-size Boxes/Trays box (thin amber outline, `st-key-pcnum*`, `PC_CSS`) + "= n pcs", "＋ Add another
   count" / ✕, thin progress bar. Round 1 is always "First take-out" (no reason asked); from round 2 the reason
   dropdown (grading loss / short / other). **Freeze 🔒** only after the first take-out is saved, with an "are you
-  sure" step. **Production sheet → "Estimate actual" tab, Creator only**: need,
+  sure" step. **25 Nov 10:25**: each card also shows **By customer** (need per customer when more than one) and
+  purple **customer needs** notes: built-in "More · Avocado: green colour" + optional tab **Customer_Notes** (City,
+  Customer, Parent SKU, Note; blank City = every city) the team can fill later (`preprod_city.customer_notes`).
+  **Production sheet → "Pre-production actual" tab (was "Estimate actual"), Creator only**: need,
   estimate, taken, fruit in boxes, extra/short per city. Batching plan / Dispatch still expect per-customer freezes
   (next step: move them to the city freeze).
 - **Same-fruit PO match with a check (25 Nov 10 AM, user)**: only **Swiggy Bangalore** (secret `fruit_match`

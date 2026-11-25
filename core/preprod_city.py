@@ -23,6 +23,8 @@ from core.models import fmt_num, to_number
 from core.preprod import _c, _k, is_count, need_unit, parse_spec
 
 CITY_GROUP = "All customers"
+CUSTOMER_NOTES = "Customer_Notes"     # optional tab: City, Customer, Parent SKU, Note (blank City = every city)
+DEFAULT_NOTES = [{"City": "", "Customer": "More", "Parent SKU": "Avocado", "Note": "green colour"}]   # user 25 Nov
 NO_SPEC = "spec not set"
 SIZE_PARENTS = {"kiwi", "grapes", "blueberry", "cherry", "cherries"}   # plain numbers are mm, not counts
 
@@ -94,11 +96,13 @@ def demand(view: pd.DataFrame, ask_variety) -> list[dict]:
         variety = _c(r.get("Variety")) if ask_variety(parent) else ""
         key = club_key(parent, variety, unit)
         g = rows.setdefault(key, {"key": key, "parent": parent, "variety": variety, "unit": unit, "need": 0.0,
-                                  "skus": set(), "customers": set(), "asked": {}, "notes": [], "lines": 0})
+                                  "skus": set(), "customers": set(), "asked": {}, "notes": [], "lines": 0,
+                                  "by_customer": {}})
         need = lots * per
         g["need"] += need
         g["skus"].add(_k(name))
         g["customers"].add(_c(r["Customer"]))
+        g["by_customer"][_c(r["Customer"])] = g["by_customer"].get(_c(r["Customer"]), 0.0) + need
         g["lines"] += 1
         st = spec_text(spec_items(r.get("Spec", ""), parent))
         g["asked"][st] = g["asked"].get(st, 0.0) + need
@@ -111,6 +115,30 @@ def demand(view: pd.DataFrame, ask_variety) -> list[dict]:
         g["need"] = round(g["need"], 3)
         out.append(g)
     return sorted(out, key=lambda g: (_k(g["parent"]), _k(g["variety"]), g["unit"]))
+
+
+def customer_notes(rows: list[dict], tab: pd.DataFrame | None, city: str) -> dict[str, list[str]]:
+    """{club key: ['More: green colour', ...]}: what one customer asks differently for that fruit
+    (25 Nov: More wants green avocados). Built-in DEFAULT_NOTES + the optional Customer_Notes tab."""
+    reqs = list(DEFAULT_NOTES)
+    if tab is not None and not tab.empty:
+        cols = {_k(c).replace(" ", "").replace("_", ""): c for c in tab.columns}
+        get = lambda r, n: _c(r.get(cols.get(n, ""), ""))
+        reqs += [{"City": get(r, "city"), "Customer": get(r, "customer"), "Parent SKU": get(r, "parentsku"),
+                  "Note": get(r, "note")} for r in tab.to_dict("records")]
+    out: dict[str, list[str]] = {}
+    for g in rows:
+        for q in reqs:
+            if not q["Note"] or _k(q["Parent SKU"]) != _k(g["parent"]):
+                continue
+            if q["City"] and _k(q["City"]) not in _k(city):
+                continue
+            for cust in g["customers"]:
+                if _k(cust).startswith(_k(q["Customer"])):
+                    t = f"{cust}: {q['Note']}"
+                    if t not in out.setdefault(g["key"], []):
+                        out[g["key"]].append(t)
+    return out
 
 
 # ------------------------------------------------------------------ options (New Mapping Parent tab)
