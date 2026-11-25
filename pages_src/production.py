@@ -156,10 +156,10 @@ def render(user: User) -> None:
     if d1.any():
         st.caption(f"{' / '.join(config.next_day_customers())} orders are not in these tables: "
                    "see their own section at the bottom.")
-    names = ["By spec size", "Make-ready list", "By customer", "Production Actual"]
+    names = ["By spec size", "Make-ready list", "By customer", "Production Actual", "Processed"]
     if user.is_owner:
         names += ["Estimate (new sheet)", "Estimate (consolidated)"]
-    v1, v2, v3, v_pa, *v4 = st.tabs(names)
+    v1, v2, v3, v_pa, v_pr, *v4 = st.tabs(names)
     with v1:
         show = common.numbered(prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"]))
         st.dataframe(show, hide_index=True, width="stretch",
@@ -188,6 +188,8 @@ def render(user: User) -> None:
         _by_customer(all_lines, m, label)
     with v_pa:
         _production_actual(label)
+    with v_pr:
+        _processed(label)
     if v4:
         with v4[0]:
             _estimate_new(all_lines, m, label)
@@ -549,3 +551,32 @@ def _production_actual(label: str) -> None:
     st.dataframe(common.numbered(show), hide_index=True, width="stretch")
     st.download_button("CSV", data=lambda: v.to_csv(index=False).encode(), file_name=f"production_actual_{label}.csv",
                        mime="text/csv", key="pa_csv", on_click="ignore", icon=":material/download:")
+
+
+def _processed(label: str) -> None:
+    """25 Nov: MT / GT / dump out of each lot (saved on the Processed page), like the team's sheet."""
+    from core import processed as pr
+    _, d, city = st.session_state.get("ps_ctx", (None, ALL_DATES, None))
+    v = pr.latest(pr.read(), None if d == ALL_DATES else d, city or None)
+    if v.empty:
+        st.info("Nothing processed for this date yet. Enter it on **Processed**.")
+        return
+    used = pd.to_numeric(v["used_kg"], errors="coerce").sum()
+    mt = pd.to_numeric(v["mt_kg"], errors="coerce").sum()
+    c = st.columns(4)
+    c[0].metric("Rows", len(v))
+    c[1].metric("Used kg", f"{used:,.1f}")
+    c[2].metric("MT kg", f"{mt:,.1f}")
+    c[3].metric("Efficiency", f"{round(mt / used * 100)}%" if used else "–")
+    show = pr.view(v)
+
+    def _colour(val):
+        try:
+            n = float(str(val).rstrip("%")) / 100
+        except ValueError:
+            return ""
+        return ("background-color:#E6F4EA;color:#1E7B34" if n >= 0.9 else
+                "background-color:#FFF4D6;color:#8A5A00" if n >= 0.85 else "background-color:#FDECEC;color:#B42318")
+    st.dataframe(common.numbered(show).style.map(_colour, subset=["Efficiency"]), hide_index=True, width="stretch")
+    st.download_button("CSV", data=lambda: v.to_csv(index=False).encode(), file_name=f"processed_{label}.csv",
+                       mime="text/csv", key="pr_csv", on_click="ignore", icon=":material/download:")

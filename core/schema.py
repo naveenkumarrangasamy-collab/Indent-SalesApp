@@ -32,6 +32,7 @@ CITY_GRADING = "City_Grading"        # 25 Nov: MT / GT / Dump per city + fruit +
 DISPATCH_LOCKS = "Dispatch_Locks"    # 25 Nov: owner unlocks of a dispatched indent (doc_no unlocked)
 RETURN_USE = "Return_Use"            # MT stock used per SKU in Pre-production (last row per day + group + SKU)
 PREPROD_ENTRIES = "Production_Actual"  # 25 Nov: lots put on grading tables (Pre-Production Actual page)
+PROCESSED = "Processed"                # 25 Nov: MT / GT / dump out of each lot (Processed page)
 BATCHING_PLAN = "Batching_Plan"      # pieces (kg) used from those boxes (last row per SKU + spec wins)
 
 TABS: dict[str, list[str]] = {
@@ -69,6 +70,11 @@ TABS: dict[str, list[str]] = {
     BATCHING_MASTER: ["City", "Customer", "Customer SKU Name", "Parent SKU", "Country", "Spec", "Unit", "Box Kg"],
     PREPROD_ACTUAL: ["round_id", "saved_at", "saved_by", "delivery_date", "city", "group", "customer_sku_name",
                      "parent_sku", "country", "spec", "boxes", "reason"],
+    PROCESSED: ["entry_id", "saved_at", "saved_by", "production_date", "city", "parent_sku", "table_no", "lot_id",
+                "size", "variety", "box_kg", "pcs_per_box", "boxes_moved", "cux_lot", "pack_kg", "mt_packs",
+                "mt_loose_kg", "left_box", "left_kg", "left_pcs", "gt_box", "gt_kg", "gt_pcs", "dump_kg", "dump_pcs",
+                "taken_kg", "used_kg", "mt_kg", "gt_kg_total", "dump_kg_total", "lotting_kg", "efficiency", "non_mt",
+                "dump_pct"],
     PREPROD_FREEZE: ["delivery_date", "city", "group", "action", "at", "by"],
     PREPROD_ENTRIES: ["entry_id", "saved_at", "saved_by", "production_date", "city", "parent_sku", "origin",
                       "variety", "brand", "size", "box_kg", "pcs_per_box", "table_no", "boxes_moved",
