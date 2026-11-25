@@ -175,6 +175,30 @@ def save(backend, entries: list[dict], user: str) -> int:
     return len(rows)
 
 
+VIEW = {"production_date": "Date", "city": "City", "parent_sku": "Fruit", "origin": "Origin", "variety": "Variety",
+        "brand": "Brand", "size": "Size", "box_kg": "Box kg", "pcs_per_box": "Pcs/box", "table_no": "Table",
+        "boxes_moved": "Boxes", "stock_type": "Stock", "saved_by": "By"}
+
+
+def view(saved: pd.DataFrame, day: str | None = None, city: str | None = None) -> pd.DataFrame:
+    """Saved entries for a date (ISO) / city, with short column names and Kg on table."""
+    cols = list(VIEW.values()) + ["Kg on table"]
+    if saved is None or saved.empty or "production_date" not in saved.columns:
+        return pd.DataFrame(columns=cols)
+    d = saved.copy()
+    d["production_date"] = d["production_date"].astype(str).str[:10]
+    if day:
+        d = d[d["production_date"] == day]
+    if city:
+        d = d[d["city"].astype(str) == city]
+    for c in VIEW:
+        if c not in d.columns:
+            d[c] = ""
+    out = d[list(VIEW)].rename(columns=VIEW)
+    out["Kg on table"] = [round((_num(a) or 0) * (_num(b) or 0), 2) for a, b in zip(out["Box kg"], out["Boxes"])]
+    return out.reset_index(drop=True)
+
+
 def read(backend=None) -> pd.DataFrame:
     from core import store_settings
     df = store_settings._read(backend, PREPROD_ENTRIES)

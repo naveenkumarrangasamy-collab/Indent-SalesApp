@@ -54,7 +54,8 @@ def _confirm(rows: list[dict], user: User) -> None:
             st.error(f"Not saved. {e}")
             return
         st.session_state["pa_rows"] = []
-        common.flash("success", f"{n} entr{'y' if n == 1 else 'ies'} saved.")
+        common.flash("success", f"{n} entr{'y' if n == 1 else 'ies'} saved · see Production sheet → "
+                                "Production Actual.")
         st.rerun()
     if c2.button("Back", width="stretch", key="pa_back"):
         st.rerun()
@@ -160,15 +161,8 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved) -> None:
 
 
 def _saved_today(saved: pd.DataFrame, city: str, day) -> None:
-    if saved is None or saved.empty or "production_date" not in saved.columns:
+    v = pa.view(saved, day.isoformat(), city)
+    if v.empty:
         return
-    d = saved[(saved["production_date"].astype(str).str[:10] == day.isoformat())
-              & (saved["city"].astype(str) == city)]
-    if d.empty:
-        return
-    st.markdown(f"#### Saved · {day.strftime('%d %b')} · {len(d)}")
-    view = d.rename(columns={"parent_sku": "Fruit", "origin": "Origin", "variety": "Variety", "brand": "Brand",
-                             "size": "Size", "box_kg": "Box kg", "pcs_per_box": "Pcs/box", "table_no": "Table",
-                             "boxes_moved": "Boxes", "stock_type": "Stock", "saved_by": "By"})
-    cols = ["Fruit", "Origin", "Variety", "Brand", "Size", "Box kg", "Pcs/box", "Table", "Boxes", "Stock", "By"]
-    st.dataframe(common.numbered(view[cols]), hide_index=True, width="stretch")
+    st.markdown(f"#### Saved · {day.strftime('%d %b')} · {len(v)}")
+    st.dataframe(common.numbered(v.drop(columns=["Date", "City"])), hide_index=True, width="stretch")

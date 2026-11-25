@@ -156,10 +156,10 @@ def render(user: User) -> None:
     if d1.any():
         st.caption(f"{' / '.join(config.next_day_customers())} orders are not in these tables: "
                    "see their own section at the bottom.")
-    names = ["By spec size", "Make-ready list", "By customer"]
+    names = ["By spec size", "Make-ready list", "By customer", "Production Actual"]
     if user.is_owner:
         names += ["Estimate (new sheet)", "Estimate (consolidated)"]
-    v1, v2, v3, *v4 = st.tabs(names)
+    v1, v2, v3, v_pa, *v4 = st.tabs(names)
     with v1:
         show = common.numbered(prod if prod["Variety"].astype(bool).any() else prod.drop(columns=["Variety"]))
         st.dataframe(show, hide_index=True, width="stretch",
@@ -186,6 +186,8 @@ def render(user: User) -> None:
         _downloads("Make-ready list", mr, f"make_ready_{label}", "mr", lines)
     with v3:
         _by_customer(all_lines, m, label)
+    with v_pa:
+        _production_actual(label)
     if v4:
         with v4[0]:
             _estimate_new(all_lines, m, label)
@@ -525,3 +527,25 @@ def _opts(m, data, r) -> dict:
         o = preprod.country_options(m, data[preprod.BATCHING_MASTER], r["city"], r["customer"],
                                     r["customer_sku_name"], r["parent_sku"])
     return o or {preprod.ANY: {"spec": [], "unit": "Box", "box_kg": None, "source": "none"}}
+
+
+def _production_actual(label: str) -> None:
+    """25 Nov: what was put on the grading tables (saved on Pre-Production Actual), for the
+    date and city picked above."""
+    from core import prod_actual as pa
+    _, d, city = st.session_state.get("ps_ctx", (None, ALL_DATES, None))
+    v = pa.view(pa.read(), None if d == ALL_DATES else d, city or None)
+    if v.empty:
+        st.info("Nothing saved for this date yet. Add it on **Pre-Production Actual**.")
+        return
+    c = st.columns(4)
+    c[0].metric("Entries", len(v))
+    c[1].metric("Fruits", v["Fruit"].nunique())
+    c[2].metric("Boxes", f"{pd.to_numeric(v['Boxes'], errors='coerce').sum():g}")
+    c[3].metric("Kg on tables", f"{v['Kg on table'].sum():,.1f}")
+    show = v if d == ALL_DATES else v.drop(columns=["Date"])
+    if city:
+        show = show.drop(columns=["City"])
+    st.dataframe(common.numbered(show), hide_index=True, width="stretch")
+    st.download_button("CSV", data=lambda: v.to_csv(index=False).encode(), file_name=f"production_actual_{label}.csv",
+                       mime="text/csv", key="pa_csv", on_click="ignore", icon=":material/download:")

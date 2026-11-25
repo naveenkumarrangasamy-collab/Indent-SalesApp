@@ -44,3 +44,14 @@ def test_defaults_with_missing_numbers():
 
 def test_blueberry_box_only():
     assert pa.box_only("Blueberry") and pa.box_only("BB") and not pa.box_only("Apple")
+
+
+def test_view_filters_and_kg():
+    saved = pd.DataFrame([
+        {"production_date": "2026-11-25", "city": "PTP Bangalore", "parent_sku": "Apple", "box_kg": "17.5",
+         "boxes_moved": "10", "stock_type": "MT Ready Leftover"},
+        {"production_date": "2026-11-24", "city": "PTP Bangalore", "parent_sku": "Avocado", "box_kg": "4",
+         "boxes_moved": "50", "stock_type": "Returns"}])
+    v = pa.view(saved, "2026-11-25", "PTP Bangalore")
+    assert list(v["Fruit"]) == ["Apple"] and v["Kg on table"].iloc[0] == 175
+    assert len(pa.view(saved)) == 2 and pa.view(None).empty
