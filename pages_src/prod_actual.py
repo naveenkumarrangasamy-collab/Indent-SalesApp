@@ -120,14 +120,16 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved) -> None:
         with r1[1]:
             variety = _pick("Variety", pa.choices(opts, "variety", origin=origin), f"{k}_v")
         with r1[2]:
-            b_opts = pa.brands(opts, variety)
+            b_opts = pa.brands(opts, origin, variety)
             brand = _pick("Brand", b_opts + [NEW], f"{k}_b")
             if brand == NEW:
                 brand = st.text_input("New brand", key=f"{k}_bn", placeholder="Type brand").strip()
         with r1[3]:
-            size = _pick("Size", pa.choices(opts, "size", origin=origin, variety=variety), f"{k}_s", blank=False)
+            size = _pick("Size", pa.choices(opts, "size", origin=origin, variety=variety,
+                                                       brand="" if brand == NEW else brand), f"{k}_s", blank=False)
 
-        kg0, pcs0 = pa.defaults(opts, origin=origin, variety=variety, size=size) if size else (None, None)
+        kg0, pcs0 = pa.defaults(opts, origin=origin, variety=variety,
+                                  brand="" if brand == NEW else brand, size=size) if size else (None, None)
         only_box = pa.box_only(parent)
         r2 = st.columns([1, 1, 1, 1.5]) if only_box else st.columns([1, 1, 1, 1, 1.5])
         box_kg = r2[0].number_input("Box kg", min_value=0.0, step=0.5, value=float(kg0 or 0),

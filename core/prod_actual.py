@@ -115,19 +115,21 @@ def option_rows(parent: str, parent_tab: pd.DataFrame | None, saved: pd.DataFram
 
 
 def _match(df: pd.DataFrame, **picked) -> pd.DataFrame:
+    """Rows that fit every pick. Per column: exact rows first; rows that leave that column blank
+    (e.g. a size known without a country) only when no row names the pick. Never falls back to all."""
     out = df
     for col, val in picked.items():
-        if val:
-            sub = out[out[col].str.casefold() == str(val).casefold()]
-            out = sub if not sub.empty else out
+        if not val:
+            continue
+        exact = out[out[col].str.casefold() == str(val).casefold()]
+        out = exact if not exact.empty else out[out[col] == ""]
     return out
 
 
 def choices(df: pd.DataFrame, col: str, **picked) -> list[str]:
-    """Values for one dropdown, narrowed by what is already picked (falls back to all)."""
-    vals = _match(df, **picked)[col]
+    """Values for one dropdown, only from rows that fit what is already picked (26 Nov: strict)."""
     seen, out = set(), []
-    for v in list(vals) + list(df[col]):
+    for v in _match(df, **picked)[col]:
         if v and v.casefold() not in seen:
             seen.add(v.casefold())
             out.append(v)
@@ -135,15 +137,15 @@ def choices(df: pd.DataFrame, col: str, **picked) -> list[str]:
 
 
 def defaults(df: pd.DataFrame, **picked) -> tuple[float | None, int | None]:
-    """Box kg and pieces per box for the picked origin / variety / size."""
+    """Box kg and pieces per box for the picked origin / variety / brand / size."""
     sub = _match(df, **picked)
     kg = next((float(x) for x in sub["box_kg"] if _num(x)), None)
     pcs = count_of(picked.get("size", "")) or next((int(float(x)) for x in sub["pcs"] if _num(x)), None)
     return kg, pcs
 
 
-def brands(df: pd.DataFrame, variety: str = "") -> list[str]:
-    return choices(df, "brand", variety=variety)
+def brands(df: pd.DataFrame, origin: str = "", variety: str = "") -> list[str]:
+    return choices(df, "brand", origin=origin, variety=variety)
 
 
 def entry_errors(e: dict) -> list[str]:

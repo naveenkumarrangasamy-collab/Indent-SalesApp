@@ -19,11 +19,24 @@ def test_options_seed_parent_tab_and_saved_brand():
                            "size": "100C", "box_kg": "18", "pcs_per_box": "100"}])
     df = pa.option_rows("Apple", parent_tab, saved)
     assert "NZ" in pa.choices(df, "origin")
-    assert {"Envy", "Kiwi Crunch"} <= set(pa.brands(df, "Gala"))
+    assert {"Envy", "Kiwi Crunch"} <= set(pa.brands(df, variety="Gala"))
     assert "90C" in pa.choices(df, "size", origin="NZ", variety="Gala")
     kg, pcs = pa.defaults(df, origin="NZ", variety="Gala", size="90C")
     assert (kg, pcs) == (18.0, 90)
     assert pa.choices(pa.option_rows("mandrin", None, None), "brand") == ["Gold Fresh"]
+
+
+def test_options_only_for_picked_country_and_variety():
+    parent_tab = pd.DataFrame([
+        {"parent": "Apple", "grade": "Gala", "country": "NZ", "spec": "90, 100", "lot": "", "box_kg": 18.0},
+        {"parent": "Apple", "grade": "Gala", "country": "Italy", "spec": "80", "lot": "", "box_kg": 13.0},
+        {"parent": "Apple", "grade": "Fuji", "country": "Italy", "spec": "110", "lot": "", "box_kg": 13.0}])
+    df = pa.option_rows("Apple", parent_tab, None)
+    assert pa.choices(df, "variety", origin="Italy") == ["Gala", "Fuji"]
+    assert pa.choices(df, "size", origin="Italy", variety="Fuji") == ["110C"]
+    assert pa.choices(df, "size", origin="NZ", variety="Gala") == ["30C", "90C", "100C"]
+    assert pa.defaults(df, origin="Italy", variety="Gala", size="80C") == (13.0, 80)
+    assert "Granny Smith" not in pa.choices(df, "variety", origin="NZ")
 
 
 def test_entry_errors():
