@@ -273,9 +273,14 @@ GRID_CSS = """<style>
 .pg-h {font-size:0.76rem; font-weight:700; color:#0C447C; line-height:1.25; background:transparent;
        padding:10px 4px; min-height:58px; display:flex; align-items:center; justify-content:center; text-align:center;}
 .st-key-pg_head {background:#E6F1FB; border-bottom:3px solid #185FA5; border-radius:10px 10px 0 0;
-                 min-width:%dpx; margin-bottom:6px;}
+                 min-width:%dpx; margin-bottom:6px; padding:2px 0 4px 0; overflow:visible;}
+.st-key-pg_head [data-testid="stColumn"], .st-key-pg_head [data-testid="stElementContainer"],
+.st-key-pg_head [data-testid="stMarkdown"], .st-key-pg_head [data-testid="stMarkdownContainer"]
+  {height:auto !important; overflow:visible !important;}
+.st-key-pg_head [data-testid="stMarkdownContainer"] div.pg-h {height:auto; min-height:64px;}
 .pg-lk {font-size:0.84rem; font-weight:700; background:#F1F4F7; color:#1F2933; border-radius:6px; padding:8px 6px;
-        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:36px; text-align:center;}
+        white-space:normal; line-height:1.2; min-height:36px; text-align:center; display:flex;
+        align-items:center; justify-content:center;}
 .pg-na {font-size:0.8rem; color:#9AA5B1; background:#F6F7F9; border-radius:8px; min-height:36px;
         display:flex; align-items:center; justify-content:center;}
 .pg-var {background:#EDE7FB; color:#4B2A9E; font-weight:700; border-radius:999px; padding:1px 8px;}
