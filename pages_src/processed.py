@@ -262,7 +262,11 @@ GRID_CSS = """<style>
   {border:2px solid #CBD5E1; border-radius:12px; background:#FFFFFF; min-height:42px;}
 .st-key-pg_grid [data-testid="stWidgetLabel"] p {font-size:0.72rem; font-weight:700; line-height:1.2;}
 .st-key-pg_grid [data-testid="stElementContainer"] {margin-bottom:0;}
-[class*="st-key-pgw_"], .st-key-pg_headw {overflow-x:auto; -webkit-overflow-scrolling:touch;}
+[class*="st-key-pgw_"], .st-key-pg_headw {overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch;
+  padding-bottom:4px;}
+[class*="st-key-pgr_"] [data-testid="stMarkdownContainer"], [class*="st-key-pgr_"] [data-testid="stElementContainer"]
+  {min-height:46px; overflow:visible;}
+[class*="st-key-pgr_"] [data-testid="stMarkdown"] {margin-bottom:0 !important;}
 [class*="st-key-pgr_"], .st-key-pg_head {min-width:%dpx;}
 [class*="st-key-pgr_"] [data-testid="stHorizontalBlock"], .st-key-pg_head [data-testid="stHorizontalBlock"]
   {flex-wrap:nowrap !important; flex-direction:row !important; gap:8px;}
@@ -325,6 +329,7 @@ GRID_CSS = """<style>
 [class*="st-key-pgb_dump_"] button {border:1px solid #A5B4FC; color:#4338CA; font-weight:800;}
 .st-key-pg_save button {background:linear-gradient(135deg,#16A34A 0%%,#15803D 100%%); border-color:#15803D;
   color:#fff; font-weight:800;}
+.st-key-pg_save button:disabled {background:#E2E8F0; border-color:#E2E8F0; color:#94A3B8;}
 @media (max-width: 640px) { .st-key-pg_grid input {font-size:16px;} }
 </style>""" % (840, )
 
