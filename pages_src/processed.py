@@ -418,7 +418,7 @@ def _eff_cell(s: dict, lot: dict) -> tuple[str, str, str]:
     return pr.pct(c["efficiency"]), bg, fg
 
 
-HEAD = [("n", "#"), ("parent_sku", "Parent SKU Name"), ("variety", "Variety"), ("size", "Size Spec"),
+HEAD = [("n", "No"), ("parent_sku", "Parent SKU Name"), ("variety", "Variety"), ("size", "Size Spec"),
         ("table_no", "Table #"), ("boxes_moved", "# Qty Moved to Grading table (Vendor Lots / Boxes) (B)"),
         ("stock_type", "Production prod Classification")]
 ROW_W = [0.6, 1.5, 1.3, 1.1, 0.9, 1.8, 1.7]
