@@ -114,6 +114,30 @@ def _key(s) -> str:
     return " ".join(str(s or "").split()).casefold()
 
 
+def _po_events(lines: pd.DataFrame, po: pd.DataFrame | None, iid: str, customer: str) -> list[tuple]:
+    """26 Nov (user): every PO upload / End of POs of one indent, oldest first, as
+    (UTC time, {item key: PO qty or None = not on the PO}, ended). Each event holds the PO as it stood
+    then (one-PO customers: the latest PO; multi-PO: all POs so far, summed)."""
+    if po is None or po.empty or "indent_id" not in po.columns or "confirmed_at" not in po.columns:
+        return []
+    rows = po[po["indent_id"].astype(str) == str(iid)].copy()
+    if rows.empty:
+        return []
+    rows["_t"] = pd.to_datetime(rows["confirmed_at"], errors="coerce", utc=True)
+    rows = rows.dropna(subset=["_t"]).sort_values("_t", kind="stable")
+    cur = indents.snapshot(lines, iid)
+    if cur is None:
+        return []
+    out = []
+    for t in sorted(set(rows["_t"])):
+        info = indents.po_info(rows[rows["_t"] <= t], iid)
+        if info["qty"] is None:
+            continue
+        res = indents.po_vs_indent(cur.lines, info, customer=customer)
+        out.append((t, {_key(r["customer_sku_name"]): r["po_qty"] for r in res}, info["ended"]))
+    return out
+
+
 def grid(lines: pd.DataFrame, po: pd.DataFrame | None, day: str,
          pts: list[tuple[str, datetime | None]]) -> list[dict]:
     """The Hourly tracker, one block per indent of `day` (customer A-Z, then store):
@@ -126,7 +150,11 @@ def grid(lines: pd.DataFrame, po: pd.DataFrame | None, day: str,
     - kind 'swing' with '(±)': changed and back inside the half hour;
     - kind 'yellow' / 'red': no change now, but it went up / down earlier (kept until the PO);
     - kind '' plain; '·' text = not entered yet.
-    From the PO (status Frozen) on, cells are plain. Last column: PO vs indent."""
+    26 Nov (user): a PO is tracked like an edit. From the half hour a PO is uploaded the cell shows the
+    **PO qty**, with '(PO +940)' / '(PO −50)' in that half hour and the yellow / red after it, so the PO
+    difference stays visible ('—' = not on the PO). Multi-PO customers (Swiggy): an item takes the PO qty
+    once it is on a PO; items on no PO keep the indent qty until End of POs. PO-only items show from their
+    PO. Last column: PO vs indent."""
     pts = [(lbl, t) for lbl, t in pts if t is not None]
     if lines is None or lines.empty or not pts:
         return []
@@ -164,6 +192,23 @@ def grid(lines: pd.DataFrame, po: pd.DataFrame | None, day: str,
                     best = v
             return best
 
+        events = _po_events(lines, po, iid, str(last["customer"]))
+        multi = indents.is_multi_po(str(last["customer"]))
+
+        def po_at(t, k, _ev=events, _multi=multi):
+            """(applies, qty or None, event time) of the PO for item k at point t."""
+            T = pd.Timestamp(t).tz_convert("UTC")
+            hit = None
+            for e in _ev:
+                if e[0] <= T:
+                    hit = e
+            if hit is None:
+                return False, None, None
+            q = hit[1].get(k)
+            if _multi and not hit[2] and q is None:       # more POs coming: not on a PO yet = keep indent
+                return False, None, None
+            return True, q, max(e[0] for e in _ev if e[0] <= T and (k in e[1] or not _multi or e[2]))
+
         rows, changes = [], 0
         for n in names:
             k = _key(n)
@@ -176,7 +221,7 @@ def grid(lines: pd.DataFrame, po: pd.DataFrame | None, day: str,
                     prev_q, prev_t = None, t
                     continue
                 T = pd.Timestamp(t).tz_convert("UTC")
-                after_po = frozen_at is not None and frozen_at <= T
+                frozen_plain = not events and frozen_at is not None and frozen_at <= T   # PO without item qty
                 lo = pd.Timestamp(prev_t).tz_convert("UTC") if prev_t is not None else None
                 inside = [qty_in[vv].get(k) for vv, _ in vers
                           if ts_of[vv] <= T and (lo is None or ts_of[vv] > lo)]
@@ -189,7 +234,25 @@ def grid(lines: pd.DataFrame, po: pd.DataFrame | None, day: str,
                     d = 0.0 if lo is None else q - base
                 else:
                     d = q - prev_q
-                if after_po:
+                applies, pq, pt = po_at(t, k)
+                if applies:
+                    qe = float(pq or 0)
+                    shown = fmt_num(qe) if pq is not None else "—"
+                    po_now = pt is not None and (lo is None or pt > lo)
+                    dd = qe - (prev_q if prev_q is not None else q)
+                    if po_now and dd:
+                        changes += 1
+                        cells.append((shown, f"(PO {'+' if dd > 0 else '−'}{fmt_num(abs(dd))})",
+                                      "up" if dd > 0 else "down"))
+                        mood = "yellow" if dd > 0 else "red"
+                    elif po_now:                       # PO = indent: plain from here
+                        mood = ""
+                        cells.append((shown, "", ""))
+                    else:
+                        cells.append((shown, "", mood))
+                    prev_q, prev_t = qe, t
+                    continue
+                if frozen_plain:
                     cells.append((fmt_num(q), "", ""))
                 elif d:
                     changes += 1
@@ -199,7 +262,7 @@ def grid(lines: pd.DataFrame, po: pd.DataFrame | None, day: str,
                     changes += 1
                     cells.append((fmt_num(q), "(±)", "swing"))
                 else:
-                    cells.append((fmt_num(q), "", "" if after_po else mood))
+                    cells.append((fmt_num(q), "", mood))
                 prev_q, prev_t = q, t
             r = po_map.get((iid, k))
             if r is None:
@@ -217,7 +280,19 @@ def grid(lines: pd.DataFrame, po: pd.DataFrame | None, day: str,
         # PO-only items (on the customer's PO, never on the indent): last, in red (19 Nov)
         for (pid, k), r in po_map.items():
             if pid == iid and r["Status"] == "Not on indent" and k not in seen:
-                rows.append({"name": r["Customer SKU Name"], "cells": [("·", "", "")] * len(pts),
+                cells, prev, seen_po = [], None, False
+                for _lbl, t in pts:
+                    applies, pq, _pt = po_at(t, k)
+                    if not applies or pq is None:
+                        cells.append(("·", "", "") if not seen_po else ("—", "", "yellow"))
+                        continue
+                    if prev is None or pq != prev:
+                        cells.append((fmt_num(pq), f"(PO +{fmt_num(pq)})" if prev is None else
+                                      f"(PO {'+' if pq > prev else '−'}{fmt_num(abs(pq - prev))})", "up"))
+                    else:
+                        cells.append((fmt_num(pq), "", "yellow"))
+                    prev, seen_po = pq, True
+                rows.append({"name": r["Customer SKU Name"], "cells": cells,
                              "po": f"Not on indent · PO {r['PO qty']}", "po_kind": "bad",
                              "changed": True, "po_only": True})
         edits = [ts_of[v] for v, g in vers[1:] if str(g["status"].iloc[0]) != "Frozen"]

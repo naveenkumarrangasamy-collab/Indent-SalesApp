@@ -268,6 +268,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   **26 Nov (from the trial branch, user)**: columns every 30 min from 8 AM **till 7 PM** (secret `tracker_until`,
   default 19; mail hours unchanged) and a **future delivery day is tracked on today's clock** (tomorrow's
   orders entered today show up as they come in) (`tracking.until_hour`, `points`).
+  **26 Nov 6 PM (user): a PO is tracked like an edit**: from the half hour a PO is uploaded (PO_Freeze
+  confirmed_at) the cell shows the **PO qty** with **(PO +940)** / **(PO −50)** in that half hour, then stays
+  yellow / red; a PO equal to the indent turns the item plain; **—** = not on the PO; PO-only items show from
+  their PO. Swiggy (multi-PO): an item takes the PO total once it is on a PO; items on no PO keep the indent qty
+  until End of POs. A frozen indent whose PO has no item qty stays plain as before (`tracking._po_events`).
 - **Production e-mail content (21 Nov)**: **Production by customer only** (see 21 Nov night).
 - The City/SKU report was removed.
 

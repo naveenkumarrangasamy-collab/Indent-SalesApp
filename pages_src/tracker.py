@@ -5,7 +5,8 @@ Every indent of the delivery day with every item; columns every 30 minutes from 
 
 Cells: qty, and only in the half hour it changed the change in brackets — green (+46)
 up, red (−50) down, yellow (±) changed and back. After that the qty stays yellow (it
-went up) or red (it went down) until the PO is uploaded; from the PO on it is plain."""
+went up) or red (it went down). 26 Nov: a PO is tracked like an edit: from the half hour it was
+uploaded the cell shows the PO qty with (PO +n) / (PO −n), then stays yellow / red ('—' = not on the PO)."""
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -60,7 +61,7 @@ def _head(b: dict) -> str:
     if b["edited"]:
         bits.append("edited " + ", ".join(_hm(t) for t in b["edited"]))
     if b["frozen_at"] is not None:
-        bits.append(f"PO {_hm(b['frozen_at'])} · tracking stopped")
+        bits.append(f"PO {_hm(b['frozen_at'])}")
     bits.append(f"{b['items']} item(s) · {fmt(b['qty'])} qty")
     bits.append(f"{b['changes']} change(s)" if b["changes"] else "no change")
     return " · ".join(bits)
@@ -143,7 +144,7 @@ def render(user: User) -> None:
 
     head = st.columns([3, 1, 1], vertical_alignment="bottom")
     head[0].markdown("### Hourly tracker")
-    head[0].caption("Every half hour from 8 AM · tracking stops for an indent once its PO is uploaded")
+    head[0].caption("Every half hour from 8 AM · from a PO on, the cell shows the PO qty and its difference")
 
     today = config.now_ist().date()
     days = [(today + timedelta(days=k)).isoformat() for k in (-1, 0, 1)]
@@ -187,8 +188,9 @@ def render(user: User) -> None:
                             icon=":material/download:", width="stretch", on_click="ignore", key="tk_xlsx")
     st.markdown("<div class='tk-legend'><b style='color:#1a7f37'>(+ green)</b> / <b style='color:#cf222e'>(− red)</b>"
                 " only in the half hour it changed · then <b style='color:#b8860b'>yellow</b> = went up, "
-                "<b style='color:#cf222e'>red</b> = went down, until the PO · <b style='color:#b8860b'>(±)</b> "
-                "changed and back · · = not entered yet</div>", unsafe_allow_html=True)
+                "<b style='color:#cf222e'>red</b> = went down · <b>(PO +n)</b> / <b>(PO −n)</b> = the PO "
+                "differs from the indent (from then on the PO qty) · — = not on the PO · "
+                "<b style='color:#b8860b'>(±)</b> changed and back · · = not entered yet</div>", unsafe_allow_html=True)
     html = _table(blocks, labels, only)
     if only and "class='c1'" not in html:
         st.success("No item changed for these filters.")

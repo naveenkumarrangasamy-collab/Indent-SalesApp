@@ -78,3 +78,49 @@ def test_grid_today_like_cases():
     z = blocks["IN-016"]["rows"][0]["cells"]
     assert z[2] == ("0", "(±)", "swing")
     assert blocks["IN-021"]["changes"] == 2 and blocks["IN-016"]["changes"] == 1
+
+
+def _po(iid, at, qty, cust, kind="po"):
+    import json
+    return {"indent_id": iid, "version": 1, "po_customer": cust, "po_store": "", "confirmed_at":
+            f"2026-11-19T{at}:00+05:30", "po_number": f"P{at}", "kind": kind,
+            "po_qty_json": json.dumps(qty) if qty is not None else ""}
+
+
+def test_grid_shows_po_qty_and_difference(monkeypatch):
+    """26 Nov (user): a PO shows in the half hour it came, with its difference, like an edit."""
+    from core import indents
+    monkeypatch.setattr(indents, "read_po_item_map", lambda *a, **k: {}, raising=False)
+    monkeypatch.setattr(indents, "_item_map_for", lambda *a, **k: {}, raising=False)
+    ist = config.IST
+    lines = pd.DataFrame([
+        _r("IN-073", 1, "08:10", "1Kg - Apple RD", 50, cust="Trent", store="Trent"),
+        _r("IN-073", 1, "08:10", "1Pc Blueberry Pack", 400, cust="Trent", store="Trent"),
+        _r("IN-073", 1, "08:10", "1Tray - Mandarin", 25, cust="Trent", store="Trent"),
+        _r("IN-073", 2, "09:16", "1Kg - Apple RD", 50, "Frozen", cust="Trent", store="Trent"),
+        _r("IN-073", 2, "09:16", "1Pc Blueberry Pack", 400, "Frozen", cust="Trent", store="Trent"),
+        _r("IN-073", 2, "09:16", "1Tray - Mandarin", 25, "Frozen", cust="Trent", store="Trent"),
+        _r("IN-076", 1, "08:05", "1Pc - Imported Avocado", 211, cust="Swiggy", store="WH2"),
+        _r("IN-076", 1, "08:05", "1Pc - Green Kiwi", 300, cust="Swiggy", store="WH2"),
+    ])
+    lines["_row"] = range(len(lines))
+    for c, v in (("parent_sku", "Apple"), ("variety", ""), ("lot", "Pcs"), ("lot_size", ""), ("price", 1),
+                 ("amount", 0), ("expected_time", "10:00"), ("submitted_by", "x"), ("change_note", "")):
+        lines[c] = v
+    po = pd.DataFrame([
+        _po("IN-073", "09:16", {"1Kg - Apple RD": 990, "1Pc Blueberry Pack": 400, "Grapes X": 40}, "Trent"),
+        _po("IN-076", "09:40", {"1Pc - Imported Avocado": 161}, "Swiggy"),
+    ])
+    pts = [(f"{h}:{m:02d}", datetime(2026, 11, 19, h, m, tzinfo=ist)) for h, m in
+           ((8, 30), (9, 0), (9, 30), (10, 0))]
+    blocks = {b["indent"]: b for b in tracking.grid(lines, po, "2026-11-19", pts)}
+    trent = {r["name"]: r["cells"] for r in blocks["IN-073"]["rows"]}
+    assert trent["1Kg - Apple RD"][1] == ("50", "", "")
+    assert trent["1Kg - Apple RD"][2] == ("990", "(PO +940)", "up")          # PO at 9:16
+    assert trent["1Kg - Apple RD"][3] == ("990", "", "yellow")
+    assert trent["1Pc Blueberry Pack"][2] == ("400", "", "")                  # PO = indent: plain
+    assert trent["1Tray - Mandarin"][2] == ("—", "(PO −25)", "down")          # not on the PO
+    assert trent["Grapes X"][1] == ("·", "", "") and trent["Grapes X"][2] == ("40", "(PO +40)", "up")
+    sw = {r["name"]: r["cells"] for r in blocks["IN-076"]["rows"]}
+    assert sw["1Pc - Imported Avocado"][3] == ("161", "(PO −50)", "down")     # Swiggy PO at 9:40
+    assert sw["1Pc - Green Kiwi"][3] == ("300", "", "")                       # more POs coming: indent kept
