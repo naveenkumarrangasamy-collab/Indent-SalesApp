@@ -313,9 +313,6 @@ GRID_CSS = """<style>
   font-weight:800; font-size:0.8rem; margin-bottom:6px;}
 .pg-chip span {background:rgba(255,255,255,.95); border-radius:6px; padding:1px 8px;}
 /* same label height for real boxes and 'not needed' boxes, so every box lines up */
-[class*="st-key-pgo_"] [data-testid="stNumberInputContainer"] {background:#F1F5F9 !important;
-  border:2px dashed #CBD5E1 !important;}
-[class*="st-key-pgo_"] input {background:transparent;}
 [class*="st-key-pgb_"] [data-testid="stWidgetLabel"] {height:2.7em; min-height:2.7em; display:flex;
   align-items:flex-end; margin-bottom:4px;}
 .pg-na-l {font-size:0.72rem; font-weight:700; line-height:1.2; height:2.7em; display:flex; align-items:flex-end;
@@ -442,12 +439,8 @@ def _band_cell(f: str, ln: dict, s: dict, title: dict) -> None:
     lab = title.get(f, "")
     if f == "comment":
         st.text_input(lab, key=k, placeholder="Type a note")
-    elif f in s["need"]:
+    else:   # 26 Nov: every box looks the same; Save still asks only for the ones this Cux Lot needs
         st.number_input(lab, min_value=0.0, step=1.0, value=None, key=k, format="%g", placeholder="0")
-    else:   # optional for this Cux Lot: grey, still open for a number
-        with st.container(key=f"pgo_{ln['id']}_{f}"):
-            st.number_input(lab, min_value=0.0, step=1.0, value=None, key=k, format="%g", placeholder="optional",
-                            help="Optional for this Cux Lot")
 
 
 def _lot_block(i: int, ln: dict, lot: dict, s: dict, packs: list, title: dict, rows: list) -> None:
