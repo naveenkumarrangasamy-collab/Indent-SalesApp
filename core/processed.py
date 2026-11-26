@@ -104,14 +104,73 @@ def sum_check(r: dict) -> float | None:
 
 
 def sum_colour(v: float | None) -> tuple[str, str]:
-    """Green 98-102 %, amber 90-97 %, red otherwise (26 Nov)."""
+    """Target band 97-100 % green, 90-96 % amber, otherwise red (26 Nov)."""
     if v is None:
         return "#F1F5F9", "#64748B"
-    if 0.98 <= v <= 1.02:
+    if 0.97 <= v <= 1.005:
         return "#EAF3DE", "#27500A"
-    if 0.90 <= v < 0.98:
+    if 0.90 <= v < 0.97:
         return "#FAEEDA", "#633806"
     return "#FCEBEB", "#791F1F"
+
+
+def _gkey(r: dict) -> tuple:
+    return tuple(str(r.get(c) or "").strip().casefold() for c in ("parent_sku", "variety", "size", "origin"))
+
+
+def group_lots(raw: pd.DataFrame) -> dict[str, dict]:
+    """Lots of one day + city clubbed by fruit + variety + size + origin (26 Nov): boxes added later to the
+    same spec join the group. Key = member entry ids joined by '+'. The group acts as one lot: boxes summed,
+    box kg = taken kg / boxes (so A x B is the real kg taken)."""
+    if raw is None or raw.empty:
+        return {}
+    lots = raw.drop_duplicates("entry_id", keep="last").to_dict("records")
+    lots.sort(key=lambda r: (str(r.get("table_no") or "").zfill(3), str(r.get("entry_id"))))
+    by: dict[tuple, list[dict]] = {}
+    for r in lots:
+        by.setdefault(_gkey(r), []).append(r)
+    out = {}
+    for members in by.values():
+        boxes = sum(_f(m.get("boxes_moved")) for m in members)
+        kg = sum(_f(m.get("box_kg")) * _f(m.get("boxes_moved")) for m in members)
+        first = members[0]
+        gid = "+".join(str(m["entry_id"]) for m in members)
+        tables = list(dict.fromkeys(str(m.get("table_no") or "") for m in members))
+        stock = list(dict.fromkeys(str(m.get("stock_type") or "") for m in members if m.get("stock_type")))
+        out[gid] = {**first, "entry_id": gid, "table_no": " + ".join(t for t in tables if t),
+                    "boxes_moved": boxes, "box_kg": round(kg / boxes, 4) if boxes else _f(first.get("box_kg")),
+                    "stock_type": " / ".join(stock), "taken_kg": kg,
+                    "members": [{"entry_id": str(m["entry_id"]), "table_no": str(m.get("table_no") or ""),
+                                 "boxes": _f(m.get("boxes_moved")), "box_kg": _f(m.get("box_kg"))}
+                                for m in members]}
+    return out
+
+
+def member_map(groups: dict[str, dict]) -> dict[str, str]:
+    """entry id (or a saved group id) -> today's group id."""
+    m = {}
+    for gid, g in groups.items():
+        m[gid] = gid
+        for x in g["members"]:
+            m[x["entry_id"]] = gid
+    return m
+
+
+def group_total(lines: list[tuple[str, dict]], g: dict) -> dict:
+    """Totals of a group's customer lots: kg taken (H), leftover (sum I), used (J = H - sum I),
+    MT / GT / Dump (K, L, M), sum check (K+L+M)/J and efficiency K/J."""
+    h = _f(g.get("box_kg")) * _f(g.get("boxes_moved"))
+    i = k = l_ = m = 0.0
+    for pack, vals in lines:
+        c = compute(g.get("box_kg"), g.get("pcs_per_box"), g.get("boxes_moved"), pack, vals)
+        i += c["left_kg_total"]
+        k += c["mt_kg"]
+        l_ += c["gt_kg_total"]
+        m += c["dump_kg_total"]
+    j = h - i
+    return {"taken_kg": h, "left_kg": i, "used_kg": j, "mt_kg": k, "gt_kg": l_, "dump_kg": m,
+            "out_kg": k + l_ + m, "to_go": j - (k + l_ + m),
+            "sum": (k + l_ + m) / j if j > 0 else None, "efficiency": k / j if j > 0 else None}
 
 
 def row(lot: dict, pack: str, vals: dict, day: str, city: str, comment: str = "") -> dict:

@@ -44,9 +44,28 @@ def test_sum_check_and_colour():
     r2 = dict(r, gt_kg_total=0.0)            # GT box missed -> 80 %, red
     assert round(pr.sum_check(r2), 2) == 0.8 and pr.sum_colour(0.8)[1] == "#791F1F"
     assert pr.sum_colour(0.93)[1] == "#633806" and pr.sum_check({"used_kg": 0}) is None
+    assert pr.sum_colour(0.97)[1] == "#27500A" and pr.sum_colour(1.03)[1] == "#791F1F"
 
 
 def test_blank_boxes_save_as_zero():
     lot = {"entry_id": "L1", "parent_sku": "Apple", "box_kg": "17.5", "pcs_per_box": "120", "boxes_moved": "10"}
     out = pr.row(lot, "1PC", {"mt_packs": 100}, "2026-11-26", "PTP Bangalore")
     assert out["gt_box"] == 0 and out["dump_kg"] == 0 and out["mt_packs"] == 100
+
+
+def test_group_lots_clubs_same_spec_and_sums():
+    raw = pd.DataFrame([
+        {"entry_id": "a", "parent_sku": "Apple", "variety": "Gala", "size": "90C", "origin": "Turkey",
+         "table_no": "2", "box_kg": "17.5", "pcs_per_box": "90", "boxes_moved": "110", "stock_type": "Unused Vendor Lot"},
+        {"entry_id": "b", "parent_sku": "Apple", "variety": "Gala", "size": "90C", "origin": "Turkey",
+         "table_no": "4", "box_kg": "17.5", "pcs_per_box": "90", "boxes_moved": "10", "stock_type": "Unused Vendor Lot"},
+        {"entry_id": "c", "parent_sku": "Avocado", "variety": "Hass", "size": "20C", "origin": "Kenya",
+         "table_no": "5", "box_kg": "4", "pcs_per_box": "20", "boxes_moved": "15", "stock_type": "Returns"}])
+    g = pr.group_lots(raw)
+    assert set(g) == {"a+b", "c"}
+    ab = g["a+b"]
+    assert ab["boxes_moved"] == 120 and ab["table_no"] == "2 + 4" and round(ab["taken_kg"]) == 2100
+    assert pr.member_map(g)["b"] == "a+b"
+    # 1Kg packs: D1 = 2,058 one-kg packs -> MT 2,058 kg; dump 21 kg -> 2,079 of 2,100 = 99 %
+    t = pr.group_total([("1Kg", {"mt_packs": 1500}), ("1Kg", {"mt_packs": 558, "dump_kg": 21})], ab)
+    assert round(t["out_kg"]) == 2079 and pr.sum_colour(t["sum"])[1] == "#27500A"

@@ -59,14 +59,32 @@ def build(lots: pd.DataFrame, done: pd.DataFrame) -> list[list]:
     for r in proc.to_dict("records") if not proc.empty else []:
         by_lot.setdefault(str(r.get("lot_id")), []).append(r)
     rows = []
-    for lot in lots.drop_duplicates("entry_id", keep="last").to_dict("records"):
+    all_lots = lots.drop_duplicates("entry_id", keep="last").to_dict("records")
+    by_id = {str(r.get("entry_id")): r for r in all_lots}
+    grp = {m: gid for gid in by_lot if "+" in gid for m in gid.split("+")}   # 26 Nov: clubbed lots
+    for lot in all_lots:
         day = str(lot.get("production_date") or "")[:10]
         a, pcs, b = pr._f(lot.get("box_kg")), pr._f(lot.get("pcs_per_box")), pr._f(lot.get("boxes_moved"))
+        eid = str(lot.get("entry_id"))
+        gid = grp.get(eid)
+        if gid:
+            members = [by_id[m] for m in gid.split("+") if m in by_id]
+            if eid != gid.split("+")[0]:
+                lead = by_id.get(gid.split("+")[0], {})
+                first = [day, day, lot.get("parent_sku", ""), lot.get("origin", ""), lot.get("variety", ""),
+                         lot.get("brand", ""), lot.get("size", ""), _r(a, 3), pcs or "", lot.get("table_no", ""),
+                         _r(b, 2), lot.get("stock_type", "")]
+                rows.append(first + [""] * (len(HEADERS) - len(first) - 1)
+                            + [f"clubbed with table {lead.get('table_no', '')}"])
+                continue
+            kg = sum(pr._f(m.get("box_kg")) * pr._f(m.get("boxes_moved")) for m in members)
+            b = sum(pr._f(m.get("boxes_moved")) for m in members)
+            a = kg / b if b else a
         x = a / pcs if a and pcs else ""
         first = [day, day, lot.get("parent_sku", ""), lot.get("origin", ""), lot.get("variety", ""),
                  lot.get("brand", ""), lot.get("size", ""), _r(a, 3), pcs or "", lot.get("table_no", ""), _r(b, 2),
                  lot.get("stock_type", "")]
-        outs = by_lot.get(str(lot.get("entry_id")), [])
+        outs = by_lot.get(gid or eid, [])
         if not outs:
             rows.append(first + [""] * (len(HEADERS) - len(first)))
             continue
