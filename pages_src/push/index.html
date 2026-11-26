@@ -15,7 +15,9 @@
   const root = document.getElementById("root");
   const setValue = v => { const s = JSON.stringify(v); if (s === last) return; last = s;
                           post("streamlit:setComponentValue", {value: v, dataType: "json"}); };
-  const height = () => post("streamlit:setFrameHeight", {height: args.mode === "check" ? 0 : root.scrollHeight + 4});
+  const height = () => post("streamlit:setFrameHeight",
+                            {height: args.mode === "check" ? 0 : Math.max(root.scrollHeight, 44) + 6});
+  if (window.ResizeObserver) new ResizeObserver(() => { if (args.mode && args.mode !== "check") height(); }).observe(root);
   const key = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); s += "=".repeat((4 - s.length % 4) % 4);
                      return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
   const supported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
