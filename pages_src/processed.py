@@ -313,6 +313,9 @@ GRID_CSS = """<style>
   font-weight:800; font-size:0.8rem; margin-bottom:6px;}
 .pg-chip span {background:rgba(255,255,255,.95); border-radius:6px; padding:1px 8px;}
 /* same label height for real boxes and 'not needed' boxes, so every box lines up */
+[class*="st-key-pgo_"] [data-testid="stNumberInputContainer"] {background:#F1F5F9 !important;
+  border:2px dashed #CBD5E1 !important;}
+[class*="st-key-pgo_"] input {background:transparent;}
 [class*="st-key-pgb_"] [data-testid="stWidgetLabel"] {height:2.7em; min-height:2.7em; display:flex;
   align-items:flex-end; margin-bottom:4px;}
 .pg-na-l {font-size:0.72rem; font-weight:700; line-height:1.2; height:2.7em; display:flex; align-items:flex-end;
@@ -399,8 +402,7 @@ def _state(ln: dict, lot: dict) -> dict:
     _, unit = pr.pack_kg(pack, x or None)
     piece = bool(x)
     need = [f for f in NUMS if _applies(f, unit, piece)]
-    vals = {f: g(f"pg_{ln['id']}_{f}") for f in NUMS}
-    vals = {f: (vals[f] if f in need else None) for f in NUMS}
+    vals = {f: g(f"pg_{ln['id']}_{f}") for f in NUMS}   # 26 Nov: every box can be typed; 'need' = must fill
     comment = str(g(f"pg_{ln['id']}_comment") or "").strip()
     touched = bool(pack) or any(v is not None for v in vals.values()) or bool(comment)
     missing = ([] if pack else ["Cux Lot"]) + [f for f in need if vals[f] is None]
@@ -442,9 +444,10 @@ def _band_cell(f: str, ln: dict, s: dict, title: dict) -> None:
         st.text_input(lab, key=k, placeholder="Type a note")
     elif f in s["need"]:
         st.number_input(lab, min_value=0.0, step=1.0, value=None, key=k, format="%g", placeholder="0")
-    else:
-        st.markdown(f"<div class='pg-na-l'>{lab}</div><div class='pg-na' title='Not needed for this Cux Lot'>"
-                    "Not needed</div>", unsafe_allow_html=True)
+    else:   # optional for this Cux Lot: grey, still open for a number
+        with st.container(key=f"pgo_{ln['id']}_{f}"):
+            st.number_input(lab, min_value=0.0, step=1.0, value=None, key=k, format="%g", placeholder="optional",
+                            help="Optional for this Cux Lot")
 
 
 def _lot_block(i: int, ln: dict, lot: dict, s: dict, packs: list, title: dict, rows: list) -> None:
