@@ -170,4 +170,5 @@ sections[last] = sections[last] + [st.Page(lambda: st.switch_page(landing), titl
 common.hide_nav_links(_away)
 nav = st.navigation(sections, expanded=True)
 common.sidebar(user)
+common.alerts_prompt(user)   # 26 Nov: ask warehouse / owners to allow PO alerts
 nav.run()

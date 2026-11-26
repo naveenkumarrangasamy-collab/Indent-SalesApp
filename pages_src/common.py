@@ -407,6 +407,58 @@ def sidebar(user: auth.User) -> None:
                    "(or now with ↻ Refresh data)")
 
 
+ALERT_WHY = (
+    "From today the **warehouse and owners** get an alert on their phone or laptop the moment a PO is "
+    "uploaded and:\n"
+    "- a quantity differs from the indent (**20 units or 10 %** or more),\n"
+    "- the PO has a **SKU that is not on the indent**, or\n"
+    "- an item on the PO has **no spec mapped**.\n\n"
+    "Each alert shows only the SKU name and the difference, so you can act before batching.")
+ALERT_HOW = (
+    "**Turn it on (1 minute, once on each phone / laptop):**\n"
+    "1. Tap **Turn on alerts** below. Your own alert page opens.\n"
+    "2. Tap **Subscribe**, then **Allow** when the browser asks to show notifications.\n"
+    "3. Come back here and tap **Send test alert**: you should get 3 sample alerts.\n\n"
+    "iPhone: on the page that opens, first tap Share → **Add to Home Screen**, open it from the home "
+    "screen, then Subscribe → Allow.")
+
+
+def alerts_prompt(user: auth.User) -> None:
+    """26 Nov: on sign-in, Warehouse / Owner / Creator are asked once to allow PO alerts on this device,
+    with the reason; asked again at the next sign-in until they tap 'Done, alerts are on'."""
+    if not (user.is_owner or user.is_warehouse) or st.session_state.get("alert_prompted"):
+        return
+    st.session_state["alert_prompted"] = True
+    try:
+        from core import recipients
+        log = recipients.read_log()
+        done = bool(((log["kind"].astype(str) == "alert-setup")
+                     & (log["to"].astype(str).str.strip().str.casefold() == user.email.casefold())).any())
+    except Exception:  # noqa: BLE001 - never block the app for this
+        done = False
+    if not done:
+        _alert_dialog(user)
+
+
+@st.dialog("🔔 Allow PO alerts on this device", width="large")
+def _alert_dialog(user: auth.User) -> None:
+    from core import alerts
+    st.markdown(ALERT_WHY)
+    st.markdown(ALERT_HOW)
+    st.link_button("Turn on alerts", alerts.subscribe_link(user.email), type="primary", width="stretch")
+    c = st.columns(3)
+    if c[0].button("Send test alert", width="stretch", key="alert_dlg_test"):
+        ok, msg = alerts.send_test(user.email)
+        (st.success if ok else st.error)(msg)
+    if c[1].button("Done, alerts are on", width="stretch", key="alert_dlg_done"):
+        from core import recipients
+        recipients.log("alert-setup", "done", user.email, True, "turned on from the sign-in prompt")
+        st.rerun()
+    if c[2].button("Later", width="stretch", key="alert_dlg_later"):
+        st.rerun()
+    st.caption("You can do this any time from the sidebar: 🔔 PO alerts on this device.")
+
+
 def _alerts_box(user: auth.User) -> None:
     """26 Nov: PO alerts on this device, tied to the login e-mail (core/alerts.py)."""
     from core import alerts

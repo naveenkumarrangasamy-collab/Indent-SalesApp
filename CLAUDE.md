@@ -703,6 +703,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   **PO difference** (one-PO customers on upload; Swiggy at End of POs; |diff| ≥ `alert_min_units` 20 or ≥
   `alert_min_pct` 10 %), **New SKU in PO** (every PO), **Spec not mapped** (PO items without Spec-Size; warehouse
   and owners). Background, never blocks a PO; logged in Mail_Log (kind alert / alert-test).
+- **Sign-in prompt** (`common.alerts_prompt`, called in app.py): Warehouse / Owner / Creator get a dialog once
+  per sign-in explaining why (the 3 alerts) and how (Turn on alerts → Subscribe → Allow; iPhone: Add to Home
+  Screen first), with Send test alert / **Done, alerts are on** (logged in Mail_Log as kind `alert-setup`, then
+  never asked again) / Later. Browser notifications are the default; the ntfy app is optional.
 
 ## 6. Code map (repo root)
 
