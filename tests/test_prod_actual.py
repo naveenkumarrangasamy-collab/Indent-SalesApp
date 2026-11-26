@@ -17,13 +17,19 @@ def test_options_seed_parent_tab_and_saved_brand():
                                 "lot": "18 Kg", "box_kg": 18.0}])
     saved = pd.DataFrame([{"parent_sku": "Apple", "origin": "NZ", "variety": "Gala", "brand": "Kiwi Crunch",
                            "size": "100C", "box_kg": "18", "pcs_per_box": "100"}])
-    df = pa.option_rows("Apple", parent_tab, saved)
+    brand_tab = pd.DataFrame(pa.brand_rows_from_seed())
+    df = pa.option_rows("Apple", parent_tab, saved, brand_tab)
     assert "NZ" in pa.choices(df, "origin")
-    assert {"Envy", "Kiwi Crunch"} <= set(pa.brands(df, variety="Gala"))
+    assert pa.brands(df, "NZ", "Gala", "30C") == ["Envy"]
+    assert pa.brands(df, "NZ", "Gala", "100C") == ["Kiwi Crunch"]
+    assert pa.brands(df, "Italy", "Gala", "90C") == []
     assert "90C" in pa.choices(df, "size", origin="NZ", variety="Gala")
     kg, pcs = pa.defaults(df, origin="NZ", variety="Gala", size="90C")
     assert (kg, pcs) == (18.0, 90)
-    assert pa.choices(pa.option_rows("mandrin", None, None), "brand") == ["Gold Fresh"]
+    mand = pa.option_rows("mandrin", None, None, brand_tab)
+    assert pa.brands(mand, "Australia", "", "80C") == ["Gold Fresh"]
+    kiwi = pa.option_rows("Kiwi", None, None, brand_tab)
+    assert pa.brands(kiwi, "NZ", "Gold", "") == ["Zespri"]      # blank origin / size in the row = any
 
 
 def test_options_only_for_picked_country_and_variety():
@@ -68,3 +74,12 @@ def test_view_filters_and_kg():
     v = pa.view(saved, "2026-11-25", "PTP Bangalore")
     assert list(v["Fruit"]) == ["Apple"] and v["Kg on table"].iloc[0] == 175
     assert len(pa.view(saved)) == 2 and pa.view(None).empty
+
+
+def test_new_brand_rows_only_once_per_sku():
+    tab = pd.DataFrame(pa.brand_rows_from_seed())
+    e = {"parent_sku": "Apple", "origin": "NZ", "variety": "Gala", "size": "30C", "brand": "Envy"}
+    assert pa.new_brand_rows([e], tab, "me", "t") == []
+    e2 = {**e, "size": "90C", "brand": "Jazz"}
+    rows = pa.new_brand_rows([e2, e2], tab, "me", "t")
+    assert len(rows) == 1 and rows[0]["Brand"] == "Jazz" and rows[0]["Size"] == "90C"

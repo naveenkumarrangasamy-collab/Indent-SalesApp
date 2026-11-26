@@ -16,7 +16,7 @@ import pandas as pd
 
 from core import config
 from core.models import to_number
-from core.schema import PREPROD_ENTRIES
+from core.schema import BRAND_MASTER, PREPROD_ENTRIES
 
 STOCK_TYPES = ["Unused Vendor Lot", "Returns", "MT Ready Leftover"]  # still valid in saved rows
 STOCK_CHOICES = ["Unused Vendor Lot"]  # 26 Nov (user): only unused stock is offered for now
@@ -91,12 +91,17 @@ def _num(v):
     return n if n == n and n > 0 else None
 
 
-def option_rows(parent: str, parent_tab: pd.DataFrame | None, saved: pd.DataFrame | None) -> pd.DataFrame:
+def option_rows(parent: str, parent_tab: pd.DataFrame | None, saved: pd.DataFrame | None,
+                brand_tab: pd.DataFrame | None = None) -> pd.DataFrame:
     """Every known combination for this parent (origin, variety, brand, size, box_kg, pcs)."""
     k, rows = pkey(parent), []
+    if brand_tab is not None and not brand_tab.empty:
+        for r in brand_tab[brand_tab["Parent SKU"].map(pkey) == k].to_dict("records"):
+            rows.append({"origin": _t(r.get("Origin")), "variety": _t(r.get("Variety")), "brand": _t(r.get("Brand")),
+                         "size": clean_size(r.get("Size")), "box_kg": None, "pcs": None})
     for p, o, v, b, s, kg, pcs in SEED:
-        if pkey(p) == k:
-            rows.append({"origin": o, "variety": v, "brand": b, "size": s, "box_kg": kg, "pcs": pcs})
+        if pkey(p) == k:   # brands now come from the Brand_Master tab (26 Nov), seeded with these
+            rows.append({"origin": o, "variety": v, "brand": "", "size": s, "box_kg": kg, "pcs": pcs})
     if parent_tab is not None and not parent_tab.empty:
         for r in parent_tab[parent_tab["parent"].map(pkey) == k].to_dict("records"):
             for s in [x.strip() for x in str(r.get("spec") or "").split(",") if x.strip()] or [""]:
@@ -144,8 +149,66 @@ def defaults(df: pd.DataFrame, **picked) -> tuple[float | None, int | None]:
     return kg, pcs
 
 
-def brands(df: pd.DataFrame, origin: str = "", variety: str = "") -> list[str]:
-    return choices(df, "brand", origin=origin, variety=variety)
+def brands(df: pd.DataFrame, origin: str = "", variety: str = "", size: str = "") -> list[str]:
+    """Brands of this SKU (fruit + origin + variety + size). A brand row fits when each of its columns
+    equals the pick or is blank (blank = any); brands that name the pick exactly come first."""
+    rows = df[df["brand"] != ""]
+    picked = {"origin": origin, "variety": variety, "size": clean_size(size)}
+    scored = []
+    for r in rows.to_dict("records"):
+        score, ok = 0, True
+        for col, val in picked.items():
+            have = str(r.get(col) or "")
+            if have and val and have.casefold() != val.casefold():
+                ok = False
+                break
+            score += bool(have and val)
+        if ok:
+            scored.append((-score, r["brand"]))
+    seen, out = set(), []
+    for _, b in sorted(scored, key=lambda x: x[0]):
+        if b.casefold() not in seen:
+            seen.add(b.casefold())
+            out.append(b)
+    return out
+
+
+def brand_rows_from_seed() -> list[dict]:
+    """Start rows for the Brand_Master tab: every brand seen in the team's sheet."""
+    return [{"Parent SKU": p, "Origin": o, "Variety": v, "Size": s, "Brand": b, "Added by": "team sheet",
+             "Added at": ""} for p, o, v, b, s, _kg, _pcs in SEED if b]
+
+
+def read_brands(backend=None) -> pd.DataFrame:
+    from core import store_settings
+    df = store_settings._read(backend, BRAND_MASTER)
+    cols = ["Parent SKU", "Origin", "Variety", "Size", "Brand"]
+    if df.empty or "Brand" not in df.columns:
+        return pd.DataFrame(columns=cols)
+    for c in cols:
+        if c not in df.columns:
+            df[c] = ""
+    return df
+
+
+def new_brand_rows(entries: list[dict], brand_tab: pd.DataFrame | None, user: str, stamp: str) -> list[dict]:
+    """Brands in these entries that the Brand_Master tab does not hold for that exact SKU yet."""
+    have = set()
+    if brand_tab is not None and not brand_tab.empty:
+        for r in brand_tab.to_dict("records"):
+            have.add((pkey(r.get("Parent SKU")), _t(r.get("Origin")).casefold(), _t(r.get("Variety")).casefold(),
+                      clean_size(r.get("Size")).casefold(), _t(r.get("Brand")).casefold()))
+    out = []
+    for e in entries:
+        b = _t(e.get("brand"))
+        key = (pkey(e.get("parent_sku")), _t(e.get("origin")).casefold(), _t(e.get("variety")).casefold(),
+               clean_size(e.get("size")).casefold(), b.casefold())
+        if b and key not in have:
+            have.add(key)
+            out.append({"Parent SKU": _t(e.get("parent_sku")), "Origin": _t(e.get("origin")),
+                        "Variety": _t(e.get("variety")), "Size": clean_size(e.get("size")), "Brand": b,
+                        "Added by": user, "Added at": stamp})
+    return out
 
 
 def entry_errors(e: dict) -> list[str]:
@@ -170,6 +233,12 @@ def save(backend, entries: list[dict], user: str) -> int:
     rows = [{"entry_id": uuid.uuid4().hex[:10], "saved_at": stamp, "saved_by": user, **e} for e in entries]
     if rows:
         backend.append_dicts(PREPROD_ENTRIES, rows)
+        try:
+            add = new_brand_rows(entries, read_brands(backend), user, stamp)
+            if add:
+                backend.append_dicts(BRAND_MASTER, add)
+        except Exception:  # noqa: BLE001  (brand list is a help, never blocks the save)
+            pass
         from core import tracking_sheet
         tracking_sheet.publish(backend)
         from core import indents

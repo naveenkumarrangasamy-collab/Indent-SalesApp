@@ -68,6 +68,7 @@ def render(user: User) -> None:
     try:
         m = masters.load_masters()
         saved = pa.read()
+        brand_tab = pa.read_brands()
         _, parent_tab = mapping_sheet.load()
     except SheetError as e:
         common.sheet_error(e, "Could not load the masters.")
@@ -88,7 +89,7 @@ def render(user: User) -> None:
         return
     parent = st.pills("Fruit", parents, key="pa_parent")
     if parent:
-        _entry_card(parent, city, day, parent_tab, saved)
+        _entry_card(parent, city, day, parent_tab, saved, brand_tab)
     else:
         st.caption("Pick a fruit to add what goes onto the tables.")
 
@@ -109,8 +110,8 @@ def render(user: User) -> None:
     _saved_today(saved, city, day)
 
 
-def _entry_card(parent: str, city: str, day, parent_tab, saved) -> None:
-    opts = pa.option_rows(parent, parent_tab, saved)
+def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None) -> None:
+    opts = pa.option_rows(parent, parent_tab, saved, brand_tab)
     k = f"pa_{pa.pkey(parent)}"
     with st.container(key="pa_card"):
         st.markdown(f"**{parent}**")
@@ -120,16 +121,14 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved) -> None:
         with r1[1]:
             variety = _pick("Variety", pa.choices(opts, "variety", origin=origin), f"{k}_v")
         with r1[2]:
-            b_opts = pa.brands(opts, origin, variety)
+            size = _pick("Size", pa.choices(opts, "size", origin=origin, variety=variety), f"{k}_s", blank=False)
+        with r1[3]:   # 26 Nov: brands per SKU (fruit + origin + variety + size) from the Brand_Master tab
+            b_opts = pa.brands(opts, origin, variety, size)
             brand = _pick("Brand", b_opts + [NEW], f"{k}_b")
             if brand == NEW:
                 brand = st.text_input("New brand", key=f"{k}_bn", placeholder="Type brand").strip()
-        with r1[3]:
-            size = _pick("Size", pa.choices(opts, "size", origin=origin, variety=variety,
-                                                       brand="" if brand == NEW else brand), f"{k}_s", blank=False)
 
-        kg0, pcs0 = pa.defaults(opts, origin=origin, variety=variety,
-                                  brand="" if brand == NEW else brand, size=size) if size else (None, None)
+        kg0, pcs0 = pa.defaults(opts, origin=origin, variety=variety, size=size) if size else (None, None)
         only_box = pa.box_only(parent)
         r2 = st.columns([1, 1, 1, 1.5]) if only_box else st.columns([1, 1, 1, 1, 1.5])
         box_kg = r2[0].number_input("Box kg", min_value=0.0, step=0.5, value=float(kg0 or 0),
