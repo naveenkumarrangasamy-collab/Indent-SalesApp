@@ -53,10 +53,9 @@ st.set_page_config(page_title="MT Indent", page_icon="🧾", layout="wide")
 from pages_src import access, common, home, indent, login, my_indents, po_upload, production, tracker  # noqa: E402
 from pages_src import delivery_times  # noqa: E402   (Bulk indents page removed 21 Nov)
 from pages_src import push_ui  # noqa: E402   (26 Nov: browser push alerts)
-from pages_src import batch_city  # noqa: E402   (25 Nov: Actual dispatch; its Batching plan page is off the menu)
-from pages_src import prod_actual  # noqa: E402   (26 Nov: Pre-Production Actual, live for owners + warehouse)
-from pages_src import processed as processed_page  # noqa: E402   (26 Nov: Processed)
-from pages_src import tracking_page  # noqa: E402   (26 Nov: Production Tracking)
+from pages_src import preprod_actual  # noqa: E402   (22 Nov: owners only while being tried)
+from pages_src import batch_city  # noqa: E402   (25 Nov: city-level Batching plan + Actual dispatch)
+from pages_src import preprod_city  # noqa: E402   (24 Nov evening: city-level pre-production, trial)
 from pages_src import dispatch as dispatch_page  # noqa: E402   (23 Nov: owners only while being tried)
 
 _remember_modules()
@@ -93,7 +92,7 @@ _views_once()
 # address this user has no page for goes to his first page (no "Page not found", 21 Nov)
 GATE_PATHS = ("home", "indent", "bulk-indents", "delivery-times", "upload-po", "tracker", "indents", "production",
               "batching", "city-sku-report", "access", "preprod-actual", "batching-plan",
-              "dispatch", "returns", "dispatch-check", "return-grading", "processed", "production-tracking")
+              "dispatch", "returns", "dispatch-check", "return-grading")
 user = common.current_user()
 common.flush_cookie()
 
@@ -124,18 +123,17 @@ pages = {
                           url_path="production", default=not makes_indents),
     "batching": st.Page(lambda: production.render_batching(user), title="Batching sheet", icon="📦",
                         url_path="batching"),
-    # 26 Nov: the trial's Pre-Production Actual / Processed / Production Tracking, for owners + warehouse
-    "preprod": st.Page(lambda: prod_actual.render(user), title="Pre-Production Actual", icon="📥",
-                       url_path="preprod-actual"),
-    "processed": st.Page(lambda: processed_page.render(user), title="Processed", icon="✅", url_path="processed"),
-    "tracking": st.Page(lambda: tracking_page.render(user), title="Production Tracking", icon="📊",
-                        url_path="production-tracking"),
 }
 if user.opens_access:
     pages["access"] = st.Page(lambda: access.render(user), title="Access", icon="🔑", url_path="access")
 if user.is_owner:
     pages["times"] = st.Page(lambda: delivery_times.render(user), title="Delivery times", icon="🕒",
                              url_path="delivery-times")
+    # 22 Nov: new pre-production pages, owners only until they are tried out (no change for others)
+    pages["preprod"] = st.Page(lambda: preprod_city.render(user), title="Pre-production actual",
+                               icon="📥", url_path="preprod-actual")
+    pages["plan"] = st.Page(lambda: batch_city.render_plan(user), title="Batching plan", icon="🧮",
+                            url_path="batching-plan")
     pages["dispatch"] = st.Page(lambda: batch_city.render_dispatch(user), title="Actual dispatch", icon="🚚",
                                 url_path="dispatch")
     pages["returns"] = st.Page(lambda: dispatch_page.render_returns(user), title="Returns", icon="↩️",
@@ -153,16 +151,15 @@ if makes_indents:
     sections["Indents"] = [pages["home"], pages["indent"], pages["my_indents"], pages["po"]]
 if sees_production:   # owner and warehouse; sales do not get production or the hourly tracker
     sections["Production"] = [pages["production"], pages["batching"], pages["tracker"]]
-    sections["Pre-production"] = [pages["preprod"], pages["processed"], pages["tracking"]]
 if user.is_owner:
+    sections["Pre-production (owners, trial)"] = [pages["preprod"], pages["plan"]]
     sections["Dispatch (owners, trial)"] = [pages["dispatch"], pages["returns"], pages["grading"],
                                                  pages["dcheck"]]
     sections["Admin"] = ([pages["access"]] if "access" in pages else []) + [pages["times"]]
 landing = pages["home"] if makes_indents else pages["production"]
 URLS = {"home": "home", "indent": "indent", "my_indents": "indents", "po": "upload-po",
         "tracker": "tracker", "production": "production", "batching": "batching", "access": "access",
-        "times": "delivery-times", "preprod": "preprod-actual", "processed": "processed",
-        "tracking": "production-tracking",
+        "times": "delivery-times", "preprod": "preprod-actual", "plan": "batching-plan",
         "dispatch": "dispatch", "returns": "returns", "dcheck": "dispatch-check",
         "grading": "return-grading"}
 in_menu = [pg for group in sections.values() for pg in group]

@@ -720,22 +720,6 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   Creator when this device has no alerts yet (once per sign-in; why + how; Allow / Send test alert / Later), and
   the sidebar box **🔔 PO alerts on this device**.
 
-### 26 Nov evening: Pre-production from the trial is live (owners + warehouse)
-
-- Menu **Pre-production** (owners and warehouse): **Pre-Production Actual** (`/preprod-actual`, `pages_src/prod_actual.py`,
-  `core/prod_actual.py`; tab `Production_Actual`), **Processed** (`/processed`, `pages_src/processed.py`,
-  `core/processed.py`; tab `Processed`), **Production Tracking** (`/production-tracking`, `pages_src/tracking_page.py`,
-  `core/tracking_sheet.py`; tab `Production_Tracking` = the team's BLR_ProdTracking columns, rebuilt after every save).
-  Brands per SKU in tab `Brand_Master` (until it exists, the brands of the team sheet are used).
-- Pre-Production Actual: Origin -> Variety -> Size -> Brand (only what fits the picks), Box kg / Pcs per box locked
-  from the master, Table, Boxes, Stock (Unused Vendor Lot / Returns / MT Ready Leftover).
-- Processed: lots with the same fruit + variety + size + origin are clubbed; customer lots one after another
-  (open -> Done -> folded), Add next customer lot, group sum check (K+L+M)/J green at 97-100 %; empty boxes save as 0.
-- The old **Pre-production actual** (city level) and **Batching plan** pages are off the menu; their code stays
-  because **Actual dispatch** (Dispatch, owners only, unchanged) uses it.
-- Built and tried first in the trial copy (fork `vamirtheeswaraa/Indent-SalesApp-trial`, branch
-  `sheet-logic-rebuild`, https://indent-salesapp-trial.streamlit.app, its own sheet, `trial_copy = true`).
-
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.

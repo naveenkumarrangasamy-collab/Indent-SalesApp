@@ -210,11 +210,6 @@ class _Base:
         ({(r, g, b): [1-based row numbers]}). Google Sheets only."""
         return None
 
-    def color_cells(self, tab: str, n_cols: int, col: int, groups: dict, n_rows: int = 0) -> None:
-        """Report tabs: clear old colours, bold + wrap the header, then colour one column's cells
-        ({(r, g, b): [1-based row numbers]}). Google Sheets only."""
-        return None
-
     def ensure_tabs(self, tabs: list[str] | None = None) -> list[str]:
         """Create any missing app tabs (header row only). Returns created names."""
         created = []
@@ -363,28 +358,6 @@ class GoogleBackend(_Base):
                 fmts.append({"range": f"{rowcol_to_a1(r, 1)}:{rowcol_to_a1(r, n_cols)}",
                              "format": {"backgroundColor": {"red": rgb[0], "green": rgb[1], "blue": rgb[2]}}})
         self._call(ws.batch_format, fmts)
-
-    def color_cells(self, tab, n_cols, col, groups, n_rows=0):
-        from gspread.utils import rowcol_to_a1
-
-        ws = self._worksheet(tab)
-        last = rowcol_to_a1(max(ws.row_count, n_rows, 1), max(n_cols, 1))
-        head = f"A1:{rowcol_to_a1(1, max(n_cols, 1))}"
-        fmts = [{"range": f"A1:{last}", "format": {"backgroundColor": {"red": 1, "green": 1, "blue": 1},
-                                                   "textFormat": {"bold": False}}},
-                {"range": head, "format": {"textFormat": {"bold": True}, "wrapStrategy": "WRAP",
-                                           "verticalAlignment": "MIDDLE",
-                                           "backgroundColor": {"red": 0.89, "green": 0.94, "blue": 0.98}}}]
-        for rgb, rows in groups.items():
-            for r in rows:
-                fmts.append({"range": rowcol_to_a1(r, col + 1),
-                             "format": {"backgroundColor": {"red": rgb[0], "green": rgb[1], "blue": rgb[2]}}})
-        self._call(ws.batch_format, fmts)
-        try:
-            self._call(ws.freeze, rows=1)
-        except SheetError:
-            pass
-
 
     def _delete_raw(self, tab, first, last):
         ws = self._worksheet(tab)
