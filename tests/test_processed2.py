@@ -41,8 +41,8 @@ def test_snapshot_latest_and_tracking_rows():
     assert s["status"] == "submitted" and len(s["lines"]) == 3 and s["tbl"]["gt_kg"] == 12 and s["comment"] == "ok"
     rows = p2.track_rows(RAW, saved)
     t1 = [r for r in rows if r[2] == "Table 1"]
-    assert [r[13] for r in t1] == ["1PC", "2PC", "1Kg", "Table total"]
+    assert [r[12] for r in t1] == ["1PC", "2PC", "1Kg", "Table total"]
     eff = p2.TRACK_HEAD.index("Category Efficiency% (K / J)")
-    assert {r[eff] for r in t1} == {"96%"} and t1[-1][18] == 12 and t1[-1][19] == 8 and t1[0][11] == 3000
+    assert {r[eff] for r in t1} == {"96%"} and t1[-1][17] == 12 and t1[-1][18] == 8
     assert p2.line_pcs('2PC', 50) == 100 and p2.line_pcs('1Kg', 5) == 0
     assert [r for r in rows if r[2] == "Table 2"][0][-2] == "Not started"

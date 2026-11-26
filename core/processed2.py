@@ -25,8 +25,7 @@ LOW, HIGH = 0.97, pr.MAX_SUM
 TRACK_TAB = "Production_Tracking_2"
 TRACK_HEAD = ["Production Date", "City", "Table #", "Parent SKU Name", "Origin", "Variety", "Brand", "Size Spec",
               "Purchase Lot weight in Kgs (A)", "# of Pcs in Purchase lot",
-              "# Qty Moved to Grading table (Vendor Lots / Boxes) (B)", "Total Pcs taken (B x Pcs)",
-              "Production prod Classification",
+              "# Qty Moved to Grading table (Vendor Lots / Boxes) (B)", "Production prod Classification",
               "Cux Lot", "MT Ready (Dispatch) (Cux Lots) (D1)", "MT Ready (Disptach) (Loose Kg) (D2)",
               "MT Ready in Kgs (K)", "Left over MT Ready in Kgs (I)", "GT Stock in Kgs (L)", "Dump in Kgs (M)",
               "Actual NW used for Production Kgs (J = H - I)", "Category Efficiency% (K / J)",
@@ -168,8 +167,7 @@ def track_rows(lots: pd.DataFrame, saved: pd.DataFrame) -> list[list]:
         for key, it in items(grp).items():
             first = [day, city, f"Table {it['table_no']}", it.get("parent_sku", ""), it.get("origin", ""),
                      it.get("variety", ""), it.get("brand", ""), it.get("size", ""), _r(it.get("box_kg"), 3),
-                     pr._f(it.get("pcs_per_box")) or "", _r(it.get("boxes_moved")), _r(it.get("taken_pcs"), 0) or "",
-                     it.get("stock_type", "")]
+                     pr._f(it.get("pcs_per_box")) or "", _r(it.get("boxes_moved")), it.get("stock_type", "")]
             s = done.get(f"{day}|{city}|{key}")
             if not s:
                 rows.append(first + [""] * 10 + ["Not started", ""])
