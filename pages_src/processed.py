@@ -523,8 +523,10 @@ def _band_cell(f: str, ln: dict, s: dict, title: dict) -> None:
 def _taken_bar(g: dict) -> str:
     pills = "".join(f"<span class='pg-pill'>Table {m['table_no']} · <b>{m['boxes']:g}</b> boxes</span>"
                     for m in g.get("members", []))
+    pcs = pr._f(g.get("taken_pcs"))
     tot = (f"<span class='pg-pill pg-pill-t'>= <b>{pr._f(g.get('boxes_moved')):g}</b> boxes · "
-           f"<b>{pr._f(g.get('taken_kg')):,.1f}</b> kg</span>")
+           f"<b>{pr._f(g.get('taken_kg')):,.1f}</b> kg"
+           + (f" · <b>{pcs:,.0f}</b> pcs" if pcs else "") + "</span>")
     return (f"<div class='pg-taken'><span class='pg-cuxl'>TAKEN FROM PRE-PRODUCTION ACTUAL</span>"
             f"<div class='pg-pills' style='justify-content:flex-start'>{pills}{tot}</div></div>")
 

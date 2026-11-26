@@ -65,6 +65,7 @@ def test_group_lots_clubs_same_spec_and_sums():
     assert set(g) == {"a+b", "c"}
     ab = g["a+b"]
     assert ab["boxes_moved"] == 120 and ab["table_no"] == "2 + 4" and round(ab["taken_kg"]) == 2100
+    assert ab["taken_pcs"] == 120 * 90
     assert pr.member_map(g)["b"] == "a+b"
     # 1Kg packs: D1 = 2,058 one-kg packs -> MT 2,058 kg; dump 21 kg -> 2,079 of 2,100 = 99 %
     t = pr.group_total([("1Kg", {"mt_packs": 1500}), ("1Kg", {"mt_packs": 558, "dump_kg": 21})], ab)

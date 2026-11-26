@@ -133,13 +133,14 @@ def group_lots(raw: pd.DataFrame) -> dict[str, dict]:
     for members in by.values():
         boxes = sum(_f(m.get("boxes_moved")) for m in members)
         kg = sum(_f(m.get("box_kg")) * _f(m.get("boxes_moved")) for m in members)
+        pcs = sum(_f(m.get("pcs_per_box")) * _f(m.get("boxes_moved")) for m in members)
         first = members[0]
         gid = "+".join(str(m["entry_id"]) for m in members)
         tables = list(dict.fromkeys(str(m.get("table_no") or "") for m in members))
         stock = list(dict.fromkeys(str(m.get("stock_type") or "") for m in members if m.get("stock_type")))
         out[gid] = {**first, "entry_id": gid, "table_no": " + ".join(t for t in tables if t),
                     "boxes_moved": boxes, "box_kg": round(kg / boxes, 4) if boxes else _f(first.get("box_kg")),
-                    "stock_type": " / ".join(stock), "taken_kg": kg,
+                    "stock_type": " / ".join(stock), "taken_kg": kg, "taken_pcs": pcs,
                     "members": [{"entry_id": str(m["entry_id"]), "table_no": str(m.get("table_no") or ""),
                                  "boxes": _f(m.get("boxes_moved")), "box_kg": _f(m.get("box_kg"))}
                                 for m in members]}
