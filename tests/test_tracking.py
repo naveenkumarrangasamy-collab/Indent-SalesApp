@@ -25,6 +25,18 @@ def test_half_hour_points():
     labels = [p[0] for p in pts]
     assert labels[:3] == ["8:00 AM", "8:30 AM", "9:00 AM"] and labels[-1] == "Now"
     assert pts[3][1] is None          # 9:30 still to come
+    assert labels[-2] == "7:00 PM"    # 26 Nov: till 7 PM
+
+
+def test_points_till_7pm_and_tomorrow_on_todays_clock():
+    late = datetime(2026, 11, 26, 17, 40, tzinfo=config.IST)
+    pts = tracking.points("2026-11-26", now=late)
+    done = [p[0] for p in pts if p[1] is not None]
+    assert done[-2:] == ["5:30 PM", "Now"] and "2:30 PM" in done
+    tom = tracking.points("2026-11-27", now=late)
+    assert tom[0][1] == datetime(2026, 11, 26, 8, 0, tzinfo=config.IST)   # tomorrow's orders tracked today
+    after = tracking.points("2026-11-26", now=datetime(2026, 11, 26, 20, 5, tzinfo=config.IST))
+    assert after[-1][0] == "7:00 PM" and after[-1][1] is not None
 
 
 def _r(iid, v, at, sku, qty, status="Submitted", cust="More", store="EK"):
