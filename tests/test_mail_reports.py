@@ -62,12 +62,12 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
     by_to = {m["To"]: m for m in sent}
     z = by_to["z@x.com"]
     names = sorted(p.get_filename() for p in z.iter_attachments())
-    # 21 Nov: only Production by customer (one PDF), item numbers, no other tables / Excel
-    assert len(names) == 1 and names[0].startswith("Production_by_customer_") and names[0].endswith(".pdf")
+    # 26 Nov: only the Batching sheet (body + one Excel), item numbers, scoped by city
+    assert len(names) == 1 and names[0].startswith("Batching_") and names[0].endswith(".xlsx")
     body = z.get_body(("html",)).get_content()
-    assert "Production by customer" in body and "Make-ready list" not in body and "spec size" not in body \
-        and ">#</th>" in body and "#1c6b49" not in body and "Chennai" not in body
-    assert z["Subject"].startswith("Production ") and "2 indent" in z["Subject"]      # Bangalore only
+    assert "Batching sheet" in body and "Production by customer" not in body \
+        and ">#</th>" in body and "No PO yet" in body and "Chennai" not in body
+    assert z["Subject"].startswith("Batching sheet ") and "2 indent" in z["Subject"]      # Bangalore only
     assert "3 indent" in by_to["all@x.com"]["Subject"] and "Chennai" in by_to["all@x.com"].get_body(("html",)).get_content()
     # same slot again (also at 8:50): nothing new; not a send hour: skipped
     assert {r["status"] for r in hourly.run(now=at9.replace(minute=40))} == {"skipped"}
@@ -79,7 +79,7 @@ def test_hourly_production_mail_per_scope_pdf_excel_and_no_repeat(env):
     log = recipients.read_log()
     assert set(log["kind"]) == {"hourly"} and set(log["status"]) == {"sent"}
     ok, msg = hourly.send_sample("me@x.com")
-    assert ok and sent[-1]["To"] == "me@x.com" and sent[-1]["Subject"].startswith("[SAMPLE] Production")
+    assert ok and sent[-1]["To"] == "me@x.com" and sent[-1]["Subject"].startswith("[SAMPLE] Batching sheet")
 
 
 def test_hourly_slot_window():

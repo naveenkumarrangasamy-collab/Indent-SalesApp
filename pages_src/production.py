@@ -428,31 +428,9 @@ def render_batching(user: User) -> None:
 
 
 def _po_quantities(lines: pd.DataFrame) -> tuple[dict, set, list[dict]]:
-    """{(indent_id, sku key): PO qty or None = not on the PO}, the indents whose PO has qty per item
-    (PO_Item_Map links used), and the PO-only items (on a PO, not on the indent)."""
-    from core.models import IndentLine
-    try:
-        po = indents.read_po_freeze()
-    except SheetError:
-        return {}, set(), []
-    out, ids, extras = {}, set(), []
-    for iid, g in lines.groupby("indent_id"):
-        info = indents.po_info(po, iid)
-        if info["qty"] is None:
-            continue
-        ids.add(iid)
-        first = g.iloc[0]
-        items = [IndentLine(parent_sku=r["parent_sku"], customer_sku_name=r["customer_sku_name"],
-                            variety=r.get("variety", ""), lot=r.get("lot", ""), qty=r["qty"])
-                 for r in g.to_dict("records")]
-        for r in indents.po_vs_indent(items, info, customer=str(first["customer"])):
-            if r["indent_qty"] is not None:
-                out[(iid, " ".join(str(r["customer_sku_name"]).split()).casefold())] = r["po_qty"]
-            elif r["po_qty"]:
-                extras.append({"day": first["delivery_date"], "City": first["city"], "Customer": first["customer"],
-                               "Delivery point": first["store"], "Customer SKU Name": r["customer_sku_name"],
-                               "PO qty": r["po_qty"]})
-    return out, ids, extras
+    """Moved to core.reports.po_quantities (26 Nov: the hourly mail uses it too)."""
+    from core.reports import po_quantities
+    return po_quantities(lines)
 
 
 def _sync_batching_tab(view: pd.DataFrame, lines: pd.DataFrame) -> None:

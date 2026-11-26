@@ -8,7 +8,7 @@ import re
 import pandas as pd
 import streamlit as st
 
-from core import config, indents, mailer, po_reader
+from core import alerts, config, indents, mailer, po_reader
 from core.masters import load_masters
 from core.auth import User
 from core.models import fmt_num, fmt_q
@@ -194,6 +194,7 @@ def _po_dialog(indent_id: str, user: User) -> None:
         if state.get()["mode"] == "edit" and state.get()["indent_id"] == indent_id:
             state.start_new()
         snap = indents.snapshot(indents.read_lines(fresh=True), indent_id) or cur
+        alerts.after_po(cur, this_po, multi)       # 26 Nov: device alerts (background, never blocks)
         if replacing and not mail_again:
             sent, mail_msg = True, "No e-mail sent (PO replaced)."
         else:
@@ -539,6 +540,7 @@ def _end_dialog(indent_id: str, user: User) -> None:
         except SheetError as e:
             st.error(f"Not done. {e}")
             return
+        alerts.after_end_of_pos(cur, info)
         _close()
         common.flash("success", f"{indent_id}: end of POs, indent frozen."
                      + (f" {len(bad)} item(s) differ; see the hourly tracker." if bad else ""))

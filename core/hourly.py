@@ -1,9 +1,10 @@
-"""Production e-mail to the ground team: every hour 8 AM-2 PM IST, on the hour
+"""Hourly e-mail to the ground team: every hour 8 AM-2 PM IST, on the hour
 (secret `production_mail_hours`, default hourly_mail_from..hourly_mail_to).
 
-Each active ground-team address gets, for the delivery day(s), the
-production report (make-ready list + by spec size, all customers together)
-of the indents in its cities, in the body and as PDF and Excel.
+26 Nov (user): each active ground-team address gets, for the delivery day(s),
+only the **Batching sheet** of the indents in its cities (counts, one table per
+customer · delivery point with spec, indent qty, PO qty, difference, status),
+in the body and as Excel.
 
 Started by cron-job.org (exact time) or the GitHub schedule (backup) through
 scripts/wake_and_send.py, or from the Access page with "Send sample".
@@ -103,21 +104,22 @@ def run(now: datetime | None = None, force: bool = False, only: str | None = Non
 
 def _send_one(to: list[str], scope: recipients.Recipient | None, lines, m, days, slot, label,
               sample: bool = False) -> tuple[bool, str, int]:
+    """26 Nov (user): the hourly e-mail carries only the Batching sheet (body + Excel)."""
     html_parts, files, n = [], [], 0
     scope_txt = scope.scope_text() if scope else "everything"
-    for day in days:     # 19 Nov: back to the first format (tracker sections come later)
+    for day in days:
         rows = reports.day_rows(lines, day)
         if scope is not None:
             rows = scope.filter(rows)
         n += 0 if rows is None or rows.empty else rows["indent_id"].nunique()
-        html_parts.append(reports.production_mail_html(rows, m, day, label,
-                                                       scope.name if scope else "", scope_txt))
-        files += reports.production_mail_files(rows, m, day, label, scope_txt)
+        view = reports.batching_view(rows, m, day)
+        html_parts.append(reports.batching_mail_html(view, day, label, scope.name if scope else "", scope_txt))
+        files += reports.batching_mail_files(view, day, label)
     day_txt = " + ".join(reports.fmt_day(d) for d in days)
-    subject = (("[SAMPLE] " if sample else "") + f"Production {slot:%I:%M %p} - delivery {day_txt} - "
+    subject = (("[SAMPLE] " if sample else "") + f"Batching sheet {slot:%I:%M %p} - delivery {day_txt} - "
                f"{n} indent(s)").replace(" 0", " ", 1)
-    text = (f"Production for delivery {day_txt} as of {label} ({scope_txt}). "
-            "Production by customer is in the e-mail and the attached PDF.")
+    text = (f"Batching sheet for delivery {day_txt} as of {label} ({scope_txt}). "
+            "The full sheet is attached as Excel.")
     msg = mailer.build_message(to, subject, "<hr>".join(html_parts), text, files)
     ok, why = mailer.deliver(msg)
     return ok, why, n
@@ -136,10 +138,9 @@ def send_sample(to: str, scope: recipients.Recipient | None = None) -> tuple[boo
 
 
 def preview(day: str, scope: recipients.Recipient | None = None) -> list[tuple[str, bytes, str]]:
-    """The 2 files as they would go out now (for downloading on the Access page)."""
+    """The file as it would go out now (for downloading on the Access page)."""
     rows = reports.day_rows(indents.read_lines(), day)
     if scope is not None:
         rows = scope.filter(rows)
-    return reports.production_mail_files(rows, masters.load_masters(), day,
-                                         slot_label(config.now_ist()),
-                                         scope.scope_text() if scope else "everything")
+    m = masters.load_masters()
+    return reports.batching_mail_files(reports.batching_view(rows, m, day), day, slot_label(config.now_ist()))

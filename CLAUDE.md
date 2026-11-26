@@ -688,6 +688,22 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.
 
+### 26 Nov: hourly mail = Batching sheet; PO alerts on devices (user-approved previews)
+
+- **Hourly e-mail = Batching sheet only** (replaces Production by customer; same list, hours, Mail_Log):
+  tiles Lines / PO matched / Short or not on PO / No PO yet / Spec missing, one table per customer · delivery
+  point (attention rows first) with Customer SKU Name, Spec ("spec missing"), Indent, PO, Diff, Status (status
+  cell coloured as the page); attachment `Batching_<date>_<hh>.xlsx` (`reports.batching_view /
+  batching_mail_html / batching_mail_files`; `reports.po_quantities` shared with the Batching page).
+- **PO alerts on devices** (`core/alerts.py`, tests `tests/test_alerts.py`): to active **Warehouse / Owner /
+  Creator** of the indent's city (no cities = all), addressed by **login e-mail** (one private ntfy channel per
+  e-mail: keyed hash with secret `alert_key`, else `pin_pepper`; server secret `alert_server`, default ntfy.sh).
+  Each person turns alerts on once per device: sidebar **🔔 PO alerts on this device** (Turn on alerts / ntfy
+  app channel / Send test alert). Alerts show **only the Customer SKU name + the difference**:
+  **PO difference** (one-PO customers on upload; Swiggy at End of POs; |diff| ≥ `alert_min_units` 20 or ≥
+  `alert_min_pct` 10 %), **New SKU in PO** (every PO), **Spec not mapped** (PO items without Spec-Size; warehouse
+  and owners). Background, never blocks a PO; logged in Mail_Log (kind alert / alert-test).
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.

@@ -388,6 +388,8 @@ def sidebar(user: auth.User) -> None:
         if c2.button("Sign out", width="stretch"):
             sign_out()
             st.rerun()
+        if user.is_owner or user.is_warehouse:
+            _alerts_box(user)
         with st.expander("Change my PIN", expanded=bool(st.session_state.get("must_change_pin"))):
             with st.form("change_pin", clear_on_submit=True):
                 cur = st.text_input("Current PIN", type="password", max_chars=6)
@@ -403,6 +405,22 @@ def sidebar(user: auth.User) -> None:
             st.caption(f"⚠️ Draft not saved to the sheet yet: {err}")
         st.caption(f"Google Sheet data refreshes every {config.master_cache_seconds() // 60} min "
                    "(or now with ↻ Refresh data)")
+
+
+def _alerts_box(user: auth.User) -> None:
+    """26 Nov: PO alerts on this device, tied to the login e-mail (core/alerts.py)."""
+    from core import alerts
+    with st.expander("🔔 PO alerts on this device"):
+        st.caption("An alert when a PO comes in with a difference, a new SKU or no spec mapped. "
+                   "Do this once on every phone / laptop you use.")
+        st.link_button("Turn on alerts", alerts.subscribe_link(user.email), width="stretch",
+                       help="Opens your alert channel: tap Subscribe and allow notifications")
+        st.caption("Phone (best): install the free **ntfy** app → ＋ → paste this channel:")
+        st.code(alerts.topic(user.email), language=None)
+        if st.button("Send test alert", width="stretch", key="alert_test"):
+            with st.spinner("Sending…"):
+                ok, msg = alerts.send_test(user.email)
+            (st.success if ok else st.error)(msg)
 
 
 def _change_pin(user: auth.User, cur: str, new: str, new2: str) -> None:

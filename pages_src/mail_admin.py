@@ -17,8 +17,8 @@ from pages_src import common
 
 TEAMS = {
     "Ground": ("Production e-mails",
-               "Every hour from 8 AM to 2 PM: production by customer (item numbers, one customer per page) "
-               "for today's deliveries, only for the cities chosen for each address, in the mail and as PDF."),
+               "Every hour from 8 AM to 2 PM: the batching sheet (indent qty, PO qty, difference, spec) "
+               "for today's deliveries, only for the cities chosen for each address, in the mail and as Excel."),
     "Central": ("PO e-mails",
                 "The moment any PO is uploaded (any time, all cities and customers): the customer's PO plus "
                 "the SO details as PDF + Excel."),
@@ -133,8 +133,8 @@ def _team(team: str, m: masters.Masters, me: User, people: list[Recipient]) -> N
         if not ok and _hint(msg):
             st.info(_hint(msg))
     if team == "Ground":
-        with st.expander("Download today's production e-mail files"):
-            if st.button("Build the PDF", key="hm_build"):
+        with st.expander("Download today's hourly e-mail file"):
+            if st.button("Build the Excel", key="hm_build"):
                 st.session_state["hm_files"] = hourly.preview(config.now_ist().date().isoformat())
             for name, data, mime in st.session_state.get("hm_files", []):
                 st.download_button(name, data, file_name=name, mime=mime, key=f"dl_{name}",

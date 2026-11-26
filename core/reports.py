@@ -228,6 +228,165 @@ def production_mail_html(rows: pd.DataFrame, m: Masters | None, day: str,
     return "".join(out)
 
 
+# ------------------------------------------------------------------ hourly batching mail (26 Nov)
+
+def po_quantities(lines: pd.DataFrame) -> tuple[dict, set, list[dict]]:
+    """{(indent_id, sku key): PO qty or None = not on the PO}, the indents whose PO has qty per item
+    (PO_Item_Map links used), and the PO-only items (on a PO, not on the indent)."""
+    from core.models import IndentLine
+    from core.sheets import SheetError
+    try:
+        po = indents.read_po_freeze()
+    except SheetError:
+        return {}, set(), []
+    out, ids, extras = {}, set(), []
+    if lines is None or lines.empty:
+        return out, ids, extras
+    for iid, g in lines.groupby("indent_id"):
+        info = indents.po_info(po, iid)
+        if info["qty"] is None:
+            continue
+        ids.add(iid)
+        first = g.iloc[0]
+        items = [IndentLine(parent_sku=r["parent_sku"], customer_sku_name=r["customer_sku_name"],
+                            variety=r.get("variety", ""), lot=r.get("lot", ""), qty=r["qty"])
+                 for r in g.to_dict("records")]
+        for r in indents.po_vs_indent(items, info, customer=str(first["customer"])):
+            if r["indent_qty"] is not None:
+                out[(iid, " ".join(str(r["customer_sku_name"]).split()).casefold())] = r["po_qty"]
+            elif r["po_qty"]:
+                extras.append({"day": first["delivery_date"], "City": first["city"], "Customer": first["customer"],
+                               "Delivery point": first["store"], "Customer SKU Name": r["customer_sku_name"],
+                               "PO qty": r["po_qty"]})
+    return out, ids, extras
+
+
+def batching_view(rows: pd.DataFrame, m: Masters | None, day: str) -> pd.DataFrame:
+    """The Batching sheet of one delivery day (as on the page): indent qty, PO qty, difference, status."""
+    pc = production_calc
+    if rows is None or rows.empty:
+        return pd.DataFrame()
+    po_qty, po_ids, extras = po_quantities(rows)
+    return pc.with_po(pc.batching(rows, m), po_qty, po_ids, [e for e in extras if e["day"] == day])
+
+
+_ORDER = {"PO lower": 0, "Not on PO": 1, "Not on indent": 2, "PO higher": 3, "No PO yet": 4, "Match": 5}
+
+
+def _spec_missing(v) -> bool:
+    t = str(v or "").strip().casefold()
+    return not t or t == "-" or t.startswith(production_calc.NOT_IN_BASE.casefold()) \
+        or t.startswith(production_calc.PENDING.casefold())
+
+
+def _q(v, sign: bool = False) -> str:
+    if v is None or v == "" or (not isinstance(v, str) and pd.isna(v)):
+        return ""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    return ("+" if sign and f > 0 else "") + fmt_num(f)
+
+
+def _batch_table(df: pd.DataFrame) -> str:
+    left = {"Customer SKU Name", "Spec"}
+    th = "".join(
+        f"<th style='padding:8px 9px;font-size:13px;font-weight:600;color:#000;background:{MAIL['head']};"
+        f"text-align:{'left' if c in left else 'center'};white-space:nowrap'>{html.escape(str(c))}</th>"
+        for c in df.columns)
+    body = []
+    for rec in df.to_dict("records"):
+        tds = []
+        for c in df.columns:
+            v = rec[c]
+            fill = ""
+            if c == "Status" and v in production_calc.STATUS_COLOURS:
+                fill = f"background:#{production_calc.STATUS_COLOURS[v]};"
+            tds.append(f"<td style='padding:7px 9px;font-size:13px;border-bottom:1px solid #e3e8e5;color:#000;"
+                       f"text-align:{'left' if c in left else 'center'};{fill}'>{html.escape(str(v))}</td>")
+        body.append(f"<tr>{''.join(tds)}</tr>")
+    return ("<table role='presentation' cellspacing='0' cellpadding='0' align='center' width='100%' "
+            f"style='border-collapse:collapse;width:100%;border:1px solid {MAIL['line']};"
+            f"font-family:Arial,Helvetica,sans-serif'><tr>{th}</tr>{''.join(body)}</table>")
+
+
+def batching_blocks(view: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
+    """One block per city · customer · delivery point; rows needing attention first, numbered."""
+    if view is None or view.empty:
+        return []
+    many = view["City"].nunique() > 1
+    has_var = "Variety" in view.columns and view["Variety"].astype(str).str.strip().astype(bool).any()
+    out = []
+    for (city, cust, point), part in view.groupby(["City", "Customer", "Delivery point"], sort=False):
+        part = part.assign(_o=part["Status"].map(lambda x: _ORDER.get(x, 9))).sort_values("_o", kind="stable")
+        df = pd.DataFrame({"Customer SKU Name": part["Customer SKU Name"]})
+        if has_var:
+            df["Variety"] = part["Variety"].values
+        df["Spec"] = [("spec missing" if _spec_missing(x) else x) for x in part["Spec"]]
+        df["Indent"] = [_q(x) for x in part["Indent qty"]]
+        df["PO"] = [_q(x) for x in part["PO qty"]]
+        df["Diff"] = [_q(x, sign=True) for x in part["Difference"]]
+        df["Status"] = part["Status"].values
+        head = " · ".join(([city] if many else []) + [cust] + ([point] if str(point) != str(cust) else []))
+        out.append((head, production_calc.numbered(df.reset_index(drop=True))))
+    return out
+
+
+def batching_counts(view: pd.DataFrame) -> list[tuple[str, int]]:
+    if view is None or view.empty:
+        return [("Lines", 0)]
+    st_ = view["Status"].value_counts()
+    return [("Lines", len(view)), ("PO matched", int(st_.get("Match", 0))),
+            ("Short / not on PO", int(st_.get("PO lower", 0) + st_.get("Not on PO", 0))),
+            ("No PO yet", int(st_.get("No PO yet", 0))),
+            ("Spec missing", int(sum(_spec_missing(x) for x in view["Spec"])))]
+
+
+def batching_mail_html(view: pd.DataFrame, day: str, slot_label: str, name: str = "",
+                       scope: str = "everything") -> str:
+    """26 Nov (user): the hourly e-mail carries only the Batching sheet."""
+    font = "font-family:Arial,Helvetica,sans-serif"
+    tiles = "".join(
+        f"<td align='center' style='padding:10px 16px'><div style='font-size:22px;font-weight:700;color:#000'>"
+        f"{v}</div><div style='font-size:11px;color:#000;text-transform:uppercase;letter-spacing:.04em'>{k}</div></td>"
+        for k, v in batching_counts(view))
+    out = [f"<div style='background:#ffffff;padding:24px 8px;{font}'>",
+           "<table role='presentation' align='center' cellspacing='0' cellpadding='0' "
+           f"style='max-width:1000px;width:100%;margin:0 auto;background:#ffffff;border-radius:10px;border:1px solid {MAIL['line']}'>",
+           f"<tr><td align='center' style='background:{MAIL['band']};color:#000;padding:18px 16px;border-radius:10px 10px 0 0'>"
+           "<div style='font-size:22px;font-weight:700'>Batching sheet</div>"
+           f"<div style='font-size:15px;margin-top:4px'>Delivery {fmt_day(day)} &nbsp;·&nbsp; as of {slot_label}</div></td></tr>",
+           f"<tr><td align='center' style='padding:14px 16px 4px;font-size:14px;color:#000'>"
+           f"Hello{(' ' + html.escape(name)) if name else ''}, here is the batching sheet ({html.escape(scope)}). "
+           "The full sheet is attached as Excel.</td></tr>",
+           f"<tr><td align='center'><table role='presentation' align='center'><tr>{tiles}</tr></table></td></tr>"]
+    blocks = batching_blocks(view)
+    if not blocks:
+        out.append("<tr><td align='center' style='padding:20px;color:#000'>No indents.</td></tr>")
+    for head, df in blocks:
+        out.append(f"<tr><td align='center' style='padding:20px 12px 4px'>"
+                   f"<div style='font-size:17px;font-weight:700;color:#000;margin-bottom:8px'>{html.escape(head)}</div>"
+                   f"{_batch_table(df)}</td></tr>")
+    out.append("<tr><td align='center' style='padding:22px 12px;font-size:12px;color:#000'>"
+               "Red = PO lower or not on the PO · yellow = PO higher · orange = not on the indent. "
+               "Sent by the MT Indent app.</td></tr></table></div>")
+    return "".join(out)
+
+
+def batching_mail_files(view: pd.DataFrame, day: str, slot_label: str) -> list[tuple[str, bytes, str]]:
+    if view is None or view.empty:
+        return []
+    stamp = str(day).replace("-", "")
+    hh = slot_label.split(",")[0].replace(":", "").replace(" ", "")
+    df = production_calc.numbered(view.reset_index(drop=True))
+    for c in ("Indent qty", "PO qty", "Difference"):
+        df[c] = [_q(x, sign=c == "Difference") for x in df[c]]
+    data = xlsx({"Batching": df}, row_fill=production_calc.STATUS_COLOURS)
+    return [(f"Batching_{stamp}_{hh}.xlsx", data,
+             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")]
+
+
 # ------------------------------------------------------------------ SO / PO
 
 def _num(df: pd.DataFrame) -> pd.DataFrame:
