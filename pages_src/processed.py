@@ -270,9 +270,10 @@ GRID_CSS = """<style>
 .st-key-pg_grid [data-baseweb="select"] > div {min-height:36px; border-color:#9AA5B1; background:#FFFFFF;}
 .st-key-pg_grid [data-testid="stNumberInputContainer"], .st-key-pg_grid [data-testid="stTextInputRootElement"]
   {border:1px solid #9AA5B1; border-radius:8px; background:#FFFFFF;}
-.pg-h {font-size:0.74rem; font-weight:700; color:#FFFFFF; line-height:1.25; background:#0C447C;
-       border-radius:6px; padding:6px 6px; min-height:58px; display:flex; align-items:center;
-       justify-content:center; text-align:center;}
+.pg-h {font-size:0.76rem; font-weight:700; color:#0C447C; line-height:1.25; background:transparent;
+       padding:10px 4px; min-height:58px; display:flex; align-items:center; justify-content:center; text-align:center;}
+.st-key-pg_head {background:#E6F1FB; border-bottom:3px solid #185FA5; border-radius:10px 10px 0 0;
+                 min-width:%dpx; margin-bottom:6px;}
 .pg-lk {font-size:0.84rem; font-weight:700; background:#F1F4F7; color:#1F2933; border-radius:6px; padding:8px 6px;
         white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:36px; text-align:center;}
 .pg-na {font-size:0.8rem; color:#9AA5B1; background:#F6F7F9; border-radius:8px; min-height:36px;
@@ -300,7 +301,7 @@ GRID_CSS = """<style>
 [class*="st-key-pgb_dump_"] [data-testid="stNumberInputContainer"] {border-color:#7F77DD;}
 [class*="st-key-pg_lot_"] {border:1px solid #D5DCE4; border-radius:12px; padding:8px; margin-bottom:8px;
                            min-width:%dpx; background:#FFFFFF;}
-</style>""" % (1280, 1300)
+</style>""" % (1280, 1300, 1300)
 
 
 def _blank(v) -> bool:
@@ -455,9 +456,10 @@ def _grid_body(rows, lots, packs, day, city, user, key) -> None:
                "boxes · scroll sideways for more columns →")
     title = {c[0]: c[1] for c in COLS}
     with st.container(key="pg_grid"):
-        head = st.columns(ROW_W)
-        for col, f in zip(head, HEAD):
-            col.markdown(f"<div class='pg-h'>{title[f]}</div>", unsafe_allow_html=True)
+        with st.container(key="pg_head"):
+            head = st.columns(ROW_W)
+            for col, f in zip(head, HEAD):
+                col.markdown(f"<div class='pg-h'>{title[f]}</div>", unsafe_allow_html=True)
         for i, ln in enumerate(rows):
             lot = lots.get(ln["lot_id"])
             if lot is None:
