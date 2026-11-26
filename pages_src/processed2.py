@@ -213,7 +213,7 @@ def _body(its: dict, box: dict, lines, day: str, city: str, user: User) -> None:
             for k in keys:
                 _item(its[k], box[k], lines, day, city, user, many=len(all_t) > 1)
     if done_keys:
-        with st.expander(f"Done today · {len(done_keys)} item(s)"):
+        with st.expander(f"Done today · {len(done_keys)} item(s)", expanded=True):
             for k in done_keys:
                 it, e = its[k], box[k]
                 t = p2.total(it, e["lines"], e["tbl"])
@@ -222,8 +222,10 @@ def _body(its: dict, box: dict, lines, day: str, city: str, user: User) -> None:
                               f"{it['table_no']} ✓ {_name(it)} · sum {pr.pct(t['sum'])} · eff "
                               f"{pr.pct(t['efficiency'])}</span> <span class='p2-tx'>MT {t['mt_kg']:,.1f} · GT "
                               f"{t['gt_kg']:,.1f} · Dump {t['dump_kg']:,.1f} kg</span>", unsafe_allow_html=True)
-                if user.is_owner and c[1].button("Reopen", key=f"p2_re_{_iid(day, city, k)}", width="stretch"):
-                    _write(it, e, "draft", day, city, user, "reopened")
+                if user.is_owner and c[1].button("✎ Edit", key=f"p2_re_{_iid(day, city, k)}", width="stretch",
+                                                   help="Open this table again to change or add customer lots"):
+                    st.session_state["p2_open"] = it["table_no"]
+                    _write(it, e, "draft", day, city, user, "opened again for editing")
 
 
 def _item(it: dict, e: dict, lines, day: str, city: str, user: User, many: bool) -> None:
