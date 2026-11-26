@@ -93,9 +93,9 @@ def render(user: User) -> None:
         _preview(user)
         return
 
-    if not st.toggle("Phone view", key="pr_phone", help="One lot at a time (cards), easier on a phone"):
-        _grid(raw, lines, day, city, user)
-        return
+    # 26 Nov (user): one view on laptop and phone (cards stack on a phone); the old card flow is kept below, unused
+    _grid(raw, lines, day, city, user)
+    return
     fruits = sorted({str(x) for x in raw["parent_sku"] if str(x).strip()}, key=str.casefold)
     fruit = st.pills("Fruit", fruits, key=f"pr_fruit_{day}")
     if fruit:
