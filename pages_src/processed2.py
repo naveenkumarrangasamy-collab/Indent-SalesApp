@@ -68,6 +68,16 @@ CSS = """<style>
 .p2-sum > div {display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;}
 .p2-bar {height:8px; border-radius:999px; background:#E2E8F0; overflow:hidden; margin:5px 0;}
 .p2-bar div {height:100%%;}
+.p2-view {border:1px solid #BFDBFE; border-radius:10px; overflow:hidden; margin:6px 0 4px 0; font-size:0.8rem;}
+.p2-vh {background:#F4F8FE; color:#0C447C; font-weight:800; padding:5px 10px; display:flex;
+  justify-content:space-between; flex-wrap:wrap; gap:6px;}
+.p2-vh span:last-child {border-radius:999px; padding:1px 10px;}
+.p2-view table {width:100%%; border-collapse:collapse;}
+.p2-view th {background:#fff; color:#475569; font-size:0.72rem; padding:4px 6px; text-align:center;
+  border-bottom:1px solid #E2E8F0;}
+.p2-view td {padding:4px 6px; text-align:center; font-weight:700; color:#000; border-bottom:1px solid #F1F5F9;}
+.p2-vt td {background:#EFF6FF; color:#1E3A8A; font-weight:800;}
+.p2-vf {display:flex; gap:14px; flex-wrap:wrap; padding:5px 10px; font-weight:800;}
 .p2-note {border-radius:10px; padding:8px 10px; font-size:0.82rem; font-weight:700; margin-bottom:8px;}
 [class*="st-key-p2sub_"] button:not(:disabled) {background:#16A34A; border-color:#15803D; color:#fff;
   font-weight:800;}
@@ -139,8 +149,41 @@ def _num(label: str, key: str, value) -> None:
 def _desc(it: dict) -> str:
     v = f" · <span class='p2-var'>{it['variety']}</span>" if it.get("variety") else ""
     unit = "trays" if pa.box_only(it.get("parent_sku", "")) else "boxes"
+    pcs = f" · <b>{it['taken_pcs']:,.0f} pcs</b>" if it.get("taken_pcs") else ""
     return (f"{it.get('parent_sku', '')}{v} · {it.get('size', '')} · {pr._f(it['boxes_moved']):g} {unit} · "
-            f"{it['taken_kg']:,.1f} kg")
+            f"{it['taken_kg']:,.1f} kg{pcs}")
+
+
+def _view(it: dict, e: dict, many: bool = False) -> str:
+    """Read-only table of what is SAVED for an item (not what is being typed)."""
+    sv = e.get("saved")
+    if not sv or not (sv["lines"] or any(sv["tbl"].values())):
+        return ""
+    lines = [{"pack": p, "mt_packs": n, "mt_loose_kg": kg} for p, n, kg in sv["lines"]]
+    t = p2.total(it, lines, sv["tbl"])
+    piece = bool(t["x"])
+    body, pcs_all = "", 0.0
+    for ln, kg in zip(lines, t["mt_per_line"]):
+        pcs = p2.line_pcs(ln["pack"], ln["mt_packs"])
+        pcs_all += pcs
+        body += (f"<tr><td><b>{ln['pack']}</b></td><td>{ln['mt_packs']:g}</td><td>{ln['mt_loose_kg']:g}</td>"
+                 f"<td>{kg:,.1f}</td>" + (f"<td>{pcs:,.0f}</td>" if piece else "") + "</tr>")
+    body += (f"<tr class='p2-vt'><td>Total MT</td><td></td><td></td><td>{t['mt_kg']:,.1f}</td>"
+             + (f"<td>{pcs_all:,.0f}</td>" if piece else "") + "</tr>")
+    bg, fg = SUM_COL[p2.state_of(t)]
+    word = "Submitted" if e["status"] == "submitted" else "Saved draft"
+    taken = f"{pr._f(it['boxes_moved']):g} boxes · {it['taken_kg']:,.1f} kg" + (
+        f" · {it['taken_pcs']:,.0f} pcs" if it.get("taken_pcs") else "")
+    return (f"<div class='p2-view'><div class='p2-vh'><span>{word}"
+            + (f" · {_name(it)}" if many else "") + f" · taken {taken}</span>"
+            f"<span style='background:{bg};color:{fg}'>Sum {pr.pct(t['sum'])} · Eff {pr.pct(t['efficiency'])}"
+            "</span></div><table><tr><th>Customer lot</th><th>Packs</th><th>Loose kg</th><th>MT kg</th>"
+            + ("<th>Pcs</th>" if piece else "") + f"</tr>{body}</table><div class='p2-vf'>"
+            f"<span style='color:#1E3A8A'>Left over {t['left_kg']:,.1f} kg</span>"
+            f"<span style='color:#9F1239'>GT {t['gt_kg']:,.1f} kg</span>"
+            f"<span style='color:#5B21B6'>Dump {t['dump_kg']:,.1f} kg</span>"
+            f"<span>Used {t['used_kg']:,.1f} kg</span>"
+            + (f"<span>{e['comment']}</span>" if e.get("comment") else "") + "</div></div>")
 
 
 def _name(it: dict) -> str:
@@ -209,6 +252,10 @@ def _body(its: dict, box: dict, lines, day: str, city: str, user: User) -> None:
             if c[2].button("▲ Close" if is_open else "▼ Open", key=f"p2_tog_{t}", width="stretch"):
                 st.session_state["p2_open"] = None if is_open else t
                 st.rerun(scope="fragment")
+            if not is_open:
+                html = "".join(_view(its[k], box[k], many=len(keys) > 1) for k in keys)
+                if html:
+                    st.markdown(html, unsafe_allow_html=True)
         if is_open:
             for k in keys:
                 _item(its[k], box[k], lines, day, city, user, many=len(all_t) > 1)
@@ -222,6 +269,7 @@ def _body(its: dict, box: dict, lines, day: str, city: str, user: User) -> None:
                               f"{it['table_no']} ✓ {_name(it)} · sum {pr.pct(t['sum'])} · eff "
                               f"{pr.pct(t['efficiency'])}</span> <span class='p2-tx'>MT {t['mt_kg']:,.1f} · GT "
                               f"{t['gt_kg']:,.1f} · Dump {t['dump_kg']:,.1f} kg</span>", unsafe_allow_html=True)
+                st.markdown(_view(it, e, many=True), unsafe_allow_html=True)
                 if user.is_owner and c[1].button("✎ Edit", key=f"p2_re_{_iid(day, city, k)}", width="stretch",
                                                    help="Open this table again to change or add customer lots"):
                     st.session_state["p2_open"] = it["table_no"]

@@ -10,6 +10,7 @@ Tab Processed_Table: every save / submit writes a full snapshot of the item (one
 'table' row), tied by save_id; the newest snapshot of an item wins. status = draft | submitted."""
 from __future__ import annotations
 
+import re
 import uuid
 
 import pandas as pd
@@ -24,7 +25,8 @@ LOW, HIGH = 0.97, pr.MAX_SUM
 TRACK_TAB = "Production_Tracking_2"
 TRACK_HEAD = ["Production Date", "City", "Table #", "Parent SKU Name", "Origin", "Variety", "Brand", "Size Spec",
               "Purchase Lot weight in Kgs (A)", "# of Pcs in Purchase lot",
-              "# Qty Moved to Grading table (Vendor Lots / Boxes) (B)", "Production prod Classification",
+              "# Qty Moved to Grading table (Vendor Lots / Boxes) (B)", "Total Pcs taken (B x Pcs)",
+              "Production prod Classification",
               "Cux Lot", "MT Ready (Dispatch) (Cux Lots) (D1)", "MT Ready (Disptach) (Loose Kg) (D2)",
               "MT Ready in Kgs (K)", "Left over MT Ready in Kgs (I)", "GT Stock in Kgs (L)", "Dump in Kgs (M)",
               "Actual NW used for Production Kgs (J = H - I)", "Category Efficiency% (K / J)",
@@ -74,6 +76,12 @@ def total(item: dict, mt_lines: list[dict], tbl: dict) -> dict:
     return {"x": t["x"], "taken_kg": t["taken_kg"], "left_kg": t["left_kg_total"], "used_kg": j, "mt_kg": k,
             "mt_per_line": per, "gt_kg": t["gt_kg_total"], "dump_kg": t["dump_kg_total"], "out_kg": out,
             "to_go": j - out, "sum": out / j if j > 0 else None, "efficiency": k / j if j > 0 else None}
+
+
+def line_pcs(pack: str, packs) -> float:
+    """Pieces in a customer lot line: '2PC' x 50 packs = 100 pcs; kg packs = 0."""
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*PC", str(pack or "").strip(), flags=re.I)
+    return float(m.group(1)) * pr._f(packs) if m else 0.0
 
 
 def state_of(t: dict) -> str:
@@ -160,7 +168,8 @@ def track_rows(lots: pd.DataFrame, saved: pd.DataFrame) -> list[list]:
         for key, it in items(grp).items():
             first = [day, city, f"Table {it['table_no']}", it.get("parent_sku", ""), it.get("origin", ""),
                      it.get("variety", ""), it.get("brand", ""), it.get("size", ""), _r(it.get("box_kg"), 3),
-                     pr._f(it.get("pcs_per_box")) or "", _r(it.get("boxes_moved")), it.get("stock_type", "")]
+                     pr._f(it.get("pcs_per_box")) or "", _r(it.get("boxes_moved")), _r(it.get("taken_pcs"), 0) or "",
+                     it.get("stock_type", "")]
             s = done.get(f"{day}|{city}|{key}")
             if not s:
                 rows.append(first + [""] * 10 + ["Not started", ""])
