@@ -31,6 +31,8 @@ RETURN_GRADING = "Return_Grading"    # returns of day D graded MT / GT / Dump (l
 CITY_GRADING = "City_Grading"        # 25 Nov: MT / GT / Dump per city + fruit + take-out option (last row wins)
 DISPATCH_LOCKS = "Dispatch_Locks"    # 25 Nov: owner unlocks of a dispatched indent (doc_no unlocked)
 RETURN_USE = "Return_Use"            # MT stock used per SKU in Pre-production (last row per day + group + SKU)
+PUSH_SUBS = "Push_Subs"                # 26 Nov: browser push subscriptions per login e-mail
+PUSH_KEYS = "Push_Keys"                # 26 Nov: the app's push key (made once)
 BATCHING_PLAN = "Batching_Plan"      # pieces (kg) used from those boxes (last row per SKU + spec wins)
 
 TABS: dict[str, list[str]] = {
@@ -84,6 +86,8 @@ TABS: dict[str, list[str]] = {
                      "customer_sku_name", "parent_sku", "variety", "unit", "spec", "returned", "mt", "gt", "dump"],
     RETURN_USE: ["saved_at", "saved_by", "use_date", "city", "group", "customer_sku_name", "parent_sku", "variety",
                  "unit", "qty"],
+    PUSH_SUBS: ["Email", "Endpoint", "P256dh", "Auth", "Device", "Status", "Updated_At"],
+    PUSH_KEYS: ["Key", "Value", "Created_At"],
 }
 
 MASTER_TABS = [SKU_MAP, STORE_MAP, VARIETIES, ACCESS]

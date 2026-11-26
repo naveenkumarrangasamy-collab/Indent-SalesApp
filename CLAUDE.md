@@ -696,17 +696,19 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   cell coloured as the page); attachment `Batching_<date>_<hh>.xlsx` (`reports.batching_view /
   batching_mail_html / batching_mail_files`; `reports.po_quantities` shared with the Batching page).
 - **PO alerts on devices** (`core/alerts.py`, tests `tests/test_alerts.py`): to active **Warehouse / Owner /
-  Creator** of the indent's city (no cities = all), addressed by **login e-mail** (one private ntfy channel per
-  e-mail: keyed hash with secret `alert_key`, else `pin_pepper`; server secret `alert_server`, default ntfy.sh).
-  Each person turns alerts on once per device: sidebar **🔔 PO alerts on this device** (Turn on alerts / ntfy
-  app channel / Send test alert). Alerts show **only the Customer SKU name + the difference**:
-  **PO difference** (one-PO customers on upload; Swiggy at End of POs; |diff| ≥ `alert_min_units` 20 or ≥
-  `alert_min_pct` 10 %), **New SKU in PO** (every PO), **Spec not mapped** (PO items without Spec-Size; warehouse
-  and owners). Background, never blocks a PO; logged in Mail_Log (kind alert / alert-test).
-- **Sign-in prompt** (`common.alerts_prompt`, called in app.py): Warehouse / Owner / Creator get a dialog once
-  per sign-in explaining why (the 3 alerts) and how (Turn on alerts → Subscribe → Allow; iPhone: Add to Home
-  Screen first), with Send test alert / **Done, alerts are on** (logged in Mail_Log as kind `alert-setup`, then
-  never asked again) / Later. Browser notifications are the default; the ntfy app is optional.
+  Creator** of the indent's city (no cities = all), addressed by **login e-mail**. Alerts show **only the Customer
+  SKU name + the difference**: **PO difference** (one-PO customers on upload; Swiggy at End of POs; |diff| ≥
+  `alert_min_units` 20 or ≥ `alert_min_pct` 10 %), **New SKU in PO** (every PO), **Spec not mapped** (PO items
+  without Spec-Size; warehouse and owners). Background, never blocks a PO; logged in Mail_Log (kind alert).
+- **Browser push, no app / account (user 26 Nov 12:51: "no ntfy step")** (`core/webpush.py`, tests
+  `tests/test_webpush.py` incl. the RFC 8291 vector): the user taps **Allow alerts on this device** (component
+  `pages_src/push/index.html`, served by the app; service worker `pages_src/push/sw.js`), the browser asks once,
+  the subscription is saved per login e-mail in tab **Push_Subs** (last row per endpoint; Status off when the push
+  service says 404/410). Keys: secret `vapid_private_key` (PEM) else made once in tab **Push_Keys** (base64 DER).
+  Sending = own Web Push code (VAPID ES256 + aes128gcm) with `cryptography`, no pywebpush. iPhone needs Add to Home
+  Screen first. `pages_src/push_ui.py`: hidden check per device (sidebar), **sign-in dialog** for Warehouse / Owner /
+  Creator when this device has no alerts yet (once per sign-in; why + how; Allow / Send test alert / Later), and
+  the sidebar box **🔔 PO alerts on this device**.
 
 ## 6. Code map (repo root)
 

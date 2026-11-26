@@ -1,8 +1,8 @@
 """Device alerts on PO upload (26 Nov, user-approved preview).
 
 Sent to the people who work on stock: Access rows with role Warehouse, Owner or Creator (active), in the
-indent's city (no cities = all). Addressed by the **login e-mail**: every e-mail has its own private alert
-channel; each person turns alerts on once per device (sidebar → "PO alerts on this device").
+indent's city (no cities = all). Addressed by the **login e-mail**: browser push to every device where that
+person tapped "Allow alerts on this device" (core/webpush.py; no extra app, no account).
 
 Three alerts, each only the Customer SKU name as entered and the difference:
 - **PO difference**: a one-PO customer's PO, or End of POs for multi-PO customers (Swiggy), with items whose
@@ -10,30 +10,19 @@ Three alerts, each only the Customer SKU name as entered and the difference:
 - **New SKU in PO**: items on the PO that are not on the indent (every PO, also Swiggy's).
 - **Spec not mapped**: items on the PO with no Spec-Size (New tab / New Mapping Combination).
 
-Delivery: ntfy (secret `alert_server`, default https://ntfy.sh). The channel name is a keyed hash of the
-e-mail (secret `alert_key`, else `pin_pepper`), so nobody can guess another person's channel. Sending never
-blocks or fails a PO upload; every alert is logged in Mail_Log (kind "alert").
+Sending never blocks or fails a PO upload; every alert is logged in Mail_Log (kind "alert").
 """
 from __future__ import annotations
 
-import hashlib
-import hmac
-import json
 import threading
-import urllib.request
 
 from core import config
 from core.models import fmt_num
 
-APP_URL = "https://indent-salesapp.streamlit.app"
 ALERT_ROLES = ("warehouse", "owner", "owner_full")
 
 
 # ------------------------------------------------------------------ settings
-
-def server() -> str:
-    return str(config.get("alert_server", "https://ntfy.sh") or "https://ntfy.sh").rstrip("/")
-
 
 def min_units() -> float:
     try:
@@ -51,17 +40,6 @@ def min_pct() -> float:
 
 def _norm(email: str) -> str:
     return str(email or "").strip().casefold()
-
-
-def topic(email: str) -> str:
-    """This person's private alert channel (same on every device)."""
-    key = str(config.get("alert_key", "") or config.get("pin_pepper", "") or config.sheet_id() or "mt-indent")
-    h = hmac.new(key.encode(), _norm(email).encode(), hashlib.sha256).hexdigest()[:20]
-    return f"mtindent-{h}"
-
-
-def subscribe_link(email: str) -> str:
-    return f"{server()}/{topic(email)}"
 
 
 # ------------------------------------------------------------------ who
@@ -150,14 +128,11 @@ def spec_missing(header, rows: list[dict], m) -> list[str]:
 # ------------------------------------------------------------------ send
 
 def publish(email: str, title: str, lines: list[str], tags=None, priority: int = 3,
-            timeout: float = 10.0) -> tuple[bool, str]:
-    body = json.dumps({"topic": topic(email), "title": title, "message": "\n".join(lines) or title,
-                       "tags": list(tags or []), "priority": int(priority), "click": APP_URL}).encode("utf-8")
-    req = urllib.request.Request(server(), data=body, method="POST",
-                                 headers={"Content-Type": "application/json"})
+            kind: str = "") -> tuple[bool, str]:
+    """Browser push to every device of this person (tags / priority kept for older callers)."""
+    from core import webpush
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return 200 <= resp.status < 300, f"HTTP {resp.status}"
+        return webpush.send_to(email, title, lines, tag=kind)
     except Exception as e:  # noqa: BLE001 - an alert must never break the app
         return False, f"{type(e).__name__}: {e}"[:300]
 
@@ -167,7 +142,7 @@ def send(to: list[str], msgs: list[dict], ref: str = "") -> list[tuple[str, str,
     results = []
     for msg in msgs:
         for email in to:
-            ok, why = publish(email, msg["title"], msg["lines"], msg.get("tags"), msg.get("priority", 3))
+            ok, why = publish(email, msg["title"], msg["lines"], kind=msg["kind"])
             results.append((email, msg["title"], ok, why))
             try:
                 rec.log("alert", f"{ref} {msg['kind']}".strip(), email, ok, f"{msg['title']} · {why}")
@@ -221,8 +196,11 @@ def send_test(email: str) -> tuple[bool, str]:
         ("Spec not mapped · Swiggy · Swiggy WH2", ["1Pc - Imported Avocado"], ["straight_ruler"], 3),
     ]
     oks = []
-    for title, lines, tags, prio in samples:
-        ok, why = publish(email, "[TEST] " + title, lines, tags, prio)
+    from core import webpush
+    if not webpush.subscriptions(email):
+        return False, "Alerts are not on for any of your devices yet: tap Allow alerts on this device first."
+    for i, (title, lines, _tags, _prio) in enumerate(samples):
+        ok, why = publish(email, "[TEST] " + title, lines, kind=f"test{i}")
         oks.append((ok, why))
     from core import recipients as rec
     good = all(ok for ok, _ in oks)

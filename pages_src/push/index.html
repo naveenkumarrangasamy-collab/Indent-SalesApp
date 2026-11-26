@@ -1,0 +1,68 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  body{margin:0;font-family:"Source Sans Pro",system-ui,sans-serif;font-size:15px;color:#1a1a1a;background:transparent}
+  button{width:100%;padding:10px 14px;border:0;border-radius:8px;background:#1f6f4a;color:#fff;font-size:15px;
+         font-weight:600;cursor:pointer}
+  button:disabled{opacity:.6;cursor:default}
+  .msg{margin-top:6px;font-size:13px;color:#555}.ok{color:#1f6f4a;font-weight:600}.bad{color:#b42318}
+</style></head>
+<body><div id="root"></div>
+<script>
+(function(){
+  const post = (type, extra) => window.parent.postMessage(Object.assign({isStreamlitMessage: true, type}, extra || {}), "*");
+  let args = {}, last = null, busy = false, state = null;
+  const root = document.getElementById("root");
+  const setValue = v => { const s = JSON.stringify(v); if (s === last) return; last = s;
+                          post("streamlit:setComponentValue", {value: v, dataType: "json"}); };
+  const height = () => post("streamlit:setFrameHeight", {height: args.mode === "check" ? 0 : root.scrollHeight + 4});
+  const key = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); s += "=".repeat((4 - s.length % 4) % 4);
+                     return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
+  const supported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+
+  async function current(){
+    if (!supported()) return {state: "unsupported"};
+    if (Notification.permission === "denied") return {state: "denied"};
+    const reg = await navigator.serviceWorker.getRegistration("sw.js").catch(() => null);
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if (sub && Notification.permission === "granted") return {state: "on", sub: sub.toJSON(), ua: navigator.userAgent};
+    return {state: "off"};
+  }
+  async function turnOn(){
+    busy = true; draw();
+    try {
+      const p = await Notification.requestPermission();
+      if (p !== "granted") { state = {state: p === "denied" ? "denied" : "off"}; }
+      else {
+        const reg = await navigator.serviceWorker.register("sw.js");
+        await navigator.serviceWorker.ready;
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) sub = await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: key(args.vapid)});
+        state = {state: "on", sub: sub.toJSON(), ua: navigator.userAgent};
+      }
+    } catch (e) { state = {state: "error", error: String(e && e.message || e)}; }
+    busy = false; setValue(state); draw();
+  }
+  function draw(){
+    if (args.mode === "check") { root.innerHTML = ""; height(); return; }
+    const s = (state || {}).state;
+    let html = "";
+    if (s === "on") html = '<div class="msg ok">✓ Alerts are on for this device.</div>';
+    else if (s === "unsupported") html = '<div class="msg bad">This browser cannot show alerts. On iPhone: Share → Add to Home Screen, open the app from there and try again.</div>';
+    else if (s === "denied") html = '<div class="msg bad">Notifications are blocked for this site. Allow them in the browser\'s site settings (lock icon next to the address), then try again.</div>';
+    else html = '<button id="b"' + (busy ? " disabled" : "") + '>' + (busy ? "Turning on…" : (args.label || "Allow alerts on this device")) + '</button>'
+               + (s === "error" ? '<div class="msg bad">Could not turn on: ' + (state.error || "") + '</div>' : "");
+    root.innerHTML = html;
+    const b = document.getElementById("b"); if (b) b.onclick = turnOn;
+    height();
+  }
+  window.addEventListener("message", async ev => {
+    const d = ev.data || {};
+    if (d.type !== "streamlit:render") return;
+    args = d.args || {};
+    if (state === null) { state = await current(); setValue(state); }
+    draw();
+  });
+  post("streamlit:componentReady", {apiVersion: 1});
+})();
+</script></body></html>

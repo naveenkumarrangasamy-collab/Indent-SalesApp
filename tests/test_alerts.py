@@ -45,8 +45,3 @@ def test_messages_only_names_and_diffs_with_threshold():
     assert kinds["spec"]["lines"] == ["1Pc - Imported Avocado"]
     # multi-PO customers: no differences per PO (they come at End of POs)
     assert "diff" not in {m["kind"] for m in alerts.messages(_hdr(), rows, [], with_diffs=False)}
-
-
-def test_topic_is_per_email_and_private():
-    a, b = alerts.topic("A@x.com "), alerts.topic("a@x.com")
-    assert a == b and a.startswith("mtindent-") and a != alerts.topic("c@x.com") and "x.com" not in a

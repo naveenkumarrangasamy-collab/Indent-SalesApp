@@ -52,6 +52,7 @@ st.set_page_config(page_title="MT Indent", page_icon="🧾", layout="wide")
 
 from pages_src import access, common, home, indent, login, my_indents, po_upload, production, tracker  # noqa: E402
 from pages_src import delivery_times  # noqa: E402   (Bulk indents page removed 21 Nov)
+from pages_src import push_ui  # noqa: E402   (26 Nov: browser push alerts)
 from pages_src import preprod_actual  # noqa: E402   (22 Nov: owners only while being tried)
 from pages_src import batch_city  # noqa: E402   (25 Nov: city-level Batching plan + Actual dispatch)
 from pages_src import preprod_city  # noqa: E402   (24 Nov evening: city-level pre-production, trial)
@@ -170,5 +171,5 @@ sections[last] = sections[last] + [st.Page(lambda: st.switch_page(landing), titl
 common.hide_nav_links(_away)
 nav = st.navigation(sections, expanded=True)
 common.sidebar(user)
-common.alerts_prompt(user)   # 26 Nov: ask warehouse / owners to allow PO alerts
+push_ui.prompt(user)   # 26 Nov: ask warehouse / owners to allow PO alerts (browser push)
 nav.run()
