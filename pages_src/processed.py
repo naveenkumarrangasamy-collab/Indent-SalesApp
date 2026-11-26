@@ -312,9 +312,14 @@ GRID_CSS = """<style>
 .pg-chip {display:inline-flex; align-items:center; gap:8px; border-radius:8px; padding:4px 12px; color:#fff;
   font-weight:800; font-size:0.8rem; margin-bottom:6px;}
 .pg-chip span {background:rgba(255,255,255,.95); border-radius:6px; padding:1px 8px;}
-.pg-na-l {font-size:0.72rem; font-weight:700; line-height:1.2; min-height:1.2em; margin-bottom:4px;}
-.pg-na {height:42px; border-radius:12px; background:#F1F5F9; border:2px dashed #E2E8F0; color:#94A3B8;
-  display:flex; align-items:center; justify-content:center; font-weight:700;}
+/* same label height for real boxes and 'not needed' boxes, so every box lines up */
+[class*="st-key-pgb_"] [data-testid="stWidgetLabel"] {height:2.7em; min-height:2.7em; display:flex;
+  align-items:flex-end; margin-bottom:4px;}
+.pg-na-l {font-size:0.72rem; font-weight:700; line-height:1.2; height:2.7em; display:flex; align-items:flex-end;
+  margin-bottom:4px;}
+.pg-na {height:46px; box-sizing:border-box; border-radius:12px; background:#E2E8F0; border:2px solid #CBD5E1;
+  color:#64748B; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:0.78rem;
+  cursor:not-allowed;}
 [class*="st-key-pgb_"] {border-radius:12px; padding:10px 12px; margin-bottom:10px;}
 [class*="st-key-pgb_mt_"] {background:#F4F8FE; border:2px solid rgba(96,165,250,.45);}
 [class*="st-key-pgb_gt_"] {background:#FDF4F5; border:2px solid rgba(251,113,133,.45);}
@@ -438,7 +443,8 @@ def _band_cell(f: str, ln: dict, s: dict, title: dict) -> None:
     elif f in s["need"]:
         st.number_input(lab, min_value=0.0, step=1.0, value=None, key=k, format="%g", placeholder="0")
     else:
-        st.markdown(f"<div class='pg-na-l'>{lab}</div><div class='pg-na'>–</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='pg-na-l'>{lab}</div><div class='pg-na' title='Not needed for this Cux Lot'>"
+                    "Not needed</div>", unsafe_allow_html=True)
 
 
 def _lot_block(i: int, ln: dict, lot: dict, s: dict, packs: list, title: dict, rows: list) -> None:
