@@ -97,6 +97,23 @@ def packs_for(lines: pd.DataFrame, parent: str, day: str, city: str) -> dict[str
     return {k: v for k, v in sorted(out.items()) if v > 0}
 
 
+def sum_check(r: dict) -> float | None:
+    """(K + L + M) / J of a computed line: 100 % = every kg used is accounted; lower = a box missed / lotting."""
+    j = r.get("used_kg") or 0
+    return (r["mt_kg"] + r["gt_kg_total"] + r["dump_kg_total"]) / j if j > 0 else None
+
+
+def sum_colour(v: float | None) -> tuple[str, str]:
+    """Green 98-102 %, amber 90-97 %, red otherwise (26 Nov)."""
+    if v is None:
+        return "#F1F5F9", "#64748B"
+    if 0.98 <= v <= 1.02:
+        return "#EAF3DE", "#27500A"
+    if 0.90 <= v < 0.98:
+        return "#FAEEDA", "#633806"
+    return "#FCEBEB", "#791F1F"
+
+
 def row(lot: dict, pack: str, vals: dict, day: str, city: str, comment: str = "") -> dict:
     r = compute(lot.get("box_kg"), lot.get("pcs_per_box"), lot.get("boxes_moved"), pack, vals)
     return {"production_date": day, "city": city, "parent_sku": lot.get("parent_sku", ""),

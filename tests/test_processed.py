@@ -36,3 +36,17 @@ def test_row_and_latest():
     df = pd.DataFrame([r1, r2])
     assert list(pr.latest(df)["mt_packs"]) == [710]
     assert list(pr.view(df)["Efficiency"])[0].endswith("%")
+
+
+def test_sum_check_and_colour():
+    r = {"used_kg": 10.0, "mt_kg": 7.0, "gt_kg_total": 2.0, "dump_kg_total": 1.0}
+    assert pr.sum_check(r) == 1.0 and pr.sum_colour(1.0)[1] == "#27500A"
+    r2 = dict(r, gt_kg_total=0.0)            # GT box missed -> 80 %, red
+    assert round(pr.sum_check(r2), 2) == 0.8 and pr.sum_colour(0.8)[1] == "#791F1F"
+    assert pr.sum_colour(0.93)[1] == "#633806" and pr.sum_check({"used_kg": 0}) is None
+
+
+def test_blank_boxes_save_as_zero():
+    lot = {"entry_id": "L1", "parent_sku": "Apple", "box_kg": "17.5", "pcs_per_box": "120", "boxes_moved": "10"}
+    out = pr.row(lot, "1PC", {"mt_packs": 100}, "2026-11-26", "PTP Bangalore")
+    assert out["gt_box"] == 0 and out["dump_kg"] == 0 and out["mt_packs"] == 100

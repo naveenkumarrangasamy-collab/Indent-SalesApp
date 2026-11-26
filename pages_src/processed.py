@@ -332,6 +332,20 @@ GRID_CSS = """<style>
 [class*="st-key-pgb_dump_"] [data-testid="stNumberInputContainer"],
 [class*="st-key-pgb_dump_"] [data-testid="stTextInputRootElement"] {border-color:rgba(129,140,248,.7);}
 [class*="st-key-pgb_dump_"] button {border:1px solid #A5B4FC; color:#4338CA; font-weight:800;}
+[class*="st-key-pgx_"] {background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:8px 12px;}
+.pg-xl {font-size:0.72rem; font-weight:700; color:#475569; text-align:center; margin-bottom:4px;}
+.pg-xp {height:42px; border-radius:10px; display:flex; align-items:center; justify-content:center; gap:6px;
+  font-weight:800; font-size:0.95rem;}
+.pg-xp small {font-size:0.7rem; font-weight:600;}
+[class*="st-key-pgx_"] [data-testid="stWidgetLabel"] {height:auto !important; min-height:0 !important;
+  justify-content:center; width:100%%;}
+[class*="st-key-pgx_"] [data-testid="stTextInputRootElement"] {border:2px solid #CBD5E1; border-radius:10px;}
+.pg-acc {border:2px solid #E2E8F0; border-radius:14px; padding:12px 14px; background:#fff; margin:10px 0;}
+.pg-acc-h {display:flex; justify-content:space-between; font-weight:800; font-size:0.85rem;}
+.pg-bar {height:8px; border-radius:999px; background:#E2E8F0; overflow:hidden; margin:8px 0 10px 0;}
+.pg-bar div {height:100%%; background:#16A34A;}
+.pg-lp {display:inline-block; border-radius:999px; padding:4px 12px; font-size:0.78rem; font-weight:700;
+  margin:0 6px 6px 0;}
 .st-key-pg_save button {background:linear-gradient(135deg,#16A34A 0%%,#15803D 100%%); border-color:#15803D;
   color:#fff; font-weight:800;}
 .st-key-pg_save button:disabled {background:#E2E8F0; border-color:#E2E8F0; color:#94A3B8;}
@@ -402,7 +416,7 @@ def _state(ln: dict, lot: dict) -> dict:
     vals = {f: g(f"pg_{ln['id']}_{f}") for f in NUMS}   # 26 Nov: every box can be typed; 'need' = must fill
     comment = str(g(f"pg_{ln['id']}_comment") or "").strip()
     touched = bool(pack) or any(v is not None for v in vals.values()) or bool(comment)
-    missing = ([] if pack else ["Cux Lot"]) + [f for f in need if vals[f] is None]
+    missing = [] if pack else ["Cux Lot"]   # 26 Nov: empty boxes save as 0; the sum check shows a missed box
     if pack and unit == "PC" and not piece:
         missing.append("# of Pcs in Purchase lot (fix on Pre-Production Actual)")
     cur = {"pack": pack, "comment": comment, **{f: vals[f] for f in NUMS}}
@@ -413,7 +427,7 @@ def _state(ln: dict, lot: dict) -> dict:
 
 
 def _eff_cell(s: dict, lot: dict) -> tuple[str, str, str]:
-    if not s["pack"] or s["vals"].get("mt_packs") is None:
+    if not s["pack"] or not s["touched"] or all(v is None for v in s["vals"].values()):
         return "–", "#F6F7F9", "#9AA5B1"
     c = pr.compute(lot.get("box_kg"), lot.get("pcs_per_box"), lot.get("boxes_moved"), s["pack"], s["vals"])
     if c["used_kg"] <= 0:
@@ -429,7 +443,7 @@ ROW_W = [0.6, 1.5, 1.3, 1.1, 0.9, 1.8, 1.7]
 BANDS = [  # (key, name on the chip, input fields, chip colour)
     ("mt", "MT Ready", ["mt_packs", "mt_loose_kg", "left_box", "left_kg", "left_pcs"], "#2563EB"),
     ("gt", "GT Stock", ["gt_box", "gt_kg", "gt_pcs"], "#BE123C"),
-    ("dump", "Dump", ["dump_kg", "dump_pcs", "comment"], "#4F46E5"),
+    ("dump", "Dump", ["dump_kg", "dump_pcs"], "#4F46E5"),
 ]
 _KG = {"mt": "mt_kg", "gt": "gt_kg_total", "dump": "dump_kg_total"}
 
@@ -481,13 +495,11 @@ def _lot_block(i: int, ln: dict, lot: dict, s: dict, packs: list, title: dict, r
         if not on:
             return
         comp = pr.compute(lot.get("box_kg"), lot.get("pcs_per_box"), lot.get("boxes_moved"), s["pack"], s["vals"])
-        txt, bg, fg = _eff_cell(s, lot)
         stt, sbg, sfg = (("Saved", "#DCFCE7", "#166534") if s["same"] else ("Not saved", "#FEF3C7", "#78350F")
                          if s["touched"] else ("Not entered", "#F1F5F9", "#64748B"))
-        st.markdown(f"<div class='pg-strip'><span>Category Efficiency% (K / J):<span class='pg-badge' "
-                    f"style='background:{bg};color:{fg}'>{txt}</span></span><span>Status:<span class='pg-badge' "
-                    f"style='background:{sbg};color:{sfg};border-color:{sbg}'>{stt}</span></span></div>",
-                    unsafe_allow_html=True)
+        st.markdown(f"<div class='pg-strip'><span>Fill what you have · empty boxes save as 0</span><span>Status:"
+                    f"<span class='pg-badge' style='background:{sbg};color:{sfg};border-color:{sbg}'>{stt}</span>"
+                    "</span></div>", unsafe_allow_html=True)
         for band, name, fields, colr in BANDS:
             with st.container(key=f"pgb_{band}_{ln['id']}"):
                 chip = (f"<div class='pg-chip' style='background:{colr}'>{name}"
@@ -506,6 +518,24 @@ def _lot_block(i: int, ln: dict, lot: dict, s: dict, packs: list, title: dict, r
                 for col, f in zip(cols, fields):
                     with col:
                         _band_cell(f, ln, s, title)
+        _result_row(ln, s, lot, comp, title)
+
+
+def _result_row(ln: dict, s: dict, lot: dict, comp: dict, title: dict) -> None:
+    """One slim row: efficiency, sum check, optional comment (26 Nov)."""
+    with st.container(key=f"pgx_{ln['id']}"):
+        c = st.columns([1.1, 1.6, 3.3], vertical_alignment="bottom")
+        txt, bg, fg = _eff_cell(s, lot)
+        c[0].markdown(f"<div class='pg-xl'>Efficiency (K / J)</div><div class='pg-xp' style='background:{bg};"
+                      f"color:{fg}'>{txt}</div>", unsafe_allow_html=True)
+        sc = pr.sum_check(comp) if any(v is not None for v in s["vals"].values()) else None
+        sbg, sfg = pr.sum_colour(sc)
+        lot_kg = f"<small>· {comp['lotting']:.2f} kg lotting</small>" if sc is not None else ""
+        c[1].markdown(f"<div class='pg-xl'>Sum check (K+L+M) / J</div><div class='pg-xp' style='background:{sbg};"
+                      f"color:{sfg}'>{pr.pct(sc) if sc is not None else '–'} {lot_kg}</div>", unsafe_allow_html=True)
+        with c[2]:
+            st.text_input("Operations team Comments (optional)", key=f"pg_{ln['id']}_comment",
+                          placeholder="Type a note")
 
 
 def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
@@ -534,6 +564,19 @@ def _grid_body(rows, lots, packs, day, city, user, key) -> None:
     st.caption(f"{active} of {len(rows)} line(s) active · {done} saved · grey comes from Pre-Production Actual · "
                "pick the Cux Lot, then fill MT, GT and Dump")
     title = {c[0]: c[1] for c in COLS}
+    order = list(dict.fromkeys(ln["lot_id"] for ln in rows if ln["lot_id"] in lots))
+    done_lots = {ln["lot_id"] for ln in rows if ln.get("saved") is not None}
+    focus = st.session_state.get("pg_only")
+    if focus not in lots:
+        focus = None
+    if focus:
+        f = lots[focus]
+        c1, c2 = st.columns([4, 1], vertical_alignment="center")
+        c1.markdown(f"<span class='pg-tag on'>Now: {f.get('parent_sku', '')} · {f.get('variety', '')} · Table "
+                    f"{f.get('table_no', '')}</span>", unsafe_allow_html=True)
+        if c2.button("Show all lots", key="pg_all", width="stretch"):
+            st.session_state.pop("pg_only", None)
+            st.rerun(scope="fragment")
     with st.container(key="pg_grid"):
         with st.container(key="pg_headw"):
             with st.container(key="pg_head"):
@@ -541,13 +584,23 @@ def _grid_body(rows, lots, packs, day, city, user, key) -> None:
                     col.markdown(f"<div class='pg-h'>{h}</div>", unsafe_allow_html=True)
         for i, ln in enumerate(rows):
             lot = lots.get(ln["lot_id"])
-            if lot is not None:
+            if lot is not None and (not focus or ln["lot_id"] == focus):
                 _lot_block(i, ln, lot, states[ln["id"]], packs, title, rows)
 
     todo = [(ln, states[ln["id"]]) for ln in rows if ln["id"] in states
             and states[ln["id"]]["touched"] and not states[ln["id"]]["same"]]
-    if st.button(f"Save {len(todo)} line(s)" if todo else "Save", type="primary", icon=":material/save:",
-                 key="pg_save", disabled=not todo):
+    after = done_lots | {ln["lot_id"] for ln, _s in todo}
+    nxt = next((lid for lid in order if lid not in after), None)
+    _accounted(order, lots, done_lots)
+    nl = lots.get(nxt) if nxt else None
+    c1, c2 = st.columns([1, 2.4], vertical_alignment="center")
+    only = c1.button("Save only", key="pg_save_only", disabled=not todo, width="stretch")
+    label = (f"Save & add next → {nl.get('parent_sku', '')} · Table {nl.get('table_no', '')}" if nl
+             else ("Save · all lots accounted ✓" if todo else "All lots accounted ✓"))
+    with c2.container(key="pg_save"):
+        go = st.button(label, type="primary", icon=":material/save:", key="pg_save_next",
+                       disabled=not todo, width="stretch")
+    if only or go:
         miss, keys = [], set()
         for ln, s in todo:
             n = rows.index(ln) + 1
@@ -562,13 +615,29 @@ def _grid_body(rows, lots, packs, day, city, user, key) -> None:
         st.session_state.pop("pg_bad", None)
         st.session_state.pop("pg_miss", None)
         out = [pr.row(lots[ln["lot_id"]], s["pack"], s["vals"], day, city, s["comment"]) for ln, s in todo]
-        _grid_confirm(out, todo, user)
+        _grid_confirm(out, todo, user, nxt if go else None)
     for m in st.session_state.get("pg_miss", []):
-        st.error("Fill before saving · " + m, icon=":material/error:")
+        st.error("Pick before saving · " + m, icon=":material/error:")
+
+
+def _accounted(order: list, lots: dict, done: set) -> None:
+    """Every lot put on a table today must end up processed (26 Nov): progress + what is left."""
+    if not order:
+        return
+    n = sum(1 for lid in order if lid in done)
+    pills = []
+    for lid in order:
+        lot = lots[lid]
+        name = f"{lot.get('parent_sku', '')} · {lot.get('variety', '') or '–'} · Table {lot.get('table_no', '')}"
+        pills.append(f"<span class='pg-lp' style='background:#EAF3DE;color:#27500A'>✓ {name}</span>" if lid in done
+                     else f"<span class='pg-lp' style='background:#FAEEDA;color:#633806'>{name} · not processed</span>")
+    st.markdown(f"<div class='pg-acc'><div class='pg-acc-h'><span>Lots accounted today</span><span style='color:"
+                f"#16A34A'>{n} of {len(order)}</span></div><div class='pg-bar'><div style='width:"
+                f"{100 * n / len(order):.0f}%'></div></div>{''.join(pills)}</div>", unsafe_allow_html=True)
 
 
 @st.dialog("Save these lines?", width="large")
-def _grid_confirm(rows: list[dict], todo: list, user: User) -> None:
+def _grid_confirm(rows: list[dict], todo: list, user: User, nxt: str | None = None) -> None:
     st.dataframe(common.numbered(pr.view(rows)), hide_index=True, width="stretch")
     c1, c2 = st.columns(2)
     if c1.button("Save", type="primary", icon=":material/save:", width="stretch", key="pg_ok"):
@@ -580,6 +649,8 @@ def _grid_confirm(rows: list[dict], todo: list, user: User) -> None:
         for ln, s in todo:
             ln["saved"] = {"pack": s["pack"], "comment": s["comment"], **s["vals"]}
         common.flash("success", f"{n} line(s) saved · see Production Tracking.")
+        if nxt:
+            st.session_state["pg_only"] = nxt
         st.rerun()
     if c2.button("Back", width="stretch", key="pg_back"):
         st.rerun()
