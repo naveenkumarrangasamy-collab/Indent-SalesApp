@@ -70,3 +70,11 @@ def test_group_lots_clubs_same_spec_and_sums():
     # 1Kg packs: D1 = 2,058 one-kg packs -> MT 2,058 kg; dump 21 kg -> 2,079 of 2,100 = 99 %
     t = pr.group_total([("1Kg", {"mt_packs": 1500}), ("1Kg", {"mt_packs": 558, "dump_kg": 21})], ab)
     assert round(t["out_kg"]) == 2079 and pr.sum_colour(t["sum"])[1] == "#27500A"
+
+
+def test_over_101_percent_is_blocked():
+    g = {"box_kg": 10, "pcs_per_box": 0, "boxes_moved": 10}          # 100 kg taken
+    ok = pr.group_total([("1Kg", {"mt_packs": 100, "dump_kg": 1})], g)   # 101 kg -> allowed
+    bad = pr.group_total([("1Kg", {"mt_packs": 100, "dump_kg": 5})], g)  # 105 kg -> blocked
+    assert not pr.over_limit(ok) and pr.sum_colour(ok["sum"])[1] == "#27500A"
+    assert pr.over_limit(bad) and pr.sum_colour(bad["sum"])[1] == "#791F1F"

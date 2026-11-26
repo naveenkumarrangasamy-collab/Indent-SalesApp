@@ -103,11 +103,19 @@ def sum_check(r: dict) -> float | None:
     return (r["mt_kg"] + r["gt_kg_total"] + r["dump_kg_total"]) / j if j > 0 else None
 
 
+MAX_SUM = 1.01   # 26 Nov (user): a group can never account for more than 101 % of the kg taken; saving is blocked
+
+
+def over_limit(t: dict) -> bool:
+    """True when a group's customer lots add up to more than 101 % of what was used."""
+    return t.get("sum") is not None and t["sum"] > MAX_SUM + 1e-9
+
+
 def sum_colour(v: float | None) -> tuple[str, str]:
-    """Target band 97-100 % green, 90-96 % amber, otherwise red (26 Nov)."""
+    """Target band 97-101 % green, 90-96 % amber, otherwise red (26 Nov)."""
     if v is None:
         return "#F1F5F9", "#64748B"
-    if 0.97 <= v <= 1.005:
+    if 0.97 <= v <= MAX_SUM:
         return "#EAF3DE", "#27500A"
     if 0.90 <= v < 0.97:
         return "#FAEEDA", "#633806"
