@@ -62,7 +62,7 @@ def test_tracker_shows_po_only_items_in_red():
     rows = tracking.grid(indents.prepare(LINES), PO, "2026-11-19", pts)[0]["rows"]
     last = rows[-1]
     assert last["name"] == "250gm - Bloom Grapes Red globe" and last["po_only"] and last["po_kind"] == "bad"
-    assert last["po"] == "Not on indent · PO 52" and last["cells"] == [("·", "", "")]
+    assert last["po"] == "Not on indent · PO 52" and last["cells"] == [("52", "(PO +52)", "up")]   # 26 Nov
 
 
 def test_indent_vs_po_rows():
