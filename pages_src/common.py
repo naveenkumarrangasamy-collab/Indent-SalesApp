@@ -414,8 +414,10 @@ def _alerts_box(user: auth.User) -> None:
         st.caption("An alert when a PO comes in with a difference, a new SKU or no spec mapped. "
                    "Do this once on every phone / laptop you use.")
         st.link_button("Turn on alerts", alerts.subscribe_link(user.email), width="stretch",
-                       help="Opens your alert channel: tap Subscribe and allow notifications")
-        st.caption("Phone (best): install the free **ntfy** app → ＋ → paste this channel:")
+                       help="Opens your alert page in the browser")
+        st.caption("On the page that opens: tap **Subscribe** and **Allow** notifications. "
+                   "iPhone: first add that page to the home screen (Share → Add to Home Screen). "
+                   "Or use the free ntfy app with this channel:")
         st.code(alerts.topic(user.email), language=None)
         if st.button("Send test alert", width="stretch", key="alert_test"):
             with st.spinner("Sending…"):
