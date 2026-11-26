@@ -273,7 +273,7 @@ GRID_CSS = """<style>
 .pg-h {font-size:0.76rem; font-weight:700; color:#0C447C; line-height:1.25; background:transparent;
        padding:10px 4px; min-height:58px; display:flex; align-items:center; justify-content:center; text-align:center;}
 .st-key-pg_head {background:#E6F1FB; border-bottom:3px solid #185FA5; border-radius:10px 10px 0 0;
-                 min-width:%dpx; margin-bottom:6px; padding:2px 0 4px 0; overflow:visible;}
+                 min-width:%dpx; margin-bottom:6px; padding:2px 0 14px 0; overflow:visible;}
 .st-key-pg_head [data-testid="stColumn"], .st-key-pg_head [data-testid="stElementContainer"],
 .st-key-pg_head [data-testid="stMarkdown"], .st-key-pg_head [data-testid="stMarkdownContainer"]
   {height:auto !important; overflow:visible !important;}
