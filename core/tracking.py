@@ -18,14 +18,24 @@ def label(t: datetime) -> str:
     return t.strftime("%I:%M %p").lstrip("0")          # 8:00 AM, 8:30 AM, 1:30 PM
 
 
+def until_hour() -> int:
+    """Last column of the Hourly tracker (26 Nov, user: till 7 PM). Secret `tracker_until`; the mail hours
+    (hourly_mail_from / _to) are not touched."""
+    try:
+        return max(9, min(23, int(config.get("tracker_until", 19))))
+    except (TypeError, ValueError):
+        return 19
+
+
 def points(day: str, now: datetime | None = None) -> list[tuple[str, datetime | None]]:
-    """(label, moment) every 30 min from the first to the last mail hour; None = still to come.
-    Plus 'Now' while the day is still open."""
-    first, last = hourly.hours()
-    d = date.fromisoformat(day)
+    """(label, moment) every 30 min from the first mail hour to 7 PM (`tracker_until`); None = still to come.
+    Plus 'Now' while the day is still open. A future delivery day is tracked on today's clock, so orders
+    entered today for tomorrow show up as they come in (26 Nov)."""
+    first, _last = hourly.hours()
     now = now or config.now_ist()
+    d = min(date.fromisoformat(day), now.date())
     t = datetime.combine(d, time(first, 0), tzinfo=config.IST)
-    end = datetime.combine(d, time(last, 0), tzinfo=config.IST)
+    end = datetime.combine(d, time(until_hour(), 0), tzinfo=config.IST)
     out = []
     while t <= end:
         out.append((label(t), t if t <= now else None))

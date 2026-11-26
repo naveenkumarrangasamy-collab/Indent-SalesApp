@@ -265,6 +265,9 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   PO (status Frozen) on, plain. An item entered and changed in the same half hour is compared with what was first
   entered; an item added to an existing indent shows (+qty). PDF (one customer per page) + Excel downloads.
   Old tabs (By customer / By store / Indent vs PO) removed. **Not in the mail yet** (user will decide later).
+  **26 Nov (from the trial branch, user)**: columns every 30 min from 8 AM **till 7 PM** (secret `tracker_until`,
+  default 19; mail hours unchanged) and a **future delivery day is tracked on today's clock** (tomorrow's
+  orders entered today show up as they come in) (`tracking.until_hour`, `points`).
 - **Production e-mail content (21 Nov)**: **Production by customer only** (see 21 Nov night).
 - The City/SKU report was removed.
 
