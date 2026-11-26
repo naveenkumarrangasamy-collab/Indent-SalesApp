@@ -83,3 +83,12 @@ def test_new_brand_rows_only_once_per_sku():
     e2 = {**e, "size": "90C", "brand": "Jazz"}
     rows = pa.new_brand_rows([e2, e2], tab, "me", "t")
     assert len(rows) == 1 and rows[0]["Brand"] == "Jazz" and rows[0]["Size"] == "90C"
+
+
+def test_newzealand_is_nz():
+    parent_tab = pd.DataFrame([{"parent": "Apple", "grade": "Gala", "country": "NewZealand", "spec": "100",
+                                "lot": "", "box_kg": 18.0}])
+    df = pa.option_rows("Apple", parent_tab, None, pd.DataFrame(pa.brand_rows_from_seed()))
+    origins = pa.choices(df, "origin")
+    assert "NZ" in origins and "NewZealand" not in origins
+    assert pa.choices(df, "size", origin="NZ", variety="Gala") == ["30C", "100C"]

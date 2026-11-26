@@ -59,6 +59,15 @@ def pkey(parent) -> str:
     return _ALIASES.get(s, s)
 
 
+_COUNTRY = {"newzealand": "NZ", "new zealand": "NZ", "nz": "NZ"}   # 26 Nov (user): NZ = NewZealand
+
+
+def country(v) -> str:
+    """One name per country ('NewZealand' / 'New Zealand' -> 'NZ')."""
+    s = _t(v)
+    return _COUNTRY.get(s.casefold(), s)
+
+
 def _t(v) -> str:
     s = str(v or "").strip()
     return "" if s.lower() in {"nan", "none"} else re.sub(r"\s+", " ", s)
@@ -97,7 +106,7 @@ def option_rows(parent: str, parent_tab: pd.DataFrame | None, saved: pd.DataFram
     k, rows = pkey(parent), []
     if brand_tab is not None and not brand_tab.empty:
         for r in brand_tab[brand_tab["Parent SKU"].map(pkey) == k].to_dict("records"):
-            rows.append({"origin": _t(r.get("Origin")), "variety": _t(r.get("Variety")), "brand": _t(r.get("Brand")),
+            rows.append({"origin": country(r.get("Origin")), "variety": _t(r.get("Variety")), "brand": _t(r.get("Brand")),
                          "size": clean_size(r.get("Size")), "box_kg": None, "pcs": None})
     for p, o, v, b, s, kg, pcs in SEED:
         if pkey(p) == k:   # brands now come from the Brand_Master tab (26 Nov), seeded with these
@@ -106,16 +115,17 @@ def option_rows(parent: str, parent_tab: pd.DataFrame | None, saved: pd.DataFram
         for r in parent_tab[parent_tab["parent"].map(pkey) == k].to_dict("records"):
             for s in [x.strip() for x in str(r.get("spec") or "").split(",") if x.strip()] or [""]:
                 size = clean_size(s if not re.fullmatch(r"\d+", s) else f"{s}C")
-                rows.append({"origin": _t(r.get("country")), "variety": _t(r.get("grade")), "brand": "",
+                rows.append({"origin": country(r.get("country")), "variety": _t(r.get("grade")), "brand": "",
                              "size": size, "box_kg": _num(r.get("box_kg")), "pcs": count_of(size)})
     if saved is not None and not saved.empty:
         for r in saved[saved["parent_sku"].map(pkey) == k].to_dict("records"):
-            rows.append({"origin": _t(r.get("origin")), "variety": _t(r.get("variety")),
+            rows.append({"origin": country(r.get("origin")), "variety": _t(r.get("variety")),
                          "brand": _t(r.get("brand")), "size": clean_size(r.get("size")),
                          "box_kg": _num(r.get("box_kg")), "pcs": _num(r.get("pcs_per_box"))})
     df = pd.DataFrame(rows, columns=COLS)
     for c in ("origin", "variety", "brand", "size"):
         df[c] = df[c].map(_t)
+    df["origin"] = df["origin"].map(country)
     return df
 
 
@@ -196,16 +206,16 @@ def new_brand_rows(entries: list[dict], brand_tab: pd.DataFrame | None, user: st
     have = set()
     if brand_tab is not None and not brand_tab.empty:
         for r in brand_tab.to_dict("records"):
-            have.add((pkey(r.get("Parent SKU")), _t(r.get("Origin")).casefold(), _t(r.get("Variety")).casefold(),
+            have.add((pkey(r.get("Parent SKU")), country(r.get("Origin")).casefold(), _t(r.get("Variety")).casefold(),
                       clean_size(r.get("Size")).casefold(), _t(r.get("Brand")).casefold()))
     out = []
     for e in entries:
         b = _t(e.get("brand"))
-        key = (pkey(e.get("parent_sku")), _t(e.get("origin")).casefold(), _t(e.get("variety")).casefold(),
+        key = (pkey(e.get("parent_sku")), country(e.get("origin")).casefold(), _t(e.get("variety")).casefold(),
                clean_size(e.get("size")).casefold(), b.casefold())
         if b and key not in have:
             have.add(key)
-            out.append({"Parent SKU": _t(e.get("parent_sku")), "Origin": _t(e.get("origin")),
+            out.append({"Parent SKU": _t(e.get("parent_sku")), "Origin": country(e.get("origin")),
                         "Variety": _t(e.get("variety")), "Size": clean_size(e.get("size")), "Brand": b,
                         "Added by": user, "Added at": stamp})
     return out
