@@ -290,8 +290,8 @@ GRID_CSS = """<style>
          align-items:flex-end; justify-content:center; text-align:center; margin-bottom:3px;}
 .st-key-pg_grid [data-testid="stWidgetLabel"] p {font-size:0.72rem; font-weight:700; color:#4A5562; line-height:1.2;
   text-align:center;}
-.st-key-pg_grid [data-testid="stWidgetLabel"] {min-height:2.4em; align-items:flex-end; justify-content:center;
-  width:100%%; display:flex;}
+.st-key-pg_grid [data-testid="stWidgetLabel"] {min-height:2.4em; align-items:flex-end; justify-content:center; width:100%%;}
+.st-key-pg_grid [class*="_pack"] [data-testid="stWidgetLabel"] {display:none !important;}
 [class*="st-key-pgb_mt_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_mt_"] .pg-lab {color:#0C447C;}
 [class*="st-key-pgb_mt_"] [data-testid="stNumberInputContainer"] {border-color:#378ADD;}
 [class*="st-key-pgb_gt_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_gt_"] .pg-lab {color:#791F1F;}
