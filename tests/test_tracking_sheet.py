@@ -45,3 +45,18 @@ def test_clubbed_group_row_uses_all_boxes():
     other = [r for r in rows if r[9] == "4"][0]
     assert lead[10] == 120 and lead[12] == "1Kg"
     assert other[-1] == "clubbed with table 2"
+
+
+def test_one_efficiency_for_all_customer_lots_of_a_lot():
+    import pandas as pd
+    from core import tracking_sheet as ts
+    lots = pd.DataFrame([{"entry_id": "a", "production_date": "2026-11-26", "parent_sku": "Apple", "variety": "Gala",
+                          "size": "100C", "origin": "NZ", "table_no": "1", "box_kg": "20", "pcs_per_box": "100",
+                          "boxes_moved": "10"}])                       # 200 kg, 0.2 kg a piece
+    done = pd.DataFrame([
+        {"lot_id": "a", "production_date": "2026-11-26", "city": "B", "cux_lot": "1PC", "mt_packs": 500, "dump_kg": 4},
+        {"lot_id": "a", "production_date": "2026-11-26", "city": "B", "cux_lot": "2PC", "mt_packs": 240, "dump_kg": 0}])
+    rows = ts.build(lots, done)
+    eff = ts.HEADERS.index(next(h for h in ts.HEADERS if "Efficiency" in h))
+    assert len(rows) == 2 and rows[0][eff] == rows[1][eff]           # MT 100 + 96 = 196 of 200 -> 98 %
+    assert rows[0][eff] in ("98%", 0.98, "98.0%")

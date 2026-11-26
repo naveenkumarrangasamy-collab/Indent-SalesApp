@@ -527,7 +527,9 @@ def _taken_bar(g: dict) -> str:
     tot = (f"<span class='pg-pill pg-pill-t'>= <b>{pr._f(g.get('boxes_moved')):g}</b> boxes · "
            f"<b>{pr._f(g.get('taken_kg')):,.1f}</b> kg"
            + (f" · <b>{pcs:,.0f}</b> pcs" if pcs else "") + "</span>")
-    return (f"<div class='pg-taken'><span class='pg-cuxl'>TAKEN FROM PRE-PRODUCTION ACTUAL</span>"
+    brand = str(g.get("brand") or "").strip()
+    return (f"<div class='pg-taken'><span class='pg-cuxl'>TAKEN FROM PRE-PRODUCTION ACTUAL"
+            f"{' · ' + str(g.get('origin')) if g.get('origin') else ''}{' · BRAND ' + brand if brand else ''}</span>"
             f"<div class='pg-pills' style='justify-content:flex-start'>{pills}{tot}</div></div>")
 
 
@@ -554,7 +556,8 @@ def _folded(n: int, ln: dict, s: dict, g: dict, rows: list) -> None:
                 f"{' · ' + s['comment'] if s['comment'] else ''}</div>", unsafe_allow_html=True)
 
 
-def _open_line(n: int, ln: dict, s: dict, g: dict, packs: list, used: set, title: dict) -> None:
+def _open_line(n: int, ln: dict, s: dict, g: dict, packs: list, used: set, title: dict,
+               gt: dict | None = None) -> None:
     on = bool(s["pack"])
     with st.container(key=f"pgc_{'on' if on else 'off'}_{ln['id']}"):
         c = st.columns([0.35, 0.9, 1.0, 3.2], vertical_alignment="center")
@@ -588,9 +591,9 @@ def _open_line(n: int, ln: dict, s: dict, g: dict, packs: list, used: set, title
     out = comp["mt_kg"] + comp["gt_kg_total"] + comp["dump_kg_total"]
     with st.container(key=f"pgx_{ln['id']}"):
         c = st.columns([1.1, 1.1, 2.6, 1.3], vertical_alignment="bottom")
-        eff = comp["mt_kg"] / out if out > 0 else None
+        eff = gt["efficiency"] if gt and gt["out_kg"] > 0 else None   # 26 Nov: one efficiency per SKU group
         bg, fg = _eff_colour(eff) if eff is not None else ("#F6F7F9", "#9AA5B1")
-        c[0].markdown(f"<div class='pg-xl'>Efficiency (this lot)</div><div class='pg-xp' style='background:{bg};"
+        c[0].markdown(f"<div class='pg-xl'>Efficiency (all customer lots)</div><div class='pg-xp' style='background:{bg};"
                       f"color:{fg}'>{pr.pct(eff) if eff is not None else '–'}</div>", unsafe_allow_html=True)
         c[1].markdown(f"<div class='pg-xl'>Line total</div><div class='pg-xp' style='background:#F1F5F9;"
                       f"color:#0F172A'>{out:,.1f} kg</div>", unsafe_allow_html=True)
@@ -648,7 +651,7 @@ def _group_block(i: int, g: dict, glines: list, states: dict, packs: list, title
             if s["pack"] and not st.session_state[ok]:
                 _folded(n, ln, s, g, rows)
             else:
-                _open_line(n, ln, s, g, packs, used - {s["pack"]}, title)
+                _open_line(n, ln, s, g, packs, used - {s["pack"]}, title, t)
         left = max(t["to_go"], 0.0)
         ready = all(states[ln["id"]]["pack"] for ln in glines) and not pr.over_limit(t)
         with st.container(key=f"pgadd_{g['entry_id'].replace('+', '_')}"):

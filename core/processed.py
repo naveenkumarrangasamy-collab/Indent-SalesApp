@@ -123,11 +123,12 @@ def sum_colour(v: float | None) -> tuple[str, str]:
 
 
 def _gkey(r: dict) -> tuple:
-    return tuple(str(r.get(c) or "").strip().casefold() for c in ("parent_sku", "variety", "size", "origin"))
+    return tuple(str(r.get(c) or "").strip().casefold()
+                 for c in ("parent_sku", "variety", "size", "origin", "brand"))
 
 
 def group_lots(raw: pd.DataFrame) -> dict[str, dict]:
-    """Lots of one day + city clubbed by fruit + variety + size + origin (26 Nov): boxes added later to the
+    """Lots of one day + city clubbed by fruit + variety + size + origin + brand (26 Nov): boxes added later to the
     same spec join the group. Key = member entry ids joined by '+'. The group acts as one lot: boxes summed,
     box kg = taken kg / boxes (so A x B is the real kg taken)."""
     if raw is None or raw.empty:

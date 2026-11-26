@@ -88,22 +88,26 @@ def build(lots: pd.DataFrame, done: pd.DataFrame) -> list[list]:
         if not outs:
             rows.append(first + [""] * (len(HEADERS) - len(first)))
             continue
+        # 26 Nov (user): one efficiency per SKU group (all its customer lots together), shown on every row,
+        # like the team's sheet; each row keeps its own inputs and MT / GT / Dump kg
+        grp_t = pr.group_total([(o.get("cux_lot", ""), o) for o in outs], {"box_kg": a, "pcs_per_box": pcs,
+                                                                             "boxes_moved": b})
+        gj = grp_t["used_kg"]
+        g_parts = [grp_t["mt_kg"] / gj, grp_t["gt_kg"] / gj, grp_t["dump_kg"] / gj] if gj > 0 else [None] * 3
         for o in outs:
             pack = o.get("cux_lot", "")
             _, unit = pr.pack_kg(pack, x or None)
             c = pr.compute(a, pcs, b, pack, o)
-            j = c["used_kg"]
-            parts = [c["efficiency"], c["non_mt"], c["dump_pct"]]
             rows.append(first + [
                 pack, unit, _r(x, 3) if x else "", 1, _r(c["pack_kg"], 3),
                 _num_or_blank(o.get("mt_packs")), _num_or_blank(o.get("mt_loose_kg")),
                 _num_or_blank(o.get("left_box")), _num_or_blank(o.get("left_kg")), _num_or_blank(o.get("left_pcs")),
                 _num_or_blank(o.get("gt_box")), _num_or_blank(o.get("gt_kg")), _num_or_blank(o.get("gt_pcs")),
                 _num_or_blank(o.get("dump_kg")), _num_or_blank(o.get("dump_pcs")),
-                _r(c["taken_kg"]), _r(c["left_kg_total"]), _r(j), _r(c["mt_kg"]), _r(c["gt_kg_total"]),
-                _r(c["dump_kg_total"]), _r(c["lotting"]),
-                _pct(c["efficiency"]), _pct(c["non_mt"]), _pct(c["dump_pct"]),
-                _pct(sum(p for p in parts if p is not None)) if j > 0 else "", str(o.get("comment") or "")])
+                _r(c["taken_kg"]), _r(c["left_kg_total"]), _r(gj), _r(c["mt_kg"]), _r(c["gt_kg_total"]),
+                _r(c["dump_kg_total"]), _r(grp_t["to_go"]),
+                _pct(g_parts[0]), _pct(g_parts[1]), _pct(g_parts[2]),
+                _pct(grp_t["sum"]) if gj > 0 else "", str(o.get("comment") or "")])
     rows.sort(key=lambda r: (r[0], str(r[9]).zfill(3), str(r[2])), reverse=False)
     rows.sort(key=lambda r: r[0], reverse=True)
     return rows
