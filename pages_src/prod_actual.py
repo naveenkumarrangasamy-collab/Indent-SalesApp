@@ -141,7 +141,7 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved) -> None:
         table = rest[0].selectbox("Table", TABLES, index=None, placeholder="Choose…", key=f"{k}_t")
         boxes = rest[1].number_input("Box/Tray" if only_box else "Boxes", min_value=0.0, step=1.0, value=0.0,
                                      key=f"{k}_n")
-        stock = rest[2].selectbox("Stock", pa.STOCK_TYPES, index=0, key=f"{k}_st")
+        stock = rest[2].selectbox("Stock", pa.STOCK_CHOICES, index=0, key=f"{k}_st")
 
         if boxes and box_kg:
             st.markdown(f"<div class='pa-sub'>= {boxes * box_kg:g} kg on table "

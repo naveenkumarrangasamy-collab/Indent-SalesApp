@@ -265,28 +265,39 @@ GRID_CSS = """<style>
 .st-key-pg_grid [data-testid="stElementContainer"] {margin-bottom:0;}
 .st-key-pg_grid button[data-testid="stNumberInputStepUp"],
 .st-key-pg_grid button[data-testid="stNumberInputStepDown"] {display:none;}
-.st-key-pg_grid input {font-size:0.85rem; text-align:center;}
+.st-key-pg_grid input {font-size:0.85rem; text-align:center; font-weight:700;}
+.st-key-pg_grid [data-baseweb="select"] div {justify-content:center; text-align:center; font-weight:700;}
 .st-key-pg_grid [data-baseweb="select"] > div {min-height:36px; border-color:#9AA5B1; background:#FFFFFF;}
 .st-key-pg_grid [data-testid="stNumberInputContainer"], .st-key-pg_grid [data-testid="stTextInputRootElement"]
   {border:1px solid #9AA5B1; border-radius:8px; background:#FFFFFF;}
-.pg-h {font-size:0.72rem; font-weight:700; color:#2F3B48; line-height:1.2; background:#E4F0FB;
-       border-radius:6px; padding:6px 6px; min-height:58px; display:flex; align-items:flex-end;}
-.pg-lk {font-size:0.82rem; background:#F1F4F7; color:#1F2933; border-radius:6px; padding:8px 6px;
-        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:36px;}
+.pg-h {font-size:0.74rem; font-weight:700; color:#FFFFFF; line-height:1.25; background:#0C447C;
+       border-radius:6px; padding:6px 6px; min-height:58px; display:flex; align-items:center;
+       justify-content:center; text-align:center;}
+.pg-lk {font-size:0.84rem; font-weight:700; background:#F1F4F7; color:#1F2933; border-radius:6px; padding:8px 6px;
+        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:36px; text-align:center;}
 .pg-na {font-size:0.8rem; color:#9AA5B1; background:#F6F7F9; border-radius:8px; min-height:36px;
         display:flex; align-items:center; justify-content:center;}
 .pg-var {background:#EDE7FB; color:#4B2A9E; font-weight:700; border-radius:999px; padding:1px 8px;}
 .pg-ef {border-radius:8px; min-height:36px; display:flex; align-items:center; justify-content:center;
         font-weight:700; font-size:0.9rem;}
-.pg-st {font-size:0.78rem; font-weight:600; min-height:36px; display:flex; align-items:center;}
+.pg-st {font-size:0.8rem; font-weight:700; min-height:36px; display:flex; align-items:center; justify-content:center;}
 .pg-hint {font-size:0.8rem; color:#6B7684; padding:2px 4px 4px 4px;}
 .pg-band {border-radius:8px; min-height:36px; margin-top:18px; display:flex; flex-direction:column;
-          justify-content:center; padding:4px 10px; font-weight:700; font-size:0.9rem;}
+          justify-content:center; align-items:center; text-align:center; padding:4px 10px; font-weight:700;
+          font-size:0.9rem;}
 .pg-band span {font-weight:500; font-size:0.75rem;}
-.pg-lab {font-size:0.72rem; color:#4A5562; line-height:1.2; min-height:2.4em; display:flex; align-items:flex-end;
-         margin-bottom:3px;}
-.st-key-pg_grid [data-testid="stWidgetLabel"] p {font-size:0.72rem; color:#4A5562; line-height:1.2;}
-.st-key-pg_grid [data-testid="stWidgetLabel"] {min-height:2.4em; align-items:flex-end;}
+.pg-lab {font-size:0.72rem; font-weight:700; color:#4A5562; line-height:1.2; min-height:2.4em; display:flex;
+         align-items:flex-end; justify-content:center; text-align:center; margin-bottom:3px;}
+.st-key-pg_grid [data-testid="stWidgetLabel"] p {font-size:0.72rem; font-weight:700; color:#4A5562; line-height:1.2;
+  text-align:center;}
+.st-key-pg_grid [data-testid="stWidgetLabel"] {min-height:2.4em; align-items:flex-end; justify-content:center;
+  width:100%; display:flex;}
+[class*="st-key-pgb_mt_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_mt_"] .pg-lab {color:#0C447C;}
+[class*="st-key-pgb_mt_"] [data-testid="stNumberInputContainer"] {border-color:#378ADD;}
+[class*="st-key-pgb_gt_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_gt_"] .pg-lab {color:#791F1F;}
+[class*="st-key-pgb_gt_"] [data-testid="stNumberInputContainer"] {border-color:#E24B4A;}
+[class*="st-key-pgb_dump_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_dump_"] .pg-lab {color:#3C3489;}
+[class*="st-key-pgb_dump_"] [data-testid="stNumberInputContainer"] {border-color:#7F77DD;}
 [class*="st-key-pg_lot_"] {border:1px solid #D5DCE4; border-radius:12px; padding:8px; margin-bottom:8px;
                            min-width:%dpx; background:#FFFFFF;}
 </style>""" % (1280, 1300)
@@ -379,10 +390,11 @@ def _eff_cell(s: dict, lot: dict) -> tuple[str, str, str]:
 HEAD = ["n", "parent_sku", "variety", "size", "table_no", "box_kg", "pcs_per_box", "boxes_moved", "stock_type",
         "pack"]
 ROW_W = [124] + [122] * 9
-BANDS = [
-    ("MT", ["mt_packs", "mt_loose_kg", "left_box", "left_kg", "left_pcs", "eff", "status"], ("#E6F4EA", "#1E7B34")),
-    ("GT", ["gt_box", "gt_kg", "gt_pcs"], ("#FFF4D6", "#8A5A00")),
-    ("Dump", ["dump_kg", "dump_pcs", "comment", "add"], ("#FDECEC", "#B42318")),
+BANDS = [  # (kg key, name shown in the coloured box, fields, (fill, text)): MT blue, GT red, Dump violet
+    ("MT", "MT Ready", ["mt_packs", "mt_loose_kg", "left_box", "left_kg", "left_pcs", "eff", "status"],
+     ("#B5D4F4", "#042C53")),
+    ("GT", "GT Stock", ["gt_box", "gt_kg", "gt_pcs"], ("#F7C1C1", "#501313")),
+    ("Dump", "Dump", ["dump_kg", "dump_pcs", "comment", "add"], ("#CECBF6", "#26215C")),
 ]
 
 
@@ -472,14 +484,15 @@ def _grid_body(rows, lots, packs, day, city, user, key) -> None:
                                 unsafe_allow_html=True)
                     continue
                 kg = _band_kg(s, lot)
-                for band, fields, colr in BANDS:
-                    cells = st.columns(ROW_W)
-                    bg, fg = colr
-                    cells[0].markdown(f"<div class='pg-band' style='background:{bg};color:{fg}'>{band}"
-                                      f"<span>{kg.get(band, '')}</span></div>", unsafe_allow_html=True)
-                    for col, f in zip(cells[1:], fields):
-                        with col:
-                            _band_cell(f, ln, s, lot, title, i, rows)
+                for band, name, fields, colr in BANDS:
+                    with st.container(key=f"pgb_{band.lower()}_{ln['id']}"):
+                        cells = st.columns(ROW_W)
+                        bg, fg = colr
+                        cells[0].markdown(f"<div class='pg-band' style='background:{bg};color:{fg}'>{name}"
+                                          f"<span>{kg.get(band, '')}</span></div>", unsafe_allow_html=True)
+                        for col, f in zip(cells[1:], fields):
+                            with col:
+                                _band_cell(f, ln, s, lot, title, i, rows)
 
     todo = [(ln, states[ln["id"]]) for ln in rows if ln["id"] in states
             and states[ln["id"]]["touched"] and not states[ln["id"]]["same"]]

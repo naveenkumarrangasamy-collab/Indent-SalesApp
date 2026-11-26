@@ -18,7 +18,8 @@ from core import config
 from core.models import to_number
 from core.schema import PREPROD_ENTRIES
 
-STOCK_TYPES = ["Unused Vendor Lot", "Returns", "MT Ready Leftover"]
+STOCK_TYPES = ["Unused Vendor Lot", "Returns", "MT Ready Leftover"]  # still valid in saved rows
+STOCK_CHOICES = ["Unused Vendor Lot"]  # 26 Nov (user): only unused stock is offered for now
 COLS = ["origin", "variety", "brand", "size", "box_kg", "pcs"]
 
 # Values read from BLR_ProdTracking (24-25 Nov), names cleaned (mandrin -> Mandarin, enay -> Envy …).
