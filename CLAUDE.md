@@ -273,6 +273,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   yellow / red; a PO equal to the indent turns the item plain; **—** = not on the PO; PO-only items show from
   their PO. Swiggy (multi-PO): an item takes the PO total once it is on a PO; items on no PO keep the indent qty
   until End of POs. A frozen indent whose PO has no item qty stays plain as before (`tracking._po_events`).
+  **26 Nov 6:15 PM**: items on a PO that are not on the indent show for **every** customer, Swiggy included
+  while more POs are coming (name in red, "Not on indent · PO n", cells from their PO with (PO +n)).
 - **Production e-mail content (21 Nov)**: **Production by customer only** (see 21 Nov night).
 - The City/SKU report was removed.
 

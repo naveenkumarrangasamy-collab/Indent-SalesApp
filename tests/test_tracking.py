@@ -109,7 +109,7 @@ def test_grid_shows_po_qty_and_difference(monkeypatch):
         lines[c] = v
     po = pd.DataFrame([
         _po("IN-073", "09:16", {"1Kg - Apple RD": 990, "1Pc Blueberry Pack": 400, "Grapes X": 40}, "Trent"),
-        _po("IN-076", "09:40", {"1Pc - Imported Avocado": 161}, "Swiggy"),
+        _po("IN-076", "09:40", {"1Pc - Imported Avocado": 161, "250gm - Imported Red Globe Grapes": 40}, "Swiggy"),
     ])
     pts = [(f"{h}:{m:02d}", datetime(2026, 11, 19, h, m, tzinfo=ist)) for h, m in
            ((8, 30), (9, 0), (9, 30), (10, 0))]
@@ -124,3 +124,6 @@ def test_grid_shows_po_qty_and_difference(monkeypatch):
     sw = {r["name"]: r["cells"] for r in blocks["IN-076"]["rows"]}
     assert sw["1Pc - Imported Avocado"][3] == ("161", "(PO −50)", "down")     # Swiggy PO at 9:40
     assert sw["1Pc - Green Kiwi"][3] == ("300", "", "")                       # more POs coming: indent kept
+    new = [r for r in blocks["IN-076"]["rows"] if r.get("po_only")][0]          # new item on a Swiggy PO
+    assert new["name"] == "250gm - Imported Red Globe Grapes" and new["cells"][2] == ("·", "", "")
+    assert new["cells"][3] == ("40", "(PO +40)", "up") and new["po"].startswith("Not on indent · PO 40")
