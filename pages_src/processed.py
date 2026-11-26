@@ -272,9 +272,9 @@ GRID_CSS = """<style>
   {flex-wrap:nowrap !important; flex-direction:row !important; gap:8px;}
 [class*="st-key-pgr_"] [data-testid="stColumn"], .st-key-pg_head [data-testid="stColumn"]
   {min-width:0 !important; width:auto !important;}
-.st-key-pg_head {background:linear-gradient(135deg,#3B6CB7 0%%,#2C5496 100%%); border-radius:16px;
-  padding:14px 12px; border-bottom:4px solid rgba(30,58,138,.4); margin-bottom:10px;}
-.pg-h {font-size:0.76rem; font-weight:800; color:#FFFFFF; line-height:1.3; text-align:center;
+.st-key-pg_head {background:#F4F8FE; border:2px solid #85B7EB; border-radius:16px;
+  padding:12px 12px; margin-bottom:10px;}
+.pg-h {font-size:0.76rem; font-weight:800; color:#0C447C; line-height:1.3; text-align:center;
   display:flex; align-items:center; justify-content:center; min-height:34px;}
 [class*="st-key-pg_lot_"] {background:#FFFFFF; border:2px solid #E2E8F0; border-radius:16px; padding:12px;
   margin-bottom:14px;}
@@ -380,6 +380,48 @@ def _blank(v) -> bool:
     return v is None or (isinstance(v, float) and v != v) or str(v).strip() == ""
 
 
+def _new_line(gid: str) -> dict:
+    """A customer-lot line. Its values live in ln['cur'] (26 Nov fix): Streamlit drops a widget's value when
+    the widget is not on screen (folded / other lot shown), so the boxes are copied here every run."""
+    return {"id": uuid.uuid4().hex[:8], "lot_id": gid, "saved": None,
+            "cur": {"pack": "", "comment": "", **{f: None for f in NUMS}}}
+
+
+def _wkey(ln: dict, f: str) -> str:
+    return f"pg_{ln['id']}_{f}"
+
+
+def _sync(rows: list[dict]) -> None:
+    """Copy what the user typed (widgets shown in the last run) into each line's own store."""
+    ss = st.session_state
+    for ln in rows:
+        cur = ln.setdefault("cur", {"pack": "", "comment": "", **{f: None for f in NUMS}})
+        k = _wkey(ln, "pack")
+        if k in ss:
+            cur["pack"] = "" if ss[k] in (None, PICK) else ss[k]
+        k = _wkey(ln, "comment")
+        if k in ss:
+            cur["comment"] = str(ss[k] or "")
+        for f in NUMS:
+            k = _wkey(ln, f)
+            if k in ss:
+                cur[f] = ss[k]
+
+
+def _seed(ln: dict, f: str) -> str:
+    """Put the line's stored value back into a widget that is about to be drawn again."""
+    k = _wkey(ln, f)
+    if k not in st.session_state:
+        v = ln["cur"].get(f)
+        if f == "pack":
+            st.session_state[k] = v or PICK
+        elif f == "comment":
+            st.session_state[k] = "" if v is None else str(v)
+        else:
+            st.session_state[k] = None if v is None or v == "" else float(v)
+    return k
+
+
 def _lines(groups: dict, day: str, city: str, key: str) -> list[dict]:
     """Session lines (one per customer lot) of each clubbed group; saved entries first, every group at least once."""
     ids = list(groups)
@@ -402,14 +444,11 @@ def _lines(groups: dict, day: str, city: str, key: str) -> list[dict]:
             continue
         saved = list({str(o.get("cux_lot")): o for o in by_grp.get(gid, [])}.values()) or [None]
         for o in saved:
-            ln = {"id": uuid.uuid4().hex[:8], "lot_id": gid, "saved": None}
+            ln = _new_line(gid)
             if o is not None:
                 ln["saved"] = {"pack": o.get("cux_lot", ""), "comment": str(o.get("comment") or ""),
                                **{f: (None if _blank(o.get(f)) else pr._f(o.get(f))) for f in NUMS}}
-                st.session_state.setdefault(f"pg_{ln['id']}_pack", ln["saved"]["pack"] or PICK)
-                st.session_state.setdefault(f"pg_{ln['id']}_comment", ln["saved"]["comment"])
-                for f in NUMS:
-                    st.session_state.setdefault(f"pg_{ln['id']}_{f}", ln["saved"][f])
+                ln["cur"] = dict(ln["saved"])
             out.append(ln)
     st.session_state[key] = out
     return out
@@ -429,24 +468,23 @@ def _applies(field: str, unit: str, piece: bool) -> bool:
 
 
 def _state(ln: dict, lot: dict) -> dict:
-    """Current values of a line from its widgets + what it needs."""
-    g = st.session_state.get
-    pack = g(f"pg_{ln['id']}_pack") or PICK
-    pack = "" if pack == PICK else pack
+    """Current values of a line (from its own store) + what it needs."""
+    cur = ln.get("cur") or {}
+    pack = cur.get("pack") or ""
     a, pcs = pr._f(lot.get("box_kg")), pr._f(lot.get("pcs_per_box"))
     x = a / pcs if a and pcs else 0
     _, unit = pr.pack_kg(pack, x or None)
     piece = bool(x)
     need = [f for f in NUMS if _applies(f, unit, piece)]
-    vals = {f: g(f"pg_{ln['id']}_{f}") for f in NUMS}   # 26 Nov: every box can be typed; 'need' = must fill
-    comment = str(g(f"pg_{ln['id']}_comment") or "").strip()
+    vals = {f: cur.get(f) for f in NUMS}
+    comment = str(cur.get("comment") or "").strip()
     touched = bool(pack) or any(v is not None for v in vals.values()) or bool(comment)
-    missing = [] if pack else ["Cux Lot"]   # 26 Nov: empty boxes save as 0; the sum check shows a missed box
+    missing = [] if pack else ["Cux Lot"]   # empty boxes save as 0; the sum check shows a missed box
     if pack and unit == "PC" and not piece:
         missing.append("# of Pcs in Purchase lot (fix on Pre-Production Actual)")
-    cur = {"pack": pack, "comment": comment, **{f: vals[f] for f in NUMS}}
+    now = {"pack": pack, "comment": comment, **vals}
     saved = ln.get("saved")
-    same = saved is not None and all((saved.get(k) or None) == (cur.get(k) or None) for k in cur)
+    same = saved is not None and all((saved.get(k) or None) == (now.get(k) or None) for k in now)
     return {"pack": pack, "unit": unit, "need": need, "vals": vals, "comment": comment, "touched": touched,
             "missing": missing, "same": same}
 
@@ -474,12 +512,12 @@ _KG = {"mt": "mt_kg", "gt": "gt_kg_total", "dump": "dump_kg_total"}
 
 
 def _band_cell(f: str, ln: dict, s: dict, title: dict) -> None:
-    k = f"pg_{ln['id']}_{f}"
+    k = _seed(ln, f)
     lab = title.get(f, "")
     if f == "comment":
         st.text_input(lab, key=k, placeholder="Type a note")
     else:   # 26 Nov: every box looks the same; Save still asks only for the ones this Cux Lot needs
-        st.number_input(lab, min_value=0.0, step=1.0, value=None, key=k, format="%g", placeholder="0")
+        st.number_input(lab, min_value=0.0, step=1.0, key=k, format="%g", placeholder="0")
 
 
 def _taken_bar(g: dict) -> str:
@@ -520,8 +558,10 @@ def _open_line(n: int, ln: dict, s: dict, g: dict, packs: list, used: set, title
         c = st.columns([0.35, 0.9, 1.0, 3.2], vertical_alignment="center")
         c[0].markdown(f"<div class='pg-no pg-no-s'>{n}</div>", unsafe_allow_html=True)
         c[1].markdown("<span class='pg-cuxl'>CUSTOMER LOT:</span>", unsafe_allow_html=True)
-        k = f"pg_{ln['id']}_pack"
+        k = _seed(ln, "pack")
         opts = [PICK] + [p for p in packs if p == s["pack"] or p not in used]
+        if s["pack"] and s["pack"] not in opts:
+            opts.append(s["pack"])
         if st.session_state.get(k) not in opts:
             st.session_state[k] = PICK
         c[2].selectbox("Customer lot", opts, key=k, label_visibility="collapsed")
@@ -553,7 +593,7 @@ def _open_line(n: int, ln: dict, s: dict, g: dict, packs: list, used: set, title
         c[1].markdown(f"<div class='pg-xl'>Line total</div><div class='pg-xp' style='background:#F1F5F9;"
                       f"color:#0F172A'>{out:,.1f} kg</div>", unsafe_allow_html=True)
         with c[2]:
-            st.text_input("Operations team Comments (optional)", key=f"pg_{ln['id']}_comment",
+            st.text_input("Operations team Comments (optional)", key=_seed(ln, "comment"),
                           placeholder="Type a note")
         with c[3].container(key=f"pgd_{ln['id']}"):
             if st.button(f"✓ Done with {s['pack']}", key=f"pg_{ln['id']}_fold", width="stretch",
@@ -615,7 +655,7 @@ def _group_block(i: int, g: dict, glines: list, states: dict, packs: list, title
                          disabled=not ready, help=None if ready else "Pick the customer lot above first"):
                 for ln in glines:
                     st.session_state[f"pg_{ln['id']}_open"] = False
-                nl = {"id": uuid.uuid4().hex[:8], "lot_id": g["entry_id"], "saved": None}
+                nl = _new_line(g["entry_id"])
                 st.session_state[f"pg_{nl['id']}_open"] = True
                 rows.insert(rows.index(glines[-1]) + 1, nl)
                 st.rerun(scope="fragment")
@@ -660,6 +700,7 @@ def _grid_body(rows, lots, packs, day, city, user, key) -> None:
             f"{{border:2px solid #D92D20 !important; background:#FFF5F5 !important;}}" for k in bad) + "</style>",
             unsafe_allow_html=True)
     rows[:] = [ln for ln in rows if ln["lot_id"] in lots]
+    _sync(rows)
     states = {ln["id"]: _state(ln, lots[ln["lot_id"]]) for ln in rows}
     order = list(dict.fromkeys(ln["lot_id"] for ln in rows))
     st.caption(f"{len(order)} group(s) · same fruit, variety, size and origin are clubbed · pick a customer lot, "
@@ -695,13 +736,15 @@ def _grid_body(rows, lots, packs, day, city, user, key) -> None:
                 done_groups.add(gid)
 
     todo = [(ln, states[ln["id"]]) for ln in rows if states[ln["id"]]["touched"] and not states[ln["id"]]["same"]]
-    nxt = next((gid for gid in order if gid not in done_groups and gid != focus), None)
+    working = {ln["lot_id"] for ln, _s in todo} | ({focus} if focus else set())
+    nxt = next((gid for gid in order if gid not in done_groups and gid not in working), None)
     _accounted(order, lots, done_groups)
     nl = lots.get(nxt) if nxt else None
     c1, c2 = st.columns([1, 2.4], vertical_alignment="center")
     only = c1.button("Save only", key="pg_save_only", disabled=not todo, width="stretch")
     label = (f"Save & add next → {nl.get('parent_sku', '')} · {nl.get('variety', '')} · Table {nl.get('table_no', '')}"
-             if nl else ("Save · all lots accounted ✓" if todo else "All lots accounted ✓"))
+             if nl else ("Save" if todo else ("All lots accounted ✓" if len(done_groups) == len(order)
+                                                   else "Nothing new to save")))
     with c2.container(key="pg_save"):
         go = st.button(label, type="primary", icon=":material/save:", key="pg_save_next",
                        disabled=not todo, width="stretch")
@@ -737,6 +780,7 @@ def _grid_confirm(rows: list[dict], todo: list, user: User, nxt: str | None = No
             return
         for ln, s in todo:
             ln["saved"] = {"pack": s["pack"], "comment": s["comment"], **s["vals"]}
+            ln["cur"] = dict(ln["saved"])
             st.session_state[f"pg_{ln['id']}_open"] = False
         common.flash("success", f"{n} line(s) saved · see Production Tracking.")
         if nxt:

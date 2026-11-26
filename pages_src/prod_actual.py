@@ -20,9 +20,10 @@ TABLES = [str(i) for i in range(1, 11)]
 CSS = """<style>
 /* 26 Nov: same look as Processed: blue header, centred bold fields, locked box kg / pcs from the master */
 .st-key-pa_card {border:2px solid rgba(59,130,246,.45); border-radius:16px; padding:14px 16px; background:#FFFFFF;}
-.pa-hd {background:#2C5496; color:#fff; border-radius:12px; padding:10px 14px; display:flex;
-  justify-content:space-between; align-items:center; font-weight:800; flex-wrap:wrap; gap:6px;}
-.pa-hd span {background:#fff; color:#2C5496; border-radius:8px; padding:2px 10px; font-size:0.78rem; font-weight:700;}
+.pa-hd {background:#F4F8FE; color:#0C447C; border:2px solid #85B7EB; border-radius:12px; padding:10px 14px;
+  display:flex; justify-content:space-between; align-items:center; font-weight:800; flex-wrap:wrap; gap:6px;}
+.pa-hd span {background:#fff; color:#0C447C; border:1px solid #B5D4F4; border-radius:999px; padding:2px 10px;
+  font-size:0.78rem; font-weight:700;}
 .pa-sec {font-size:0.78rem; font-weight:800; color:#2C5496; text-align:center; margin:12px 0 4px 0;}
 .st-key-pa_card [data-testid="stWidgetLabel"] {justify-content:center; width:100%;}
 .st-key-pa_card [data-testid="stWidgetLabel"] p {font-size:0.75rem; font-weight:700; color:#475569; text-align:center;}
