@@ -254,59 +254,79 @@ NUMS = [c[0] for c in COLS if c[3] == "num"]
 WIDTHS = [c[2] for c in COLS]
 
 GRID_CSS = """<style>
-.st-key-pg_grid {overflow-x:auto; padding-bottom:8px; -webkit-overflow-scrolling:touch; overscroll-behavior-x:contain;}
-@media (max-width: 640px) {
-  .st-key-pg_grid [data-testid="stHorizontalBlock"] {flex-direction:row !important;}
-  .st-key-pg_grid [data-testid="stColumn"] {flex:1 1 0 !important; width:auto !important; min-width:0 !important;}
-  .st-key-pg_grid input {font-size:16px;}
-}
-.st-key-pg_grid [data-testid="stHorizontalBlock"] {min-width:%dpx; flex-wrap:nowrap !important; gap:6px;}
-.st-key-pg_grid [data-testid="stColumn"] {min-width:0 !important;}
-.st-key-pg_grid [data-testid="stElementContainer"] {margin-bottom:0;}
+/* 26 Nov: grading-sheet look (user's design): blue header, lot row, Cux Lot bar, MT / GT / Dump cards */
+.st-key-pg_grid input {text-align:center; font-weight:700;}
 .st-key-pg_grid button[data-testid="stNumberInputStepUp"],
 .st-key-pg_grid button[data-testid="stNumberInputStepDown"] {display:none;}
-.st-key-pg_grid input {font-size:0.85rem; text-align:center; font-weight:700;}
-.st-key-pg_grid [data-baseweb="select"] div {justify-content:center; text-align:center; font-weight:700;}
-.st-key-pg_grid [data-baseweb="select"] > div {min-height:36px; border-color:#9AA5B1; background:#FFFFFF;}
 .st-key-pg_grid [data-testid="stNumberInputContainer"], .st-key-pg_grid [data-testid="stTextInputRootElement"]
-  {border:1px solid #9AA5B1; border-radius:8px; background:#FFFFFF;}
-.pg-h {font-size:0.76rem; font-weight:700; color:#0C447C; line-height:1.25; background:transparent;
-       padding:10px 4px; min-height:58px; display:flex; align-items:center; justify-content:center; text-align:center;}
-.st-key-pg_head {background:#E6F1FB; border-bottom:3px solid #185FA5; border-radius:10px 10px 0 0;
-                 min-width:%dpx; margin-bottom:6px; padding:2px 0 14px 0; overflow:visible;}
-.st-key-pg_head [data-testid="stColumn"], .st-key-pg_head [data-testid="stElementContainer"],
-.st-key-pg_head [data-testid="stMarkdown"], .st-key-pg_head [data-testid="stMarkdownContainer"]
-  {height:auto !important; overflow:visible !important;}
-.st-key-pg_head [data-testid="stMarkdownContainer"] div.pg-h {height:auto; min-height:64px;}
-.pg-lk {font-size:0.84rem; font-weight:700; background:#F1F4F7; color:#1F2933; border-radius:6px; padding:8px 6px;
-        white-space:normal; line-height:1.2; min-height:36px; text-align:center; display:flex;
-        align-items:center; justify-content:center;}
-.pg-na {font-size:0.8rem; color:#9AA5B1; background:#F6F7F9; border-radius:8px; min-height:36px;
-        display:flex; align-items:center; justify-content:center;}
-.pg-var {background:#EDE7FB; color:#4B2A9E; font-weight:700; border-radius:999px; padding:1px 8px;}
-.pg-ef {border-radius:8px; min-height:36px; display:flex; align-items:center; justify-content:center;
-        font-weight:700; font-size:0.9rem;}
-.pg-st {font-size:0.8rem; font-weight:700; min-height:36px; display:flex; align-items:center; justify-content:center;}
-.pg-hint {font-size:0.8rem; color:#6B7684; padding:2px 4px 4px 4px;}
-.pg-band {border-radius:8px; min-height:36px; margin-top:18px; display:flex; flex-direction:column;
-          justify-content:center; align-items:center; text-align:center; padding:4px 10px; font-weight:700;
-          font-size:0.9rem;}
-.pg-band span {font-weight:500; font-size:0.75rem;}
-.pg-lab {font-size:0.72rem; font-weight:700; color:#4A5562; line-height:1.2; min-height:2.4em; display:flex;
-         align-items:flex-end; justify-content:center; text-align:center; margin-bottom:3px;}
-.st-key-pg_grid [data-testid="stWidgetLabel"] p {font-size:0.72rem; font-weight:700; color:#4A5562; line-height:1.2;
-  text-align:center;}
-.st-key-pg_grid [data-testid="stWidgetLabel"] {min-height:2.4em; align-items:flex-end; justify-content:center; width:100%%;}
-.st-key-pg_grid [class$="_pack"] [data-testid="stWidgetLabel"], .st-key-pg_grid [class*="_pack "] [data-testid="stWidgetLabel"] {display:none !important;}
-[class*="st-key-pgb_mt_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_mt_"] .pg-lab {color:#0C447C;}
-[class*="st-key-pgb_mt_"] [data-testid="stNumberInputContainer"] {border-color:#378ADD;}
-[class*="st-key-pgb_gt_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_gt_"] .pg-lab {color:#791F1F;}
-[class*="st-key-pgb_gt_"] [data-testid="stNumberInputContainer"] {border-color:#E24B4A;}
-[class*="st-key-pgb_dump_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_dump_"] .pg-lab {color:#3C3489;}
-[class*="st-key-pgb_dump_"] [data-testid="stNumberInputContainer"] {border-color:#7F77DD;}
-[class*="st-key-pg_lot_"] {border:1px solid #D5DCE4; border-radius:12px; padding:8px; margin-bottom:8px;
-                           min-width:%dpx; background:#FFFFFF;}
-</style>""" % (1280, 1300, 1300)
+  {border:2px solid #CBD5E1; border-radius:12px; background:#FFFFFF; min-height:42px;}
+.st-key-pg_grid [data-testid="stWidgetLabel"] p {font-size:0.72rem; font-weight:700; line-height:1.2;}
+.st-key-pg_grid [data-testid="stElementContainer"] {margin-bottom:0;}
+[class*="st-key-pgw_"], .st-key-pg_headw {overflow-x:auto; -webkit-overflow-scrolling:touch;}
+[class*="st-key-pgr_"], .st-key-pg_head {min-width:%dpx;}
+[class*="st-key-pgr_"] [data-testid="stHorizontalBlock"], .st-key-pg_head [data-testid="stHorizontalBlock"]
+  {flex-wrap:nowrap !important; flex-direction:row !important; gap:8px;}
+[class*="st-key-pgr_"] [data-testid="stColumn"], .st-key-pg_head [data-testid="stColumn"]
+  {min-width:0 !important; width:auto !important;}
+.st-key-pg_head {background:linear-gradient(135deg,#3B6CB7 0%%,#2C5496 100%%); border-radius:16px;
+  padding:14px 12px; border-bottom:4px solid rgba(30,58,138,.4); margin-bottom:10px;}
+.pg-h {font-size:0.76rem; font-weight:800; color:#FFFFFF; line-height:1.3; text-align:center;
+  display:flex; align-items:center; justify-content:center; min-height:34px;}
+[class*="st-key-pg_lot_"] {background:#FFFFFF; border:2px solid #E2E8F0; border-radius:16px; padding:12px;
+  margin-bottom:14px;}
+[class*="st-key-pg_lot_on_"] {border-color:rgba(59,130,246,.6);}
+.pg-no {height:44px; border-radius:12px; background:#475569; color:#fff; font-weight:800; display:flex;
+  align-items:center; justify-content:center;}
+.pg-lk {height:44px; border-radius:12px; background:#F1F5F9; border:1px solid #E2E8F0; color:#0F172A;
+  font-weight:800; font-size:0.88rem; display:flex; align-items:center; justify-content:center; text-align:center;
+  line-height:1.15; padding:0 6px;}
+.pg-var {background:#EDE9FE; color:#5B21B6; border:1px solid #DDD6FE; font-weight:800; border-radius:999px;
+  padding:3px 12px; font-size:0.8rem;}
+[class*="st-key-pgc_"] {background:#F4F8FE; border:2px solid #BFDBFE; border-radius:12px; padding:8px 14px;
+  margin-top:10px;}
+[class*="st-key-pgc_on_"] {border-color:#3B82F6;}
+[class*="st-key-pgc_"] [data-testid="stHorizontalBlock"] {align-items:center;}
+[class*="st-key-pgc_"] [data-baseweb="select"] > div {border:2px solid #3B82F6; border-radius:12px;
+  font-weight:800; color:#2C5496; background:#FFFFFF;}
+[class*="st-key-pgc_on_"] [data-baseweb="select"] > div {background:#3B82F6; color:#FFFFFF;}
+[class*="st-key-pgc_on_"] [data-baseweb="select"] svg {fill:#FFFFFF;}
+.pg-cuxl {font-size:0.75rem; font-weight:800; letter-spacing:.06em; color:#2C5496;}
+.pg-tag {display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:4px 12px;
+  font-size:0.78rem; font-weight:800;}
+.pg-tag.on {background:#16A34A; color:#fff;}
+.pg-tag.off {background:#FEF3C7; color:#78350F; border:1px solid #FCD34D;}
+.pg-hint {font-size:0.8rem; color:#475569; font-weight:600; margin-left:8px;}
+.pg-pills {display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;}
+.pg-pill {background:#fff; border:1px solid #BFDBFE; border-radius:999px; padding:5px 12px; font-size:0.78rem;
+  font-weight:700; color:#2C5496;}
+.pg-pill b {color:#0F172A;}
+.pg-strip {display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;
+  background:#F8FAFC; border:1px solid #E2E8F0; border-radius:12px; padding:8px 12px; margin:12px 0 10px 0;
+  font-size:0.8rem; font-weight:700; color:#475569;}
+.pg-badge {border-radius:8px; padding:2px 10px; font-weight:800; border:1px solid #CBD5E1; background:#fff;
+  color:#0F172A; margin-left:6px;}
+.pg-chip {display:inline-flex; align-items:center; gap:8px; border-radius:8px; padding:4px 12px; color:#fff;
+  font-weight:800; font-size:0.8rem; margin-bottom:6px;}
+.pg-chip span {background:rgba(255,255,255,.95); border-radius:6px; padding:1px 8px;}
+.pg-na-l {font-size:0.72rem; font-weight:700; line-height:1.2; min-height:1.2em; margin-bottom:4px;}
+.pg-na {height:42px; border-radius:12px; background:#F1F5F9; border:2px dashed #E2E8F0; color:#94A3B8;
+  display:flex; align-items:center; justify-content:center; font-weight:700;}
+[class*="st-key-pgb_"] {border-radius:12px; padding:10px 12px; margin-bottom:10px;}
+[class*="st-key-pgb_mt_"] {background:#F4F8FE; border:2px solid rgba(96,165,250,.45);}
+[class*="st-key-pgb_gt_"] {background:#FDF4F5; border:2px solid rgba(251,113,133,.45);}
+[class*="st-key-pgb_dump_"] {background:#F5F5FE; border:2px solid rgba(129,140,248,.45);}
+[class*="st-key-pgb_mt_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_mt_"] .pg-na-l {color:#1E3A8A;}
+[class*="st-key-pgb_gt_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_gt_"] .pg-na-l {color:#9F1239;}
+[class*="st-key-pgb_dump_"] [data-testid="stWidgetLabel"] p, [class*="st-key-pgb_dump_"] .pg-na-l {color:#3730A3;}
+[class*="st-key-pgb_mt_"] [data-testid="stNumberInputContainer"] {border-color:rgba(96,165,250,.7);}
+[class*="st-key-pgb_gt_"] [data-testid="stNumberInputContainer"] {border-color:rgba(251,113,133,.7);}
+[class*="st-key-pgb_dump_"] [data-testid="stNumberInputContainer"],
+[class*="st-key-pgb_dump_"] [data-testid="stTextInputRootElement"] {border-color:rgba(129,140,248,.7);}
+[class*="st-key-pgb_dump_"] button {border:1px solid #A5B4FC; color:#4338CA; font-weight:800;}
+.st-key-pg_save button {background:linear-gradient(135deg,#16A34A 0%%,#15803D 100%%); border-color:#15803D;
+  color:#fff; font-weight:800;}
+@media (max-width: 640px) { .st-key-pg_grid input {font-size:16px;} }
+</style>""" % (840, )
 
 
 def _blank(v) -> bool:
@@ -393,46 +413,92 @@ def _eff_cell(s: dict, lot: dict) -> tuple[str, str, str]:
     return pr.pct(c["efficiency"]), bg, fg
 
 
-HEAD = ["n", "parent_sku", "variety", "size", "table_no", "box_kg", "pcs_per_box", "boxes_moved", "stock_type",
-        "pack"]
-ROW_W = [124] + [122] * 9
-BANDS = [  # (kg key, name shown in the coloured box, fields, (fill, text)): MT blue, GT red, Dump violet
-    ("MT", "MT Ready", ["mt_packs", "mt_loose_kg", "left_box", "left_kg", "left_pcs", "eff", "status"],
-     ("#B5D4F4", "#042C53")),
-    ("GT", "GT Stock", ["gt_box", "gt_kg", "gt_pcs"], ("#F7C1C1", "#501313")),
-    ("Dump", "Dump", ["dump_kg", "dump_pcs", "comment", "add"], ("#CECBF6", "#26215C")),
+HEAD = [("n", "#"), ("parent_sku", "Parent SKU Name"), ("variety", "Variety"), ("size", "Size Spec"),
+        ("table_no", "Table #"), ("boxes_moved", "# Qty Moved to Grading table (Vendor Lots / Boxes) (B)"),
+        ("stock_type", "Production prod Classification")]
+ROW_W = [0.6, 1.5, 1.3, 1.1, 0.9, 1.8, 1.7]
+BANDS = [  # (key, name on the chip, input fields, chip colour)
+    ("mt", "MT Ready", ["mt_packs", "mt_loose_kg", "left_box", "left_kg", "left_pcs"], "#2563EB"),
+    ("gt", "GT Stock", ["gt_box", "gt_kg", "gt_pcs"], "#BE123C"),
+    ("dump", "Dump", ["dump_kg", "dump_pcs", "comment"], "#4F46E5"),
 ]
+_KG = {"mt": "mt_kg", "gt": "gt_kg_total", "dump": "dump_kg_total"}
 
 
-def _band_kg(s: dict, lot: dict) -> dict:
-    c = pr.compute(lot.get("box_kg"), lot.get("pcs_per_box"), lot.get("boxes_moved"), s["pack"], s["vals"])
-    return {"MT": f"{c['mt_kg']:.1f} kg", "GT": f"{c['gt_kg_total']:.1f} kg", "Dump": f"{c['dump_kg_total']:.1f} kg"}
-
-
-def _band_cell(f: str, ln: dict, s: dict, lot: dict, title: dict, i: int, rows: list) -> None:
+def _band_cell(f: str, ln: dict, s: dict, title: dict) -> None:
     k = f"pg_{ln['id']}_{f}"
     lab = title.get(f, "")
-    if f in NUMS:
-        if f in s["need"]:
-            st.number_input(lab, min_value=0.0, step=1.0, value=None, key=k, format="%g", placeholder="")
-        else:
-            st.markdown(f"<div class='pg-lab'>{lab}</div><div class='pg-na'>–</div>", unsafe_allow_html=True)
-    elif f == "eff":
-        txt, bg, fg = _eff_cell(s, lot)
-        st.markdown(f"<div class='pg-lab'>{lab}</div><div class='pg-ef' style='background:{bg};color:{fg}'>{txt}"
-                    "</div>", unsafe_allow_html=True)
-    elif f == "status":
-        stt, colr = (("Saved", "#1E7B34") if s["same"] else ("Not saved", "#8A5A00") if s["touched"]
-                     else ("Not entered", "#9AA5B1"))
-        st.markdown(f"<div class='pg-lab'>Status</div><div class='pg-st' style='color:{colr}'>{stt}</div>",
-                    unsafe_allow_html=True)
-    elif f == "comment":
+    if f == "comment":
         st.text_input(lab, key=k, placeholder="Type a note")
-    elif f == "add":
-        st.markdown("<div class='pg-lab'>&nbsp;</div>", unsafe_allow_html=True)
-        if st.button("＋ pack", key=f"pg_{ln['id']}_add", help="Another pack from this lot", width="stretch"):
-            rows.insert(i + 1, {"id": uuid.uuid4().hex[:8], "lot_id": ln["lot_id"], "saved": None})
-            st.rerun(scope="fragment")
+    elif f in s["need"]:
+        st.number_input(lab, min_value=0.0, step=1.0, value=None, key=k, format="%g", placeholder="0")
+    else:
+        st.markdown(f"<div class='pg-na-l'>{lab}</div><div class='pg-na'>–</div>", unsafe_allow_html=True)
+
+
+def _lot_block(i: int, ln: dict, lot: dict, s: dict, packs: list, title: dict, rows: list) -> None:
+    on = bool(s["pack"])
+    with st.container(key=f"pg_lot_{'on' if on else 'off'}_{ln['id']}"):
+        with st.container(key=f"pgw_{ln['id']}"):
+            with st.container(key=f"pgr_{ln['id']}"):
+                cells = st.columns(ROW_W)
+                for col, (f, _h) in zip(cells, HEAD):
+                    if f == "n":
+                        col.markdown(f"<div class='pg-no'>{i + 1}</div>", unsafe_allow_html=True)
+                        continue
+                    v = lot.get(f, "")
+                    if f == "boxes_moved":
+                        v = f"{pr._f(v):g}" if pr._f(v) else ""
+                    if f == "variety" and v:
+                        v = f"<span class='pg-var'>{v}</span>"
+                    col.markdown(f"<div class='pg-lk'>{v or '&nbsp;'}</div>", unsafe_allow_html=True)
+        a, b, pcs = pr._f(lot.get("box_kg")), pr._f(lot.get("boxes_moved")), pr._f(lot.get("pcs_per_box"))
+        with st.container(key=f"pgc_{'on' if on else 'off'}_{ln['id']}"):
+            c = st.columns([0.55, 1.0, 2.4, 2.6], vertical_alignment="center")
+            c[0].markdown("<span class='pg-cuxl'>CUX LOT:</span>", unsafe_allow_html=True)
+            k = f"pg_{ln['id']}_pack"
+            if st.session_state.get(k) not in [PICK] + packs:
+                st.session_state[k] = PICK
+            c[1].selectbox("Cux Lot", [PICK] + packs, key=k, label_visibility="collapsed")
+            if on:
+                c[2].markdown(f"<span class='pg-tag on'>● Active lot · {lot.get('parent_sku', '')}"
+                              f"{' (' + str(lot.get('variety')) + ')' if lot.get('variety') else ''}</span>",
+                              unsafe_allow_html=True)
+            else:
+                c[2].markdown("<span class='pg-tag off'>Action required</span><span class='pg-hint'>Pick the Cux "
+                              "Lot to open MT, GT and Dump.</span>", unsafe_allow_html=True)
+            pills = [f"Lot weight: <b>{a:g} kg</b>" if a else "", f"Pcs in lot: <b>{pcs:g}</b>" if pcs else "",
+                     f"Boxes moved: <b>{b:g}</b>" if b else ""]
+            c[3].markdown("<div class='pg-pills'>" + "".join(f"<span class='pg-pill'>{p}</span>" for p in pills if p)
+                          + "</div>", unsafe_allow_html=True)
+        if not on:
+            return
+        comp = pr.compute(lot.get("box_kg"), lot.get("pcs_per_box"), lot.get("boxes_moved"), s["pack"], s["vals"])
+        txt, bg, fg = _eff_cell(s, lot)
+        stt, sbg, sfg = (("Saved", "#DCFCE7", "#166534") if s["same"] else ("Not saved", "#FEF3C7", "#78350F")
+                         if s["touched"] else ("Not entered", "#F1F5F9", "#64748B"))
+        st.markdown(f"<div class='pg-strip'><span>Category Efficiency% (K / J):<span class='pg-badge' "
+                    f"style='background:{bg};color:{fg}'>{txt}</span></span><span>Status:<span class='pg-badge' "
+                    f"style='background:{sbg};color:{sfg};border-color:{sbg}'>{stt}</span></span></div>",
+                    unsafe_allow_html=True)
+        for band, name, fields, colr in BANDS:
+            with st.container(key=f"pgb_{band}_{ln['id']}"):
+                chip = (f"<div class='pg-chip' style='background:{colr}'>{name}"
+                        f"<span style='color:{colr}'>{comp[_KG[band]]:.1f} kg</span></div>")
+                if band == "dump":
+                    h = st.columns([4, 1], vertical_alignment="center")
+                    h[0].markdown(chip, unsafe_allow_html=True)
+                    if h[1].button("＋ pack", key=f"pg_{ln['id']}_add", help="Another Cux lot from this lot",
+                                   width="stretch"):
+                        rows.insert(rows.index(ln) + 1, {"id": uuid.uuid4().hex[:8], "lot_id": ln["lot_id"],
+                                                         "saved": None})
+                        st.rerun(scope="fragment")
+                else:
+                    st.markdown(chip, unsafe_allow_html=True)
+                cols = st.columns(len(fields))
+                for col, f in zip(cols, fields):
+                    with col:
+                        _band_cell(f, ln, s, title)
 
 
 def _grid(raw: pd.DataFrame, lines, day: str, city: str, user: User) -> None:
@@ -457,49 +523,19 @@ def _grid_body(rows, lots, packs, day, city, user, key) -> None:
             unsafe_allow_html=True)
     states = {ln["id"]: _state(ln, lots[ln["lot_id"]]) for ln in rows if ln["lot_id"] in lots}
     done = sum(1 for s in states.values() if s["same"])
-    st.caption(f"{len(rows)} line(s) · {done} saved · grey comes from Pre-Production Actual · fill the white "
-               "boxes · scroll sideways for more columns →")
+    active = sum(1 for s in states.values() if s["pack"])
+    st.caption(f"{active} of {len(rows)} line(s) active · {done} saved · grey comes from Pre-Production Actual · "
+               "pick the Cux Lot, then fill MT, GT and Dump")
     title = {c[0]: c[1] for c in COLS}
     with st.container(key="pg_grid"):
-        with st.container(key="pg_head"):
-            head = st.columns(ROW_W)
-            for col, f in zip(head, HEAD):
-                col.markdown(f"<div class='pg-h'>{title[f]}</div>", unsafe_allow_html=True)
+        with st.container(key="pg_headw"):
+            with st.container(key="pg_head"):
+                for col, (_f, h) in zip(st.columns(ROW_W), HEAD):
+                    col.markdown(f"<div class='pg-h'>{h}</div>", unsafe_allow_html=True)
         for i, ln in enumerate(rows):
             lot = lots.get(ln["lot_id"])
-            if lot is None:
-                continue
-            s = states[ln["id"]]
-            with st.container(key=f"pg_lot_{ln['id']}"):
-                cells = st.columns(ROW_W)
-                for col, f in zip(cells, HEAD):
-                    with col:
-                        if f == "pack":
-                            k = f"pg_{ln['id']}_pack"
-                            if st.session_state.get(k) not in [PICK] + packs:
-                                st.session_state[k] = PICK
-                            st.selectbox("Cux Lot", [PICK] + packs, key=k, label_visibility="collapsed")
-                            continue
-                        v = i + 1 if f == "n" else lot.get(f, "")
-                        if f in ("box_kg", "pcs_per_box", "boxes_moved"):
-                            v = f"{pr._f(v):g}" if pr._f(v) else ""
-                        if f == "variety" and v:
-                            v = f"<span class='pg-var'>{v}</span>"
-                        st.markdown(f"<div class='pg-lk'>{v or '&nbsp;'}</div>", unsafe_allow_html=True)
-                if not s["pack"]:
-                    st.markdown("<div class='pg-hint'>Pick the Cux Lot to open MT, GT and Dump.</div>",
-                                unsafe_allow_html=True)
-                    continue
-                kg = _band_kg(s, lot)
-                for band, name, fields, colr in BANDS:
-                    with st.container(key=f"pgb_{band.lower()}_{ln['id']}"):
-                        cells = st.columns(ROW_W)
-                        bg, fg = colr
-                        cells[0].markdown(f"<div class='pg-band' style='background:{bg};color:{fg}'>{name}"
-                                          f"<span>{kg.get(band, '')}</span></div>", unsafe_allow_html=True)
-                        for col, f in zip(cells[1:], fields):
-                            with col:
-                                _band_cell(f, ln, s, lot, title, i, rows)
+            if lot is not None:
+                _lot_block(i, ln, lot, states[ln["id"]], packs, title, rows)
 
     todo = [(ln, states[ln["id"]]) for ln in rows if ln["id"] in states
             and states[ln["id"]]["touched"] and not states[ln["id"]]["same"]]
