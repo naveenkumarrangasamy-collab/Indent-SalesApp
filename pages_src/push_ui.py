@@ -69,17 +69,23 @@ def check(user: auth.User) -> None:
 
 
 def prompt(user: auth.User) -> None:
-    """Once per sign-in: when this device does not have alerts yet, ask with the reason."""
-    if not for_alerts(user) or st.session_state.get("alert_prompted"):
+    """Once per sign-in: when this device does not have alerts yet, ask with the reason. The dialog is drawn
+    on every run until it is closed (another rerun would otherwise remove it)."""
+    if not for_alerts(user):
         return
-    if st.session_state.get("push_state") != "off":     # unknown yet, already on, blocked or not supported
-        return
-    st.session_state["alert_prompted"] = True
-    _dialog(user)
+    ss = st.session_state
+    if not ss.get("alert_prompted") and ss.get("push_state") == "off":
+        ss["alert_prompted"] = True
+        ss["alert_dialog_open"] = True
+    if ss.get("alert_dialog_open"):
+        _dialog(user)
 
 
-@st.dialog("🔔 Allow PO alerts on this device", width="large")
-def _dialog(user: auth.User) -> None:
+def _closed() -> None:
+    st.session_state["alert_dialog_open"] = False
+
+
+def _dialog_body(user: auth.User) -> None:
     st.markdown(ALERT_WHY)
     st.markdown(ALERT_HOW)
     res = button(user, key="push_dlg")
@@ -90,8 +96,15 @@ def _dialog(user: auth.User) -> None:
         ok, msg = alerts.send_test(user.email)
         (st.success if ok else st.error)(msg)
     if c[1].button("Close" if on else "Later", width="stretch", key="push_dlg_close"):
+        _closed()
         st.rerun()
     st.caption("You can do this any time from the sidebar: 🔔 PO alerts on this device.")
+
+
+try:      # on_dismiss: closing with ✕ also ends it (older Streamlit without it: Later / Close end it)
+    _dialog = st.dialog("🔔 Allow PO alerts on this device", width="large", on_dismiss=_closed)(_dialog_body)
+except TypeError:
+    _dialog = st.dialog("🔔 Allow PO alerts on this device", width="large")(_dialog_body)
 
 
 def sidebar_box(user: auth.User) -> None:
