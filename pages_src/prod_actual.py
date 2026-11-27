@@ -46,11 +46,12 @@ CSS = """<style>
 </style>"""
 
 
-def _pick(label: str, opts: list[str], key: str, blank: bool = True) -> str:
+def _pick(label: str, opts: list[str], key: str, blank: bool = True, fmt=None) -> str:
     vals = ([BLANK] if blank else []) + opts
     if st.session_state.get(key) not in vals:
         st.session_state.pop(key, None)
-    v = st.selectbox(label, vals, key=key, placeholder="Choose…", index=None if not blank else 0)
+    v = st.selectbox(label, vals, key=key, placeholder="Choose…", index=None if not blank else 0,
+                     format_func=fmt or str)
     return "" if v in (None, BLANK) else v
 
 
@@ -61,6 +62,21 @@ def _typed(label: str, opts: list[str], key: str, hint: str) -> str:
         opts = opts + [cur]
     v = st.selectbox(label, opts, key=key, index=None, placeholder=hint, accept_new_options=True)
     return str(v or "").strip()
+
+
+def _add_name(city: str, key: str) -> None:
+    """＋ Add name: save the typed name for this city and select it."""
+    name = " ".join(str(st.session_state.get(f"{key}_new") or "").split())
+    if not name:
+        return
+    u = st.session_state.get("user") or {}
+    try:
+        pa.add_executive(get_backend(), city, name, str(u.get("email", "")))
+    except Exception as e:  # noqa: BLE001
+        st.toast(f"Name not saved: {e}", icon="⚠️")
+        return
+    st.session_state[key] = name
+    st.session_state[f"{key}_new"] = ""
 
 
 def _pending() -> list[dict]:
@@ -174,7 +190,14 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
         with r1[1]:
             variety = _pick("Variety", pa.choices(opts, "variety", origin=origin), f"{k}_v")
         with r1[2]:
-            size = _pick("Spec", pa.choices(opts, "size", origin=origin, variety=variety), f"{k}_s", blank=False)
+            sw = pa.size_weights(opts, origin=origin, variety=variety)
+            flat = [w[0] for w in sw.values() if len(w) == 1]
+            usual = max(set(flat), key=flat.count) if flat else None
+
+            def _spec(s, sw=sw, usual=usual):      # "60C · 10 kg": a spec that only comes in the other box
+                w = sw.get(s) or []
+                return f"{s} · {w[0]:g} kg" if len(w) == 1 and usual is not None and w[0] != usual else s
+            size = _pick("Spec", list(sw), f"{k}_s", blank=False, fmt=_spec)
         with r1[3]:   # brands per SKU (fruit + origin + variety + size) from the Brand_Master tab
             b_opts = pa.brands(opts, origin, variety, size)
             brand = _typed("Brand", b_opts, f"{k}_b", "Choose or type")   # typed in the same box, Enter adds it
@@ -205,8 +228,14 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
         names = pa.executives(exec_tab, city)
         names += [n for n in dict.fromkeys(r.get("executive", "") for r in _pending() if r.get("city") == city)
                   if n and n.casefold() not in {x.casefold() for x in names}]
-        with r3[0]:    # names of this city only; a new name is typed here and kept for the city on Save
-            person = _typed("Executive name", names, f"pa_ex_{pa.pkey(city)}", "Choose or type a name")
+        ek = f"pa_ex_{pa.pkey(city)}"
+        with r3[0]:    # names of this city only; ＋ Add name onboards a new one for the city at once
+            person = _typed("Executive name", names, ek, "Choose a name")
+            with st.popover("＋ Add name", width="stretch"):
+                st.text_input("New executive name", key=f"{ek}_new", placeholder="Type the name")
+                st.button("Add", key=f"{ek}_addbtn", type="primary", width="stretch",
+                          on_click=_add_name, args=(city, ek))
+                st.caption(f"Kept for {city} only.")
         table = r3[1].selectbox("Table number", TABLES, index=None, placeholder="Choose…", key=f"{k}_t")
         with r3[2].container(key=f"pa_box_{k}"):
             boxes = st.number_input("Number of boxes", min_value=0.0, step=1.0, value=None,

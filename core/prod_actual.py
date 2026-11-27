@@ -255,6 +255,25 @@ def executives(tab: pd.DataFrame | None, city: str) -> list[str]:
     return sorted(out, key=str.casefold)
 
 
+def add_executive(backend, city: str, name: str, user: str) -> bool:
+    """Onboard one name for a city right away (the ＋ Add name option). False when it is already there."""
+    row = new_executive_rows([{"city": city, "executive": name}], read_executives(backend), user, config.now_iso())
+    if not row:
+        return False
+    backend.append_dicts(GRADING_EXECUTIVES, row)
+    try:
+        from core import indents
+        indents.clear_cache()
+    except Exception:  # noqa: BLE001
+        pass
+    return True
+
+
+def size_weights(df: pd.DataFrame, **picked) -> dict[str, list[float]]:
+    """Box weights per spec for the picked origin / variety ('60C' -> [10.0])."""
+    return {s: box_weights(df, **picked, size=s) for s in choices(df, "size", **picked)}
+
+
 def new_executive_rows(entries: list[dict], tab: pd.DataFrame | None, user: str, stamp: str) -> list[dict]:
     have = set()
     if tab is not None and not tab.empty:
