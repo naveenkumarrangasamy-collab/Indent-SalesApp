@@ -479,7 +479,8 @@ def next_day_mask(lines: pd.DataFrame) -> pd.Series:
 # ------------------------------------------------------------------ batching: indent vs PO (24 Nov)
 
 SHEET_COLUMNS = ["Delivery date", "City", "Customer", "Delivery point", "Parent SKU", "Customer SKU Name", "Variety",
-                 "Lot", "Lot Size", "Spec", "Indent qty", "PO qty", "Difference", "Status", "Updated at"]
+                 "Lot", "Lot Size", "Spec", "Indent qty", "PO qty", "Difference", "Status", "Updated at",
+                 "Facility"]          # Facility (27 Nov) is last so the older columns keep their place
 NO_PO, MATCH, PO_LOW, PO_HIGH, NOT_ON_PO, NOT_ON_INDENT = ("No PO yet", "Match", "PO lower", "PO higher",
                                                            "Not on PO", "Not on indent")
 STATUS_COLOURS = {PO_LOW: "F8C9C9", NOT_ON_PO: "F8C9C9", PO_HIGH: "FFE89A", NOT_ON_INDENT: "FFD3A1"}
@@ -528,13 +529,30 @@ def with_po(bat: pd.DataFrame, po_qty: dict, po_indents: set, extras: list[dict]
     return out
 
 
+def add_facility(view: pd.DataFrame, lines: pd.DataFrame) -> pd.DataFrame:
+    """27 Nov: a 'Facility' column after 'City' on a batching view (from the indents' facility; blank =
+    the city's first facility). Unchanged when no city on it has facilities."""
+    from core import config
+    if view.empty or not any(config.facilities(c) for c in view["City"].unique()):
+        return view
+    k = lambda v: " ".join(str(v or "").split()).casefold()   # noqa: E731
+    fac = lines["facility"] if "facility" in lines.columns else [""] * len(lines)
+    known = {(k(ci), k(c), k(s)): config.facility_of(ci, f)
+             for ci, c, s, f in zip(lines["city"], lines["customer"], lines["store"], fac)}
+    out = view.copy()
+    vals = [known.get((k(ci), k(c), k(s))) or config.facility_of(ci)
+            for ci, c, s in zip(out["City"], out["Customer"], out["Delivery point"])]
+    out.insert(list(out.columns).index("City") + 1, "Facility", vals)
+    return out
+
+
 def sheet_rows(view: pd.DataFrame, delivery_date: str, stamp: str) -> list[list]:
     """Rows for the Batching_Sheet tab: one per delivery point + SKU."""
     def cell(v):
         return "" if v is None or (not isinstance(v, str) and pd.isna(v)) else v
     return [[delivery_date, r["City"], r["Customer"], r["Delivery point"], r["Parent SKU"], r["Customer SKU Name"],
              r.get("Variety", ""), r["Lot"], r["Lot Size"], r["Spec"], cell(r.get("Indent qty")),
-             cell(r.get("PO qty")), cell(r.get("Difference")), r["Status"], stamp]
+             cell(r.get("PO qty")), cell(r.get("Difference")), r["Status"], stamp, cell(r.get("Facility", ""))]
             for r in view.to_dict("records")]
 
 
@@ -542,7 +560,8 @@ def merge_sheet(existing: list[list], new_rows: list[list], delivery_date: str, 
     """Batching_Sheet keeps every day: this date's rows for these cities are replaced, the rest kept.
     An old-format tab (title rows, no header) is started fresh."""
     keep = []
-    if existing and [str(x).strip() for x in existing[0][:len(SHEET_COLUMNS)]] == SHEET_COLUMNS:
+    old = len(SHEET_COLUMNS) - 1          # a tab written before the Facility column keeps its rows
+    if existing and [str(x).strip() for x in existing[0][:old]] == SHEET_COLUMNS[:old]:
         cset = {c.casefold() for c in cities}
         for r in existing[1:]:
             if not any(str(x).strip() for x in r):

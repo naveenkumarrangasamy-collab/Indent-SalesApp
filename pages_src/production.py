@@ -12,7 +12,7 @@ from core import config, indents, masters, reports
 from core.auth import User
 from core.pdf_report import sections_pdf, table_pdf
 from core.production_calc import (batching, default_date, delivery_dates, filter_lines, make_ready,
-                                  make_ready_by_customer, merge_sheet, next_day_mask, not_in_base,
+                                  make_ready_by_customer, merge_sheet, add_facility, next_day_mask, not_in_base,
                                   production, sheet_rows, unmapped, with_po,
                                   MATCH, NO_PO, NOT_ON_INDENT, NOT_ON_PO, PO_HIGH, PO_LOW, STATUS_COLOURS)
 from core.models import fmt_num
@@ -377,7 +377,7 @@ def render_batching(user: User) -> None:
     for day, part in lines.groupby("delivery_date", sort=True):
         v = with_po(batching(part, m), po_qty, po_ids, [e for e in extras if e["day"] == day])
         v.insert(0, "Delivery date", day)
-        parts.append(v)
+        parts.append(add_facility(v, part))
     view = pd.concat(parts, ignore_index=True)
     bat = common.numbered(view)
     has_var = bat["Variety"].astype(bool).any()
@@ -445,7 +445,7 @@ def _sync_batching_tab(view: pd.DataFrame, lines: pd.DataFrame) -> None:
     cities = set(lines["city"].unique())
     stamp = config.now_ist().strftime("%Y-%m-%d %H:%M")
     rows = sheet_rows(view, day, stamp)
-    sig = hash((day, tuple(sorted(cities)), str([r[:-1] for r in rows])))
+    sig = hash((day, tuple(sorted(cities)), str([r[:-2] + r[-1:] for r in rows])))
     if st.session_state.get("bs_synced") == sig:
         st.caption(f"**{BATCHING_TAB}** tab of the Google Sheet is up to date for {_fmt_date(day)}.")
         return

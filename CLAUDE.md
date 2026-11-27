@@ -733,7 +733,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **BLR dispatch sheet**: **Facility** column after City (column C); the app now writes **A–N**, people type from
   O on. `dispatch_sync` reads the header: no Facility column in C → old A–M layout (`has_facility`, `widen`).
   The tab is now named "Auto03-BLR_MTDispatch-Live" (found by gid).
-- Production / Batching / mails / Home / Upload PO are NOT split by facility yet (all facilities together).
+- **Batching sheet (27 Nov 12:13)**: still every indent of the city, with a **Facility** column after City
+  (screen, Excel, CSV; `production_calc.add_facility`). The Batching_Sheet tab has Facility as its **last** column
+  (older columns keep their place; an older tab keeps its rows). PDF and the hourly mail unchanged.
+- Production / mails / Home / Upload PO are NOT split by facility yet (all facilities together).
 - Master 27 Nov: PTP Bangalore Reliance "1Box - Royal Gala" (Gala; New tab: Box, 90C, 100C, 110C, Poland).
 
 ## 6. Code map (repo root)
