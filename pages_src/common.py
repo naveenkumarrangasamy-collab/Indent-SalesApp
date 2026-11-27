@@ -216,6 +216,18 @@ def flash(kind: str, text: str) -> None:
     st.session_state.setdefault("_flash", []).append((kind, text))
 
 
+def day_input(box, key: str, label: str = "Date"):
+    """Date picker of the Option 2 pages. 27 Nov (user): the date chosen on one page is the date the next
+    page opens on (Pre-Production Actual -> Production Detail Process -> Summary -> Dispatch -> Returns),
+    so back-dated entry does not fall back to today. A new sign-in starts on today."""
+    from core import config
+    if key not in st.session_state:
+        st.session_state[key] = st.session_state.get("o2_day") or config.now_ist().date()
+    day = box.date_input(label, key=key, format="DD/MM/YYYY")
+    st.session_state["o2_day"] = day
+    return day
+
+
 def show_flash() -> None:
     for kind, text in st.session_state.pop("_flash", []):
         getattr(st, kind, st.info)(text)

@@ -200,7 +200,7 @@ def render(user: User) -> None:
         return
     cities = [c for c in m.cities() if user.sees_all_cities or user.in_my_cities(c)]
     top = st.columns([1, 3])
-    day = top[0].date_input("Date", value=config.now_ist().date(), key="p2_day", format="DD/MM/YYYY").isoformat()
+    day = common.day_input(top[0], "p2_day").isoformat()
     city = cities[0] if cities else ""
     if len(cities) > 1:
         with top[1]:
@@ -550,9 +550,8 @@ def render_tracking(user: User) -> None:
         common.sheet_error(e, "Could not load.")
         return
     cities = [c for c in m.cities() if user.sees_all_cities or user.in_my_cities(c)]
-    today = config.now_ist().date()
     top = st.columns([1, 0.9, 1, 3])
-    d1 = top[0].date_input("Date", value=today, key="t2_day", format="DD/MM/YYYY")
+    d1 = common.day_input(top[0], "t2_day")
     ranged = top[1].toggle("Date range", key="t2_range", help="Add a second date to see a week, a month ...")
     d2 = top[2].date_input("To", value=d1, min_value=d1, key="t2_to", format="DD/MM/YYYY") if ranged else d1
     if d2 < d1:

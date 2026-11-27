@@ -23,7 +23,8 @@ TABLE_FIELDS = ["left_box", "left_kg", "left_pcs", "gt_box", "gt_kg", "gt_pcs", 
 MT_FIELDS = ["mt_packs", "mt_loose_kg"]
 LOW, HIGH = 0.97, pr.MAX_SUM
 TRACK_TAB = "Production_Tracking_2"
-TRACK_HEAD = ["Production Date", "City", "Table #", "Parent SKU Name", "Origin", "Variety", "Brand", "Size Spec",
+TRACK_HEAD = ["Production Date", "City", "Table #", "Executive", "Parent SKU Name", "Origin", "Variety", "Brand",
+              "Size Spec",
               "Purchase Lot weight in Kgs (A)", "# of Pcs in Purchase lot",
               "# Qty Moved to Grading table (Vendor Lots / Boxes) (B)", "Production prod Classification",
               "Cux Lot", "MT Ready (Dispatch) (Cux Lots) (D1)", "MT Ready (Disptach) (Loose Kg) (D2)",
@@ -287,7 +288,7 @@ def track_rows(lots: pd.DataFrame, saved: pd.DataFrame) -> list[list]:
     d["production_date"] = d["production_date"].astype(str).str[:10]
     for (day, city), grp in d.groupby(["production_date", d["city"].astype(str)], sort=False):
         for key, it in items(grp).items():
-            first = [day, city, f"Table {it['table_no']}", it.get("parent_sku", ""), it.get("origin", ""),
+            first = [day, city, f"Table {it['table_no']}", it.get("executive", ""), it.get("parent_sku", ""), it.get("origin", ""),
                      it.get("variety", ""), it.get("brand", ""), it.get("size", ""), _r(it.get("box_kg"), 3),
                      pr._f(it.get("pcs_per_box")) or "", _r(it.get("boxes_moved")), it.get("stock_type", "")]
             s = done.get(f"{day}|{city}|{key}")
@@ -302,7 +303,7 @@ def track_rows(lots: pd.DataFrame, saved: pd.DataFrame) -> list[list]:
                                      "", "", ""] + tail + [""])
             rows.append(first + ["Table total", "", "", _r(t["mt_kg"]), _r(t["left_kg"]), _r(t["gt_kg"]),
                                  _r(t["dump_kg"])] + tail + [s["comment"]])
-    rows.sort(key=lambda r: (r[0], str(r[2]).replace("Table ", "").zfill(3), str(r[3])))
+    rows.sort(key=lambda r: (r[0], str(r[2]).replace("Table ", "").zfill(3), str(r[4])))
     rows.sort(key=lambda r: r[0], reverse=True)
     return rows
 

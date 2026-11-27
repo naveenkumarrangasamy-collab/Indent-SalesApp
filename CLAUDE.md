@@ -762,3 +762,23 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 - Keep the e-mail formats stable once agreed.
 - Test before pushing: run pytest and pyflakes; check the live app after the redeploy.
 
+
+### 27 Nov evening (TRIAL branch only): Option 2 end of day + balance cases
+
+- Option 2 menu: Pre-Production Actual, Production Detail Process, **Production Summary** (tracker + Category
+  efficiency), **Dispatch** (`/dispatch-2`) and **Returns** (`/returns-2`); `core/day_dispatch.py`,
+  `pages_src/day_dispatch.py`, tabs `Day_Dispatch` / `Day_Returns` (create only, rounds add up). PO qty is final
+  (indent qty until the PO); extra stock may be sent; billed never above the PO.
+- The date picked on one Option 2 page is the date the next one opens on (`common.day_input`, session key
+  `o2_day`). The Production tracker has an **Executive** column after Table #.
+- **Balance cases from the 27 Nov end-to-end test** (user: "show me this list when I ask for the balance cases"):
+  2. MT stock matched too loosely: every 1-piece avocado SKU shares one stock, every Gala 2PC SKU one stock
+     (count / size ignored).
+  3. Gram packs (Blueberry 125 gm, grapes 250 gm) show in kg, not punnets / packs, in the end-of-day table.
+  4. Dispatch tile says "PO qty" even when the indent qty is used (no PO).
+  5. A fully sent (locked) dispatch card hides what was sent (only inside "Send more" / Returns).
+  7. Dispatch / Returns entry boxes are not amber as in the preview.
+  8. A confirmed day does not stop dispatch or new lots; dispatch does not wait for the day to be confirmed.
+  9. Returned stock is only recorded; it does not go back to MT / GT stock.
+  Also open: test entries of 26 Nov Bangalore (Executive A / B, Brand A, IN-071 dispatch + returns) still on the
+  trial sheet; no invoice PDF; box SKUs have no MT figure.

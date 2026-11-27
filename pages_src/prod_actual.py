@@ -257,7 +257,7 @@ def render(user: User, nxt: str = "") -> None:
 
     cities = [c for c in m.cities() if user.sees_all_cities or user.in_my_cities(c)]
     top = st.columns([1, 3])
-    day = top[0].date_input("Date", value=config.now_ist().date(), key="pa_day", format="DD/MM/YYYY")
+    day = common.day_input(top[0], "pa_day")
     city = cities[0] if len(cities) == 1 else ""
     if len(cities) > 1:       # 27 Nov (user): the city is chosen, never assumed
         with top[1]:
