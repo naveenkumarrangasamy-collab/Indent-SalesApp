@@ -30,30 +30,32 @@ SUM_COL = {"empty": ("#F1F5F9", "#64748B"), "low": ("#FAEEDA", "#633806"), "ok":
            "over": ("#FCEBEB", "#791F1F")}
 
 CSS = """<style>
-.p2-hd {background:#F4F8FE; border:2px solid #85B7EB; border-radius:12px; padding:8px 12px; color:#0C447C;
+.p2-hd {font-size:1.08rem; background:#F4F8FE; border:2px solid #85B7EB; border-radius:12px; padding:8px 12px; color:#0C447C;
   font-weight:800; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; margin-bottom:10px;}
-.p2-hd span {background:#fff; border:1px solid #B5D4F4; border-radius:999px; padding:2px 10px; font-size:0.8rem;}
-[class*="st-key-p2t_"] {background:#fff; border:2px solid #E2E8F0; border-radius:14px; padding:8px 12px;
+.p2-hd span {background:#fff; border:1px solid #B5D4F4; border-radius:999px; padding:2px 10px; font-size:0.88rem;}
+[class*="st-key-p2t_"] {background:#fff; border:2px solid #E2E8F0; border-radius:14px; padding:12px 16px 14px 16px;
   margin-bottom:8px;}
+[class*="st-key-p2t_"] [data-testid="stMarkdownContainer"] {margin-bottom:0;}
+[class*="st-key-p2t_"] [data-testid="stMarkdownContainer"] p {margin-bottom:0;}
 [class*="st-key-p2t_on_"] {border-color:#3B82F6;}
-.p2-tn {font-weight:800; font-size:1.15rem; color:#000;}
-.p2-tx {font-size:0.8rem; color:#475569;}
+.p2-tn {font-weight:800; font-size:1.25rem; color:#000; line-height:1.35;}
+.p2-tx {font-size:0.9rem; color:#475569; line-height:1.55; margin-top:2px;}
 .p2-var {background:#F3E8FF; color:#6B21A8; border-radius:999px; padding:1px 8px; font-weight:700;}
-.p2-st {border-radius:999px; padding:3px 10px; font-size:0.78rem; font-weight:800; display:inline-block;}
+.p2-st {border-radius:999px; padding:3px 10px; font-size:0.86rem; font-weight:800; display:inline-block;}
 [class*="st-key-p2i_"] {background:#fff; border:1px solid #E2E8F0; border-radius:12px; padding:10px;
   margin:0 0 10px 0;}
 [class*="st-key-p2mt_"] {background:#F4F8FE; border:2px solid #BFDBFE; border-radius:12px; padding:10px;}
 [class*="st-key-p2tb_"] {background:#F8FAFC; border:2px solid #E2E8F0; border-radius:12px; padding:10px;}
-.p2-chip {display:inline-block; border-radius:6px; padding:2px 10px; color:#fff; font-size:0.78rem;
+.p2-chip {display:inline-block; border-radius:6px; padding:2px 10px; color:#fff; font-size:0.86rem;
   font-weight:800; margin-bottom:4px;}
 .p2-no {background:#334155; color:#fff; border-radius:8px; height:38px; display:flex; align-items:center;
   justify-content:center; font-weight:800; margin-top:26px;}
-.p2-l {font-size:0.72rem; font-weight:700; color:#475569; text-align:center; margin-bottom:4px; height:1.3em;}
+.p2-l {font-size:0.8rem; font-weight:700; color:#475569; text-align:center; margin-bottom:4px; height:1.3em;}
 .p2-k {height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center;
   font-weight:800; background:#EFF6FF; color:#1E3A8A;}
-.p2-sub {font-size:0.76rem; font-weight:800; margin:6px 0 0 0;}
+.p2-sub {font-size:0.86rem; font-weight:800; margin:6px 0 0 0;}
 [class*="st-key-p2i_"] [data-testid="stWidgetLabel"] {justify-content:center; width:100%%;}
-[class*="st-key-p2i_"] [data-testid="stWidgetLabel"] p {font-size:0.72rem; font-weight:700; color:#475569;
+[class*="st-key-p2i_"] [data-testid="stWidgetLabel"] p {font-size:0.8rem; font-weight:700; color:#475569;
   text-align:center;}
 [class*="st-key-p2i_"] input {text-align:center; font-weight:800;}
 [class*="st-key-p2i_"] [data-testid="stNumberInputContainer"],
@@ -64,7 +66,7 @@ CSS = """<style>
 [class*="st-key-p2i_"] button[data-testid="stNumberInputStepUp"],
 [class*="st-key-p2i_"] button[data-testid="stNumberInputStepDown"] {display:none;}
 [class*="st-key-p2add_"] button {border:2px dashed #85B7EB; background:#F4F8FE; color:#185FA5; font-weight:800;}
-.p2-sum {border-radius:12px; padding:8px 12px; margin:8px 0; font-size:0.82rem; font-weight:800;}
+.p2-sum {border-radius:12px; padding:8px 12px; margin:8px 0; font-size:0.9rem; font-weight:800;}
 .p2-sum > div {display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;}
 .p2-bar {height:8px; border-radius:999px; background:#E2E8F0; overflow:hidden; margin:5px 0;}
 .p2-bar div {height:100%%;}
@@ -79,11 +81,11 @@ CSS = """<style>
 .p2-vt td {background:#EFF6FF; color:#1E3A8A; font-weight:800;}
 .p2-vf {display:flex; gap:14px; flex-wrap:wrap; padding:5px 10px; font-weight:800;}
 .p2-lock {height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center;
-  font-weight:700; font-size:0.78rem; background:#F1F5F9; color:#94A3B8; border:1px dashed #CBD5E1;
+  font-weight:700; font-size:0.84rem; background:#F1F5F9; color:#94A3B8; border:1px dashed #CBD5E1;
   cursor:not-allowed;}
 .st-key-p2next button {background:#2563EB; border-color:#2563EB; color:#fff; font-weight:800;}
 .st-key-p2day button {background:#1F6B4A; border-color:#1F6B4A; color:#fff; font-weight:800;}
-.p2-note {border-radius:10px; padding:8px 10px; font-size:0.82rem; font-weight:700; margin-bottom:8px;}
+.p2-note {border-radius:10px; padding:8px 10px; font-size:0.9rem; font-weight:700; margin-bottom:8px;}
 [class*="st-key-p2sub_"] button:not(:disabled) {background:#16A34A; border-color:#15803D; color:#fff;
   font-weight:800;}
 @media (max-width: 640px) { [class*="st-key-p2i_"] input {font-size:16px;} .p2-no {margin-top:0;} }
