@@ -114,6 +114,48 @@ def _confirm(rows: list[dict], user: User, nxt: str = "") -> None:
         st.rerun()
 
 
+def _line_name(r: dict) -> str:
+    bits = [r.get("parent_sku", ""), r.get("variety", ""), r.get("size", ""), r.get("executive", ""),
+            f"table {r.get('table_no', '')}", f"{pa._num(r.get('boxes_moved')) or 0:g} boxes"]
+    return " · ".join(str(b) for b in bits if str(b).strip())
+
+
+@st.dialog("Edit this line")
+def _edit(i: int, names: list[str]) -> None:
+    rows = _pending()
+    if i is None or i >= len(rows):
+        st.rerun()
+    r = rows[i]
+    st.caption(" · ".join(str(x) for x in (r.get("parent_sku"), r.get("origin"), r.get("variety"), r.get("brand"),
+                                             r.get("size"), f"{pa._num(r.get('box_kg')) or 0:g} kg box") if x))
+    cur = str(r.get("executive") or "")
+    opts = names + ([cur] if cur and cur not in names else [])
+    person = st.selectbox("Executive name", opts, index=opts.index(cur) if cur in opts else None,
+                          accept_new_options=True, key=f"pa_ed_ex_{i}")
+    t = str(r.get("table_no") or "")
+    table = st.selectbox("Table number", TABLES, index=TABLES.index(t) if t in TABLES else None,
+                         key=f"pa_ed_t_{i}")
+    boxes = st.number_input("Number of boxes", min_value=0.0, step=1.0, format="%g",
+                            value=float(pa._num(r.get("boxes_moved")) or 0), key=f"pa_ed_n_{i}")
+    s = r.get("stock_type")
+    stock = st.selectbox("Stock", pa.STOCK_CHOICES, key=f"pa_ed_s_{i}",
+                         index=pa.STOCK_CHOICES.index(s) if s in pa.STOCK_CHOICES else 0)
+    st.caption("To change the fruit, spec, brand or box weight, remove the line and add it again.")
+    new = {**r, "executive": str(person or "").strip(), "table_no": table or "", "boxes_moved": boxes or 0,
+           "stock_type": stock}
+    errs = pa.entry_errors(new)
+    c1, c2 = st.columns(2)
+    if c1.button("Update", type="primary", width="stretch", key=f"pa_ed_ok_{i}"):
+        if errs:
+            st.error("Still to fill: " + ", ".join(errs))
+        else:
+            rows[i] = new
+            st.session_state.pop("pa_line", None)
+            st.rerun()
+    if c2.button("Back", width="stretch", key=f"pa_ed_back_{i}"):
+        st.rerun()
+
+
 def _clock(stamp) -> str:
     try:
         return pd.to_datetime(str(stamp)).strftime("%I:%M %p").lstrip("0")
@@ -203,15 +245,18 @@ def render(user: User, nxt: str = "") -> None:
     if rows:
         st.markdown(f"#### Added · {len(rows)} to save")
         _by_executive(_preview_df(rows), "Number of boxes", _last_times(rows, "executive", "added_at"))
-        c = st.columns([1, 1, 3])
-        if c[0].button("Save", type="primary", icon=":material/save:", width="stretch", key="pa_save"):
-            _confirm(rows, user)
-        drop = c[1].selectbox("Remove", ["—"] + [f"#{i + 1}" for i in range(len(rows))], key="pa_drop",
-                              label_visibility="collapsed")
-        if drop != "—":
-            rows.pop(int(drop[1:]) - 1)
-            st.session_state.pop("pa_drop", None)
+        # 27 Nov (user): a line can be corrected or taken out before saving
+        c = st.columns([2.4, 1, 1], vertical_alignment="bottom")
+        i = c[0].selectbox("Change a line before saving", range(len(rows)), index=None, key="pa_line",
+                           placeholder="Choose the line…", format_func=lambda j: _line_name(rows[j]))
+        if c[1].button("✎ Edit", key="pa_edit", width="stretch", disabled=i is None):
+            _edit(i, pa.executives(exec_tab, rows[i].get("city", "")))
+        if c[2].button("✕ Remove", key="pa_remove", width="stretch", disabled=i is None):
+            rows.pop(i)
+            st.session_state.pop("pa_line", None)
             st.rerun()
+        if st.button("Save", type="primary", icon=":material/save:", key="pa_save"):
+            _confirm(rows, user)
 
     if ready:
         _saved_today(saved, city, day)
