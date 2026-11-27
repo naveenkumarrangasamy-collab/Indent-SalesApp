@@ -81,7 +81,7 @@ TABS: dict[str, list[str]] = {
     PROCESSED_TABLE: ["save_id", "saved_at", "saved_by", "production_date", "city", "item_key", "table_no",
                       "parent_sku", "variety", "size", "origin", "brand", "status", "kind", "cux_lot", "mt_packs",
                       "mt_loose_kg", "left_box", "left_kg", "left_pcs", "gt_box", "gt_kg", "gt_pcs", "dump_kg",
-                      "dump_pcs", "comment"],
+                      "dump_pcs", "comment", "executive"],
     PREPROD_FREEZE: ["delivery_date", "city", "group", "action", "at", "by"],
     BRAND_MASTER: ["Parent SKU", "Origin", "Variety", "Size", "Brand", "Added by", "Added at"],
     PREPROD_ENTRIES: ["entry_id", "saved_at", "saved_by", "production_date", "city", "parent_sku", "origin",

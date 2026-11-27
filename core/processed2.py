@@ -37,7 +37,30 @@ def _s(v) -> str:
 
 
 def item_key(r: dict) -> str:
-    return "|".join(_s(r.get(c)).casefold() for c in ("table_no", "parent_sku", "variety", "size", "origin", "brand"))
+    """27 Nov: executive level. One item = one executive + table + fruit / variety / size / origin / brand.
+    Lots saved before executives existed keep their old key (no name in front)."""
+    base = "|".join(_s(r.get(c)).casefold() for c in ("table_no", "parent_sku", "variety", "size", "origin", "brand"))
+    ex = _s(r.get("executive")).casefold()
+    return f"{ex}|{base}" if ex else base
+
+
+def lot_unit(pack: str) -> str:
+    """'PC' for a piece customer lot (1PC, 2PC ...), 'Kg' for a kg lot, '' when not chosen.
+    27 Nov (user): a piece lot is entered ONLY in packs, a kg lot ONLY in kg (MT Ready lines only)."""
+    return pr.pack_kg(pack, 1.0)[1]
+
+
+def clean_line(ln: dict) -> dict:
+    """The MT line with the box that does not belong to its lot type emptied."""
+    u = lot_unit(ln.get("pack", ""))
+    out = dict(ln)
+    if u == "PC":
+        out["mt_loose_kg"] = None
+    elif u == "Kg":      # typed in kg; packs saved the old way (30 x 1Kg) are carried over as kg
+        kg = pr._f(ln.get("mt_loose_kg")) + pr._f(ln.get("mt_packs")) * (pr.pack_kg(ln.get("pack", ""), 1.0)[0] or 0)
+        out["mt_loose_kg"] = kg or None
+        out["mt_packs"] = None
+    return out
 
 
 def items(raw: pd.DataFrame) -> dict[str, dict]:
@@ -56,9 +79,12 @@ def items(raw: pd.DataFrame) -> dict[str, dict]:
         stock = list(dict.fromkeys(_s(m.get("stock_type")) for m in ms if _s(m.get("stock_type"))))
         f = ms[0]
         out[key] = {**f, "key": key, "table_no": _s(f.get("table_no")), "boxes_moved": boxes,
+                    "executive": _s(f.get("executive")),
+                    "last_at": max((str(m.get("saved_at") or "") for m in ms), default=""),
                     "box_kg": round(kg / boxes, 4) if boxes else pr._f(f.get("box_kg")),
                     "taken_kg": kg, "taken_pcs": pcs, "stock_type": " / ".join(stock)}
-    return dict(sorted(out.items(), key=lambda kv: (kv[1]["table_no"].zfill(3), _s(kv[1].get("parent_sku")))))
+    return dict(sorted(out.items(), key=lambda kv: (kv[1]["executive"].casefold(), kv[1]["table_no"].zfill(3),
+                                                    _s(kv[1].get("parent_sku")))))
 
 
 def total(item: dict, mt_lines: list[dict], tbl: dict) -> dict:
@@ -67,6 +93,7 @@ def total(item: dict, mt_lines: list[dict], tbl: dict) -> dict:
     t = pr.compute(a, pcs, b, "1Kg", tbl or {})
     per, k = [], 0.0
     for ln in mt_lines:
+        ln = clean_line(ln)
         c = pr.compute(a, pcs, b, ln.get("pack", ""), ln)
         per.append(c["mt_kg"])
         k += c["mt_kg"]
@@ -98,8 +125,9 @@ def snapshot(item: dict, mt_lines: list[dict], tbl: dict, comment: str, status: 
     base = {"save_id": sid, "saved_at": stamp, "saved_by": user, "production_date": day, "city": city,
             "item_key": item["key"], "table_no": item.get("table_no", ""), "parent_sku": item.get("parent_sku", ""),
             "variety": item.get("variety", ""), "size": item.get("size", ""), "origin": item.get("origin", ""),
-            "brand": item.get("brand", ""), "status": status}
-    rows = [{**base, "kind": "mt", "cux_lot": ln.get("pack", ""), **{f: pr._f(ln.get(f)) for f in MT_FIELDS}}
+            "brand": item.get("brand", ""), "status": status, "executive": item.get("executive", "")}
+    rows = [{**base, "kind": "mt", "cux_lot": ln.get("pack", ""),
+             **{f: pr._f(clean_line(ln).get(f)) for f in MT_FIELDS}}
             for ln in mt_lines if ln.get("pack")]
     rows.append({**base, "kind": "table", "cux_lot": "", **{f: pr._f((tbl or {}).get(f)) for f in TABLE_FIELDS},
                  "comment": _s(comment)})
@@ -118,6 +146,28 @@ def save(backend, rows: list[dict]) -> int:
     return len(rows)
 
 
+DAY_KEY = "_day"
+
+
+def close_rows(day: str, city: str, user: str, status: str = "closed") -> list[dict]:
+    """The row that confirms (closes) or reopens a whole day for a city."""
+    return [{"save_id": uuid.uuid4().hex[:10], "saved_at": config.now_iso(), "saved_by": user,
+             "production_date": day, "city": city, "item_key": DAY_KEY, "status": status, "kind": "day"}]
+
+
+def day_state(saved: pd.DataFrame, day: str, city: str) -> dict | None:
+    """{'by', 'at'} when the day is confirmed for this city (the newest day row says closed), else None."""
+    if saved is None or saved.empty or "kind" not in saved.columns:
+        return None
+    d = saved[(saved["kind"].astype(str) == "day") & (saved["production_date"].astype(str).str[:10] == day)
+              & (saved["city"].astype(str) == city)]
+    if d.empty:
+        return None
+    r = d.iloc[-1]
+    return {"by": str(r.get("saved_by") or ""), "at": str(r.get("saved_at") or "")} \
+        if str(r.get("status")) == "closed" else None
+
+
 def read(backend=None) -> pd.DataFrame:
     from core import store_settings
     return store_settings._read(backend, PROCESSED_TABLE)
@@ -129,6 +179,7 @@ def latest(saved: pd.DataFrame, day: str | None = None, city: str | None = None)
     if saved is None or saved.empty or "save_id" not in saved.columns:
         return {}
     d = saved.copy()
+    d = d[d["kind"].astype(str) != "day"] if "kind" in d.columns else d
     d["production_date"] = d["production_date"].astype(str).str[:10]
     if day:
         d = d[d["production_date"] == day]

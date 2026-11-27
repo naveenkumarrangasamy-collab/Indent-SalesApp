@@ -46,3 +46,18 @@ def test_snapshot_latest_and_tracking_rows():
     assert {r[eff] for r in t1} == {"96%"} and t1[-1][17] == 12 and t1[-1][18] == 8
     assert p2.line_pcs('2PC', 50) == 100 and p2.line_pcs('1Kg', 5) == 0
     assert [r for r in rows if r[2] == "Table 2"][0][-2] == "Not started"
+
+
+def test_executive_items_lot_units_and_day_close():
+    raw = RAW.assign(executive=["Ravi", ""])
+    it = p2.items(raw)
+    assert [(v["executive"], v["table_no"]) for v in it.values()] == [("", "2"), ("Ravi", "1")]
+    assert [k.split("|")[0] for k in it] == ["2", "ravi"]                 # no name = the old key
+    assert p2.lot_unit("2PC") == "PC" and p2.lot_unit("1Kg") == "Kg" and p2.lot_unit("") == ""
+    assert p2.clean_line({"pack": "2PC", "mt_packs": 5, "mt_loose_kg": 3})["mt_loose_kg"] is None
+    assert p2.clean_line({"pack": "1Kg", "mt_packs": 30, "mt_loose_kg": 2}) == {"pack": "1Kg", "mt_packs": None,
+                                                                              "mt_loose_kg": 32.0}
+    saved = pd.DataFrame(p2.close_rows("2026-11-26", "B", "me"))
+    assert p2.day_state(saved, "2026-11-26", "B")["by"] == "me" and p2.day_state(saved, "2026-11-27", "B") is None
+    again = pd.concat([saved, pd.DataFrame(p2.close_rows("2026-11-26", "B", "boss", "open"))], ignore_index=True)
+    assert p2.day_state(again, "2026-11-26", "B") is None and p2.latest(again, "2026-11-26", "B") == {}

@@ -141,7 +141,8 @@ pages = {
     # 26 Nov: option 2 (table by table); option 1 above stays as it is
     "preprod2": st.Page(lambda: prod_actual.render(user, "processed2"), title="Pre-Production Actual", icon="📥",
                         url_path="preprod-actual-2"),
-    "processed2": st.Page(lambda: processed2.render(user), title="Processed", icon="✅", url_path="processed-2"),
+    "processed2": st.Page(lambda: processed2.render(user), title="Production Detail Process", icon="✅",
+                          url_path="processed-2"),
     "tracking2": st.Page(lambda: processed2.render_tracking(user), title="Production Tracking", icon="📊",
                          url_path="production-tracking-2"),
 }

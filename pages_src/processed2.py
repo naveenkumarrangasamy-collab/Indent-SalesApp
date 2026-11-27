@@ -1,4 +1,4 @@
-"""Option 2 (26 Nov, trial): Processed table by table + its Production Tracking.
+"""Production Detail Process (27 Nov, trial; was 'Processed · option 2'): by grading executive, + its tracking.
 
 Only tables still in process are listed (folded; tap to open). Inside a table, per item: MT Ready per customer
 lot, then left-over / GT / dump once for the item, a sum check (97-101 %), Save draft and Submit. A submitted
@@ -78,6 +78,11 @@ CSS = """<style>
 .p2-view td {padding:4px 6px; text-align:center; font-weight:700; color:#000; border-bottom:1px solid #F1F5F9;}
 .p2-vt td {background:#EFF6FF; color:#1E3A8A; font-weight:800;}
 .p2-vf {display:flex; gap:14px; flex-wrap:wrap; padding:5px 10px; font-weight:800;}
+.p2-lock {height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+  font-weight:700; font-size:0.78rem; background:#F1F5F9; color:#94A3B8; border:1px dashed #CBD5E1;
+  cursor:not-allowed;}
+.st-key-p2next button {background:#2563EB; border-color:#2563EB; color:#fff; font-weight:800;}
+.st-key-p2day button {background:#1F6B4A; border-color:#1F6B4A; color:#fff; font-weight:800;}
 .p2-note {border-radius:10px; padding:8px 10px; font-size:0.82rem; font-weight:700; margin-bottom:8px;}
 [class*="st-key-p2sub_"] button:not(:disabled) {background:#16A34A; border-color:#15803D; color:#fff;
   font-weight:800;}
@@ -109,7 +114,7 @@ def _store(day: str, city: str, its: dict, saved: dict) -> dict:
         if key in box:
             continue
         s = saved.get(f"{day}|{city}|{key}")
-        e = {"lines": [_new_line(x) for x in (s["lines"] if s else [])] or [_new_line()],
+        e = {"lines": [_new_line(p2.clean_line(x)) for x in (s["lines"] if s else [])] or [_new_line()],
              "tbl": dict(s["tbl"]) if s else {f: None for f in p2.TABLE_FIELDS},
              "comment": s["comment"] if s else "", "status": s["status"] if s else "new"}
         e["saved"] = _plain(e) if s else None
@@ -146,44 +151,8 @@ def _num(label: str, key: str, value) -> None:
     st.number_input(label, min_value=0.0, step=1.0, key=_seed(key, value), format="%g", placeholder="0")
 
 
-def _desc(it: dict) -> str:
-    v = f" · <span class='p2-var'>{it['variety']}</span>" if it.get("variety") else ""
-    unit = "trays" if pa.box_only(it.get("parent_sku", "")) else "boxes"
-    pcs = f" · <b>{it['taken_pcs']:,.0f} pcs</b>" if it.get("taken_pcs") else ""
-    return (f"{it.get('parent_sku', '')}{v} · {it.get('size', '')} · {pr._f(it['boxes_moved']):g} {unit} · "
-            f"{it['taken_kg']:,.1f} kg{pcs}")
-
-
-def _view(it: dict, e: dict, many: bool = False) -> str:
-    """Read-only table of what is SAVED for an item (not what is being typed)."""
-    sv = e.get("saved")
-    if not sv or not (sv["lines"] or any(sv["tbl"].values())):
-        return ""
-    lines = [{"pack": p, "mt_packs": n, "mt_loose_kg": kg} for p, n, kg in sv["lines"]]
-    t = p2.total(it, lines, sv["tbl"])
-    piece = bool(t["x"])
-    body, pcs_all = "", 0.0
-    for ln, kg in zip(lines, t["mt_per_line"]):
-        pcs = p2.line_pcs(ln["pack"], ln["mt_packs"])
-        pcs_all += pcs
-        body += (f"<tr><td><b>{ln['pack']}</b></td><td>{ln['mt_packs']:g}</td><td>{ln['mt_loose_kg']:g}</td>"
-                 f"<td>{kg:,.1f}</td>" + (f"<td>{pcs:,.0f}</td>" if piece else "") + "</tr>")
-    body += (f"<tr class='p2-vt'><td>Total MT</td><td></td><td></td><td>{t['mt_kg']:,.1f}</td>"
-             + (f"<td>{pcs_all:,.0f}</td>" if piece else "") + "</tr>")
-    bg, fg = SUM_COL[p2.state_of(t)]
-    word = "Submitted" if e["status"] == "submitted" else "Saved draft"
-    taken = f"{pr._f(it['boxes_moved']):g} boxes · {it['taken_kg']:,.1f} kg" + (
-        f" · {it['taken_pcs']:,.0f} pcs" if it.get("taken_pcs") else "")
-    return (f"<div class='p2-view'><div class='p2-vh'><span>{word}"
-            + (f" · {_name(it)}" if many else "") + f" · taken {taken}</span>"
-            f"<span style='background:{bg};color:{fg}'>Sum {pr.pct(t['sum'])} · Eff {pr.pct(t['efficiency'])}"
-            "</span></div><table><tr><th>Customer lot</th><th>Packs</th><th>Loose kg</th><th>MT kg</th>"
-            + ("<th>Pcs</th>" if piece else "") + f"</tr>{body}</table><div class='p2-vf'>"
-            f"<span style='color:#1E3A8A'>Left over {t['left_kg']:,.1f} kg</span>"
-            f"<span style='color:#9F1239'>GT {t['gt_kg']:,.1f} kg</span>"
-            f"<span style='color:#5B21B6'>Dump {t['dump_kg']:,.1f} kg</span>"
-            f"<span>Used {t['used_kg']:,.1f} kg</span>"
-            + (f"<span>{e['comment']}</span>" if e.get("comment") else "") + "</div></div>")
+NO_NAME = "Name not recorded"
+ALL = "All"
 
 
 def _name(it: dict) -> str:
@@ -191,10 +160,34 @@ def _name(it: dict) -> str:
                                   str(it.get("size", ""))] if x)
 
 
+def _ex(it: dict) -> str:
+    return str(it.get("executive") or "").strip() or NO_NAME
+
+
+def _clock(stamp) -> str:
+    try:
+        return pd.to_datetime(str(stamp)).strftime("%I:%M %p").lstrip("0")
+    except (TypeError, ValueError):
+        return ""
+
+
+def _to_top() -> None:
+    if not st.session_state.pop("p2_top", False):
+        return
+    import streamlit.components.v1 as components
+    components.html("<script>const d = window.parent.document;"
+                    "['stMain', 'stAppViewContainer'].forEach(t => {const e = d.querySelector"
+                    "('[data-testid=\"' + t + '\"]'); if (e) e.scrollTo({top: 0, behavior: 'smooth'});});"
+                    "window.parent.scrollTo(0, 0);</script>", height=0)
+
+
 def render(user: User) -> None:
+    """27 Nov (user): 'Production Detail Process', by grading executive. Save just saves, Submit just submits;
+    one table at the end to check; only 'Confirm and submit the day' asks and shows the summary."""
     common.show_flash()
     st.markdown(CSS, unsafe_allow_html=True)
-    st.markdown("### Processed · option 2")
+    _to_top()
+    st.markdown("### Production Detail Process")
     try:
         m = masters.load_masters()
         lots = pa.read()
@@ -215,68 +208,99 @@ def render(user: User) -> None:
         raw = raw[(raw["production_date"].astype(str).str[:10] == day) & (raw["city"].astype(str) == city)]
     its = p2.items(raw)
     if not its:
-        st.info("No lots on tables for this date yet. Add them on **Pre-Production Actual** first.")
+        st.info("No lots given to executives for this date yet. Add them on **Pre-Production Actual** first.")
         return
     box = _store(day, city, its, p2.latest(saved_df, day, city))
-    _body(its, box, lines, day, city, user)
+    _body(its, box, lines, day, city, user, p2.day_state(saved_df, day, city))
 
 
 @st.fragment
-def _body(its: dict, box: dict, lines, day: str, city: str, user: User) -> None:
+def _body(its: dict, box: dict, lines, day: str, city: str, user: User, closed: dict | None) -> None:
     _sync(box, day, city)
-    open_keys = [k for k in its if box[k]["status"] != "submitted"]
-    done_keys = [k for k in its if box[k]["status"] == "submitted"]
-    tables = list(dict.fromkeys(its[k]["table_no"] for k in open_keys))
-    st.markdown(f"<div class='p2-hd'>Processed · {city} · {day[8:]}/{day[5:7]}/{day[:4]}<span>Open tables "
-                f"{len(tables)} · Done items {len(done_keys)}</span></div>", unsafe_allow_html=True)
-    if not tables:
-        st.success("Every table of this date is submitted.")
+    locked = bool(closed) and not user.is_owner
+    names = list(dict.fromkeys(_ex(it) for it in its.values()))
+    names.sort(key=lambda n: (n == NO_NAME, n.casefold()))
+    count = {n: sum(1 for it in its.values() if _ex(it) == n) for n in names}
+    if closed:
+        st.success(f"This day is confirmed · {closed['by']} · {_clock(closed['at'])}."
+                   + (" Owners can still correct it." if user.is_owner else " Nothing can be changed."))
+    opts = [ALL] + names
+    go = st.session_state.pop("p2_ex_go", None)        # set by 'Save and next executive'
+    if go in opts:
+        st.session_state["p2_ex"] = go
+    if st.session_state.get("p2_ex") not in opts:
+        st.session_state["p2_ex"] = ALL
+    pick = st.pills("Executive", opts, key="p2_ex",
+                    format_func=lambda n: f"{n} · {len(its) if n == ALL else count[n]}") or ALL
+    shown = names if pick == ALL else [pick]
     cur = st.session_state.get("p2_open")
-    for t in tables:
-        keys = [k for k in open_keys if its[k]["table_no"] == t]
-        all_t = [k for k in its if its[k]["table_no"] == t]
-        started = any(_plain(box[k])["lines"] or any(_plain(box[k])["tbl"].values()) for k in keys)
-        n_done = len(all_t) - len(keys)
-        if n_done:
-            stt, col = f"{n_done} of {len(all_t)} items done", "background:#FAEEDA;color:#633806"
-        elif started:
-            stt, col = "In process", "background:#FAEEDA;color:#633806"
-        else:
-            stt, col = "Not started", "background:#F1F5F9;color:#475569"
-        is_open = cur == t
-        with st.container(key=f"p2t_{'on' if is_open else 'off'}_{t}"):
-            c = st.columns([4, 1.4, 1], vertical_alignment="center")
-            c[0].markdown(f"<div class='p2-tn'>Table {t}</div><div class='p2-tx'>"
-                          + " &nbsp;|&nbsp; ".join(_desc(its[k]) for k in keys) + "</div>", unsafe_allow_html=True)
-            c[1].markdown(f"<span class='p2-st' style='{col}'>{stt}</span>", unsafe_allow_html=True)
-            if c[2].button("▲ Close" if is_open else "▼ Open", key=f"p2_tog_{t}", width="stretch"):
-                st.session_state["p2_open"] = None if is_open else t
-                st.rerun(scope="fragment")
-            if not is_open:
-                html = "".join(_view(its[k], box[k], many=len(keys) > 1) for k in keys)
-                if html:
-                    st.markdown(html, unsafe_allow_html=True)
-        if is_open:
-            for k in keys:
-                _item(its[k], box[k], lines, day, city, user, many=len(all_t) > 1)
-    if done_keys:
-        with st.expander(f"Done today · {len(done_keys)} item(s)", expanded=True):
-            for k in done_keys:
-                it, e = its[k], box[k]
-                t = p2.total(it, e["lines"], e["tbl"])
-                c = st.columns([4, 1], vertical_alignment="center")
-                c[0].markdown(f"<span class='p2-st' style='background:#EAF3DE;color:#27500A'>Table "
-                              f"{it['table_no']} ✓ {_name(it)} · sum {pr.pct(t['sum'])} · eff "
-                              f"{pr.pct(t['efficiency'])}</span> <span class='p2-tx'>MT {t['mt_kg']:,.1f} · GT "
-                              f"{t['gt_kg']:,.1f} · Dump {t['dump_kg']:,.1f} kg</span>", unsafe_allow_html=True)
-                st.markdown(_view(it, e, many=True), unsafe_allow_html=True)
-                if user.is_owner and c[1].button("✎ Edit", key=f"p2_re_{_iid(day, city, k)}", width="stretch",
-                                                   help="Open this table again to change or add customer lots"):
-                    st.session_state["p2_open"] = it["table_no"]
-                    _write(it, e, "draft", day, city, user, "opened again for editing")
+    for name in shown:
+        keys = [k for k, it in its.items() if _ex(it) == name]
+        done = sum(1 for k in keys if box[k]["status"] == "submitted")
+        boxes = sum(pr._f(its[k]["boxes_moved"]) for k in keys)
+        at = _clock(max((its[k].get("last_at", "") for k in keys), default=""))
+        st.markdown(f"<div class='p2-hd'>{name}<span>{'Last given ' + at + ' · ' if at else ''}{len(keys)} SKU"
+                    f"{'' if len(keys) == 1 else 's'} · {boxes:g} boxes · {done} of {len(keys)} submitted</span>"
+                    "</div>", unsafe_allow_html=True)
+        for k in keys:
+            it, e = its[k], box[k]
+            is_open = cur == k
+            started = bool(_plain(e)["lines"] or any(_plain(e)["tbl"].values()))
+            if e["status"] == "submitted":
+                stt, col = "Submitted", "background:#EAF3DE;color:#27500A"
+            elif started:
+                stt, col = "In process", "background:#FAEEDA;color:#633806"
+            else:
+                stt, col = "Not started", "background:#F1F5F9;color:#475569"
+            with st.container(key=f"p2t_{'on' if is_open else 'off'}_{_iid(day, city, k)}"):
+                c = st.columns([4, 1.4, 1], vertical_alignment="center")
+                c[0].markdown(f"<div class='p2-tn'>Table {it['table_no']} · {_name(it)}</div><div class='p2-tx'>"
+                              f"Taken: {_taken(it)}{_short(it, e)}</div>", unsafe_allow_html=True)
+                c[1].markdown(f"<span class='p2-st' style='{col}'>{stt}</span>", unsafe_allow_html=True)
+                word = "▲ Close" if is_open else ("✎ Edit" if e["status"] == "submitted" else "▼ Open")
+                if c[2].button(word, key=f"p2_tog_{_iid(day, city, k)}", width="stretch", disabled=locked):
+                    st.session_state["p2_open"] = None if is_open else k
+                    st.rerun(scope="fragment")
+            if is_open and not locked:
+                _item(it, e, lines, day, city, user)
+    if pick != ALL and not locked:
+        nxt = names[(names.index(pick) + 1) % len(names)] if len(names) > 1 else ""
+        c = st.columns([2, 1.6])
+        with c[1].container(key="p2next"):
+            if st.button(f"Save and next executive: {nxt} →" if nxt else "Save", key="p2_next", width="stretch"):
+                _save_all([k for k, it in its.items() if _ex(it) == pick], its, box, day, city, user)
+                if nxt:
+                    st.session_state["p2_ex_go"] = nxt
+                    st.session_state["p2_open"] = None
+                    st.session_state["p2_top"] = True
+                st.rerun()
+    _entered(its, box, day)
+    _day_end(its, box, day, city, user, closed)
 
 
-def _item(it: dict, e: dict, lines, day: str, city: str, user: User, many: bool) -> None:
+def _taken(it: dict) -> str:
+    unit = "trays" if pa.box_only(it.get("parent_sku", "")) else "boxes"
+    pcs = f" · {it['taken_pcs']:,.0f} pcs" if it.get("taken_pcs") else ""
+    return f"{pr._f(it['boxes_moved']):g} {unit} · {it['taken_kg']:,.1f} kg{pcs}"
+
+
+def _short(it: dict, e: dict) -> str:
+    """One line of what is SAVED for a folded item."""
+    sv = e.get("saved")
+    if not sv or not (sv["lines"] or any(sv["tbl"].values())):
+        return ""
+    lines = [{"pack": p, "mt_packs": n, "mt_loose_kg": kg} for p, n, kg in sv["lines"]]
+    t = p2.total(it, lines, sv["tbl"])
+    return (f"<br><b>Saved:</b> MT {t['mt_kg']:,.1f} · left over {t['left_kg']:,.1f} · GT {t['gt_kg']:,.1f} · "
+            f"Dump {t['dump_kg']:,.1f} kg · sum {pr.pct(t['sum'])}")
+
+
+def _locked(col, label: str, text: str) -> None:
+    col.markdown(f"<div class='p2-l'>{label}</div><div class='p2-lock' title='{text}'>🔒 {text}</div>",
+                 unsafe_allow_html=True)
+
+
+def _item(it: dict, e: dict, lines, day: str, city: str, user: User) -> None:
     iid = _iid(day, city, it["key"])
     t = p2.total(it, e["lines"], e["tbl"])
     piece = bool(t["x"])
@@ -285,13 +309,10 @@ def _item(it: dict, e: dict, lines, day: str, city: str, user: User, many: bool)
     if not piece:
         packs = [p for p in packs if pr.pack_kg(p, None)[0]]
     with st.container(key=f"p2i_{iid}"):
-        pcs = f" · <b>{it['taken_pcs']:,.0f}</b> pcs" if it["taken_pcs"] else ""
         extra = " · ".join(x for x in [str(it.get("origin") or ""), f"brand {it['brand']}" if it.get("brand") else "",
                                        f"{pr._f(it['box_kg']):g} kg box",
                                        f"{pr._f(it.get('pcs_per_box')):g} pcs" if piece else ""] if x)
-        st.markdown((f"<div class='p2-tn' style='font-size:1rem'>{_name(it)}</div>" if many else "")
-                    + f"<div class='p2-tx'>Taken: <b>{pr._f(it['boxes_moved']):g}</b> boxes · "
-                    f"<b>{it['taken_kg']:,.1f}</b> kg{pcs} · {extra}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='p2-tx'>{extra}</div>", unsafe_allow_html=True)
         with st.container(key=f"p2mt_{iid}"):
             st.markdown("<span class='p2-chip' style='background:#2563EB'>1 · MT Ready by customer lot</span>",
                         unsafe_allow_html=True)
@@ -306,10 +327,22 @@ def _item(it: dict, e: dict, lines, day: str, city: str, user: User, many: bool)
                 if st.session_state.get(k) not in opts:
                     st.session_state[k] = PICK
                 c[1].selectbox("Customer lot", opts, key=k)
-                with c[2]:
-                    _num(LABEL["mt_packs"], f"p2_{ln['id']}_mt_packs", ln.get("mt_packs"))
-                with c[3]:
-                    _num(LABEL["mt_loose_kg"], f"p2_{ln['id']}_mt_loose_kg", ln.get("mt_loose_kg"))
+                # 27 Nov (user): a piece lot is typed ONLY in packs, a kg lot ONLY in kg (this line only;
+                # left over, GT and dump keep every box)
+                unit = p2.lot_unit(ln["pack"])
+                if unit == "PC":
+                    with c[2]:
+                        _num(LABEL["mt_packs"], f"p2_{ln['id']}_mt_packs", ln.get("mt_packs"))
+                    _locked(c[3], "MT Ready (kg)", "Not for pieces")
+                    _drop(ln, "mt_loose_kg")
+                elif unit == "Kg":
+                    _locked(c[2], "MT Ready (packs)", "Not for kg")
+                    _drop(ln, "mt_packs")
+                    with c[3]:
+                        _num("MT Ready (kg)", f"p2_{ln['id']}_mt_loose_kg", ln.get("mt_loose_kg"))
+                else:
+                    _locked(c[2], "MT Ready (packs)", "Choose the lot")
+                    _locked(c[3], "MT Ready (kg)", "Choose the lot")
                 c[4].markdown(f"<div class='p2-l'>MT kg</div><div class='p2-k'>{kg:,.1f} kg</div>",
                               unsafe_allow_html=True)
                 if len(e["lines"]) > 1:
@@ -356,18 +389,28 @@ def _item(it: dict, e: dict, lines, day: str, city: str, user: User, many: bool)
         elif state == "low":
             st.markdown(f"<div class='p2-note' style='background:#FAEEDA;color:#633806'>{t['to_go']:,.1f} kg not "
                         "accounted yet (target 97–101%).</div>", unsafe_allow_html=True)
-        dirty = e["saved"] != _plain(e)
+        # never disabled and no pop-up: Save just saves, Submit just submits (user 27 Nov)
         c = st.columns([1, 2])
-        if c[0].button("Save draft", key=f"p2_{iid}_save", width="stretch",
-                       disabled=state in ("over", "empty") or not dirty):
-            _write(it, e, "draft", day, city, user, "saved")
+        if c[0].button("Save", key=f"p2_{iid}_save", width="stretch"):
+            _write(it, e, "draft", day, city, user, state)
         with c[1].container(key=f"p2sub_{iid}"):
-            if st.button(f"✓ Submit Table {it['table_no']}" + (f" · {_name(it)}" if many else ""),
-                         key=f"p2_{iid}_submit", width="stretch", disabled=state in ("over", "empty")):
-                _confirm(it, e, t, state, day, city, user)
+            if st.button("✓ Submit", key=f"p2_{iid}_submit", width="stretch"):
+                _write(it, e, "submitted", day, city, user, state)
 
 
-def _write(it: dict, e: dict, status: str, day: str, city: str, user: User, word: str) -> None:
+def _drop(ln: dict, field: str) -> None:
+    """Empty the MT box that is locked for this lot type (and its widget value)."""
+    ln[field] = None
+    st.session_state.pop(f"p2_{ln['id']}_{field}", None)
+
+
+def _write(it: dict, e: dict, status: str, day: str, city: str, user: User, state: str) -> None:
+    if state == "over":
+        st.toast("Not saved: more than 101% of the kg used.", icon="⚠️")
+        return
+    if state == "empty":
+        st.toast("Nothing entered yet.", icon="⚠️")
+        return
     rows = p2.snapshot(it, e["lines"], e["tbl"], e["comment"], status, day, city, user.email)
     try:
         p2.save(get_backend(), rows)
@@ -376,24 +419,116 @@ def _write(it: dict, e: dict, status: str, day: str, city: str, user: User, word
         return
     e["status"] = status
     e["saved"] = _plain(e)
-    if status == "submitted" and st.session_state.get("p2_open") == it["table_no"]:
+    if status == "submitted":
         st.session_state["p2_open"] = None
-    common.flash("success", f"Table {it['table_no']} · {_name(it)} {word}.")
+    common.flash("success", f"Table {it['table_no']} · {_name(it)} {'submitted' if status == 'submitted' else 'saved'}.")
     st.rerun()
 
 
-@st.dialog("Submit this table?")
-def _confirm(it: dict, e: dict, t: dict, state: str, day: str, city: str, user: User) -> None:
-    per = " · ".join(f"{ln['pack']} {kg:,.1f}" for ln, kg in zip(e["lines"], t["mt_per_line"]) if ln["pack"])
-    st.markdown(f"**Table {it['table_no']} · {_name(it)}** · {pr._f(it['boxes_moved']):g} boxes  \n"
-                f"MT {t['mt_kg']:,.1f} kg ({per or 'none'}) · GT {t['gt_kg']:,.1f} · Dump {t['dump_kg']:,.1f} · "
-                f"left over {t['left_kg']:,.1f} kg  \nSum {pr.pct(t['sum'])} · Efficiency {pr.pct(t['efficiency'])}")
-    if state == "low":
-        st.warning(f"Only {pr.pct(t['sum'])} is accounted · {t['to_go']:,.1f} kg missing. Submit anyway?")
-    c = st.columns(2)
-    if c[0].button("Yes, submit" if state == "low" else "Submit", type="primary", width="stretch", key="p2_ok"):
-        _write(it, e, "submitted", day, city, user, "submitted")
-    if c[1].button("Back", width="stretch", key="p2_back"):
+def _save_all(keys: list[str], its: dict, box: dict, day: str, city: str, user: User,
+              submit: bool = False) -> int:
+    """Save every changed item of these keys in one write (their status is kept unless `submit`)."""
+    rows, done = [], []
+    for k in keys:
+        it, e = its[k], box[k]
+        state = p2.state_of(p2.total(it, e["lines"], e["tbl"]))
+        if state in ("over", "empty"):
+            continue
+        status = "submitted" if submit or e["status"] == "submitted" else "draft"
+        if e["saved"] == _plain(e) and e["status"] == status:
+            continue
+        rows += p2.snapshot(it, e["lines"], e["tbl"], e["comment"], status, day, city, user.email)
+        done.append((e, status))
+    if rows:
+        try:
+            p2.save(get_backend(), rows)
+        except SheetError as err:
+            st.error(f"Not saved. {err}")
+            return 0
+        for e, status in done:
+            e["status"] = status
+            e["saved"] = _plain(e)
+        common.flash("success", f"{len(done)} item(s) saved.")
+    return len(done)
+
+
+def _entered_df(its: dict, box: dict) -> pd.DataFrame:
+    rows = []
+    for n, (k, it) in enumerate(its.items(), 1):
+        e = box[k]
+        sv = e.get("saved")
+        base = {"No": str(n), "Executive": _ex(it), "Table": it["table_no"], "Fruit": it.get("parent_sku", ""),
+                "Variety": it.get("variety", ""), "Spec size": it.get("size", ""),
+                "Boxes": f"{pr._f(it['boxes_moved']):g}"}
+        if sv and (sv["lines"] or any(sv["tbl"].values())):
+            ls = [{"pack": p, "mt_packs": a, "mt_loose_kg": b} for p, a, b in sv["lines"]]
+            t = p2.total(it, ls, sv["tbl"])
+            rows.append({**base, "Customer lots": ", ".join(x["pack"] for x in ls), "MT kg": f"{t['mt_kg']:,.1f}",
+                         "Left over kg": f"{t['left_kg']:,.1f}", "GT kg": f"{t['gt_kg']:,.1f}",
+                         "Dump kg": f"{t['dump_kg']:,.1f}", "Sum": pr.pct(t["sum"]),
+                         "Efficiency": pr.pct(t["efficiency"]),
+                         "Status": "Submitted" if e["status"] == "submitted" else "Saved"})
+        else:
+            rows.append({**base, "Customer lots": "", "MT kg": "", "Left over kg": "", "GT kg": "", "Dump kg": "",
+                         "Sum": "", "Efficiency": "", "Status": "Not started"})
+    return pd.DataFrame(rows)
+
+
+def _entered(its: dict, box: dict, day: str) -> None:
+    """The one table at the end of the page to check what was saved (everyone)."""
+    df = _entered_df(its, box)
+    st.markdown(f"#### {day[8:]}/{pd.to_datetime(day).strftime('%b')}/{day[2:4]} - Production Detail Entered · "
+                f"{len(df)}")
+    tint = {"Submitted": "#EAF3DE", "Saved": "#FAEEDA"}
+    st.dataframe(df.style.map(lambda v: f"background-color:{tint[v]}" if v in tint else "", subset=["Status"]),
+                 hide_index=True, width="stretch")
+
+
+def _day_end(its: dict, box: dict, day: str, city: str, user: User, closed: dict | None) -> None:
+    df = _entered_df(its, box)
+    sub, not_started = int((df["Status"] == "Submitted").sum()), int((df["Status"] == "Not started").sum())
+    if closed:
+        if user.is_owner and st.button("Reopen the day", key="p2_reopen"):
+            try:
+                p2.save(get_backend(), p2.close_rows(day, city, user.email, "open"))
+            except SheetError as err:
+                st.error(f"Not saved. {err}")
+                return
+            st.rerun()
+        return
+    c = st.columns([2, 1.6])
+    c[0].caption(f"{sub} of {len(df)} submitted · {not_started} not started.")
+    with c[1].container(key="p2day"):
+        if st.button("🔒 Confirm and submit the day", key="p2_day_btn", width="stretch"):
+            _day_confirm(its, box, day, city, user)
+
+
+@st.dialog("Confirm and submit the day?", width="large")
+def _day_confirm(its: dict, box: dict, day: str, city: str, user: User) -> None:
+    """The only pop-up on this page: the day's summary, then one confirm."""
+    df = _entered_df(its, box)
+    n_sub, n_saved = int((df["Status"] == "Submitted").sum()), int((df["Status"] == "Saved").sum())
+    n_none = int((df["Status"] == "Not started").sum())
+    c = st.columns(3)
+    c[0].metric("Submitted", f"{n_sub} of {len(df)}")
+    c[1].metric("Saved, not submitted", n_saved)
+    c[2].metric("Not started", n_none)
+    st.dataframe(df, hide_index=True, width="stretch")
+    if n_saved:
+        st.info(f"{n_saved} saved item(s) will be submitted with the day.")
+    if n_none:
+        st.warning(f"{n_none} item(s) are not started. They stay empty when the day is confirmed.")
+    b = st.columns(2)
+    if b[0].button("Yes, confirm the day", type="primary", width="stretch", key="p2_day_ok"):
+        _save_all(list(its), its, box, day, city, user, submit=True)
+        try:
+            p2.save(get_backend(), p2.close_rows(day, city, user.email))
+        except SheetError as err:
+            st.error(f"Not saved. {err}")
+            return
+        common.flash("success", "The day is confirmed.")
+        st.rerun()
+    if b[1].button("Back", width="stretch", key="p2_day_back"):
         st.rerun()
 
 
