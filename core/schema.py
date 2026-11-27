@@ -35,6 +35,8 @@ PREPROD_ENTRIES = "Production_Actual"  # 25 Nov: lots put on grading tables (Pre
 GRADING_EXECUTIVES = "Grading_Executives"   # 27 Nov: grading executives per city (Pre-Production Actual)
 BRAND_MASTER = "Brand_Master"         # 26 Nov: brands per SKU (Parent SKU + Origin + Variety + Size)
 PROCESSED_TABLE = "Processed_Table"    # 26 Nov: option 2, accounted table by table (snapshots, newest wins)
+DAY_DISPATCH = "Day_Dispatch"          # 27 Nov (trial): what was sent per indent + item; create only, rounds add up
+DAY_RETURNS = "Day_Returns"            # 27 Nov (trial): what came back per indent + item; create only, rounds add up
 PROCESSED = "Processed"                # 25 Nov: MT / GT / dump out of each lot (Processed page)
 BATCHING_PLAN = "Batching_Plan"      # pieces (kg) used from those boxes (last row per SKU + spec wins)
 
@@ -88,6 +90,11 @@ TABS: dict[str, list[str]] = {
                       "variety", "brand", "size", "box_kg", "pcs_per_box", "table_no", "boxes_moved",
                       "stock_type", "executive"],
     GRADING_EXECUTIVES: ["City", "Name", "Added by", "Added at"],
+    DAY_DISPATCH: ["dispatch_id", "saved_at", "saved_by", "delivery_date", "city", "indent_id", "customer",
+                   "store", "customer_sku_name", "parent_sku", "variety", "lot", "lot_size", "pool_key", "unit",
+                   "per", "indent_qty", "po_qty", "asked_qty", "basis", "dispatch_qty", "from_pool"],
+    DAY_RETURNS: ["return_id", "saved_at", "saved_by", "delivery_date", "city", "indent_id", "customer", "store",
+                  "customer_sku_name", "returned_qty", "reason"],
     BATCHING_PLAN: ["saved_at", "saved_by", "delivery_date", "city", "group", "customer_sku_name", "country",
                     "spec", "boxes", "used", "unit", "gt_qty", "dump", "mt_grade", "sample", "parent_sku",
                     "variety"],

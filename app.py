@@ -64,6 +64,7 @@ from pages_src import access, common, home, indent, login, my_indents, po_upload
 from pages_src import prod_actual  # noqa: E402   (25 Nov: Pre-Production Actual, trial)
 from pages_src import processed as processed_page  # noqa: E402   (25 Nov: Processed, trial)
 from pages_src import tracking_page  # noqa: E402   (25 Nov: Production Tracking, trial)
+from pages_src import day_dispatch  # noqa: E402   (27 Nov: Dispatch + Returns at the end of the day, trial)
 from pages_src import processed2  # noqa: E402   (26 Nov: option 2, accounted table by table, trial)
 from pages_src import delivery_times  # noqa: E402   (Bulk indents page removed 21 Nov)
 
@@ -102,7 +103,7 @@ _views_once()
 GATE_PATHS = ("home", "indent", "bulk-indents", "delivery-times", "upload-po", "tracker", "indents", "production",
               "batching", "city-sku-report", "access", "preprod-actual", "batching-plan",
               "dispatch", "returns", "dispatch-check", "return-grading", "processed", "production-tracking",
-              "preprod-actual-2", "processed-2", "production-tracking-2")
+              "preprod-actual-2", "processed-2", "production-tracking-2", "dispatch-2", "returns-2")
 user = common.current_user()
 common.flush_cookie()
 
@@ -145,6 +146,9 @@ pages = {
                           url_path="processed-2"),
     "tracking2": st.Page(lambda: processed2.render_tracking(user), title="Production Summary", icon="📊",
                          url_path="production-tracking-2"),
+    "dispatch2": st.Page(lambda: day_dispatch.render(user), title="Dispatch", icon="🚚", url_path="dispatch-2"),
+    "returns2": st.Page(lambda: day_dispatch.render_returns(user), title="Returns", icon="↩️",
+                        url_path="returns-2"),
 }
 if user.opens_access:
     pages["access"] = st.Page(lambda: access.render(user), title="Access", icon="🔑", url_path="access")
@@ -161,14 +165,16 @@ if makes_indents:
 if sees_production:   # owner and warehouse; sales do not get production or the hourly tracker
     sections["Production"] = [pages["production"], pages["batching"], pages["tracker"]]
     sections["Pre-production"] = [pages["preprod"], pages["processed"], pages["tracking"]]
-    sections["Option 2"] = [pages["preprod2"], pages["processed2"], pages["tracking2"]]
+    sections["Option 2"] = [pages["preprod2"], pages["processed2"], pages["tracking2"], pages["dispatch2"],
+                            pages["returns2"]]
 if user.is_owner:
     sections["Admin"] = ([pages["access"]] if "access" in pages else []) + [pages["times"]]
 landing = pages["home"] if makes_indents else pages["production"]
 URLS = {"home": "home", "indent": "indent", "my_indents": "indents", "po": "upload-po",
         "tracker": "tracker", "production": "production", "batching": "batching", "access": "access",
         "times": "delivery-times", "preprod": "preprod-actual", "processed": "processed", "tracking": "production-tracking",
-        "preprod2": "preprod-actual-2", "processed2": "processed-2", "tracking2": "production-tracking-2"}
+        "preprod2": "preprod-actual-2", "processed2": "processed-2", "tracking2": "production-tracking-2",
+        "dispatch2": "dispatch-2", "returns2": "returns-2"}
 in_menu = [pg for group in sections.values() for pg in group]
 shown = {URLS[k] for k, pg in pages.items() if any(pg is q for q in in_menu)}   # addresses the menu already uses
 _away = [x for x in ("signin", "login") + GATE_PATHS if x not in shown]
