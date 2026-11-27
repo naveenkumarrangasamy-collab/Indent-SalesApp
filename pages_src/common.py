@@ -221,7 +221,7 @@ _THEME_CSS = """
 
   /* ---- day switch: outlined pill, pale blue chosen half ---- */
   [role="radiogroup"]:has(> button[data-variant="segmented_control"]) { background: transparent;
-      border: 1px solid var(--g-out); border-radius: 999px; box-shadow: none; padding: 0; overflow: hidden; }
+      border: 1px solid var(--g-out); border-radius: 20px; box-shadow: none; padding: 0; overflow: hidden; }
   button[data-variant="segmented_control"] { border-radius: 999px !important; color: var(--g-ov) !important; font-weight: 500 !important; }
   button[data-variant="segmented_control"]:hover { background: var(--g-hov) !important; color: var(--g-on) !important; }
   button[data-variant="segmented_control"][aria-checked="true"] { background: var(--g-sc) !important; color: var(--g-osc) !important; }
