@@ -16,7 +16,7 @@ import pandas as pd
 
 from core import config
 from core.models import to_number
-from core.schema import BRAND_MASTER, PREPROD_ENTRIES
+from core.schema import BRAND_MASTER, GRADING_EXECUTIVES, PREPROD_ENTRIES
 
 STOCK_TYPES = ["Unused Vendor Lot", "Returns", "MT Ready Leftover"]  # still valid in saved rows
 STOCK_CHOICES = list(STOCK_TYPES)  # 26 Nov evening (user): Returns + MT Ready Leftover back in
@@ -159,6 +159,17 @@ def defaults(df: pd.DataFrame, **picked) -> tuple[float | None, int | None]:
     return kg, pcs
 
 
+def box_weights(df: pd.DataFrame, **picked) -> list[float]:
+    """Every box weight the master holds for the picked SKU (27 Nov: Avocado 4 kg and 10 kg, 6 / 6.7 ...).
+    More than one -> the user says which box it was; never a random one."""
+    out = []
+    for x in _match(df, **picked)["box_kg"]:
+        n = _num(x)
+        if n and float(n) not in out:
+            out.append(float(n))
+    return sorted(out)
+
+
 def brands(df: pd.DataFrame, origin: str = "", variety: str = "", size: str = "") -> list[str]:
     """Brands of this SKU (fruit + origin + variety + size). A brand row fits when each of its columns
     equals the pick or is blank (blank = any); brands that name the pick exactly come first."""
@@ -221,18 +232,57 @@ def new_brand_rows(entries: list[dict], brand_tab: pd.DataFrame | None, user: st
     return out
 
 
+def read_executives(backend=None) -> pd.DataFrame:
+    """Grading executives per city (27 Nov): tab Grading_Executives (City, Name)."""
+    from core import store_settings
+    df = store_settings._read(backend, GRADING_EXECUTIVES)
+    if df.empty or "Name" not in df.columns or "City" not in df.columns:
+        return pd.DataFrame(columns=["City", "Name"])
+    return df
+
+
+def executives(tab: pd.DataFrame | None, city: str) -> list[str]:
+    """Names onboarded for this city only (a name of another city is never offered)."""
+    if tab is None or tab.empty:
+        return []
+    c = _t(city).casefold()
+    seen, out = set(), []
+    for r in tab.to_dict("records"):
+        n = _t(r.get("Name"))
+        if n and _t(r.get("City")).casefold() == c and n.casefold() not in seen:
+            seen.add(n.casefold())
+            out.append(n)
+    return sorted(out, key=str.casefold)
+
+
+def new_executive_rows(entries: list[dict], tab: pd.DataFrame | None, user: str, stamp: str) -> list[dict]:
+    have = set()
+    if tab is not None and not tab.empty:
+        have = {(_t(r.get("City")).casefold(), _t(r.get("Name")).casefold()) for r in tab.to_dict("records")}
+    out = []
+    for e in entries:
+        key = (_t(e.get("city")).casefold(), _t(e.get("executive")).casefold())
+        if key[1] and key not in have:
+            have.add(key)
+            out.append({"City": _t(e.get("city")), "Name": _t(e.get("executive")), "Added by": user,
+                        "Added at": stamp})
+    return out
+
+
 def entry_errors(e: dict) -> list[str]:
     errs = []
     if not e.get("parent_sku"):
         errs.append("Fruit")
     if not e.get("size"):
-        errs.append("Size")
+        errs.append("Spec")
     if not _num(e.get("box_kg")):
         errs.append("Box kg")
+    if not _t(e.get("executive")):
+        errs.append("Executive name")
     if not e.get("table_no"):
-        errs.append("Table")
+        errs.append("Table number")
     if not _num(e.get("boxes_moved")):
-        errs.append("Boxes")
+        errs.append("Number of boxes")
     if e.get("stock_type") not in STOCK_TYPES:
         errs.append("Stock")
     return errs
@@ -249,6 +299,12 @@ def save(backend, entries: list[dict], user: str) -> int:
                 backend.append_dicts(BRAND_MASTER, add)
         except Exception:  # noqa: BLE001  (brand list is a help, never blocks the save)
             pass
+        try:
+            add = new_executive_rows(entries, read_executives(backend), user, stamp)
+            if add:
+                backend.append_dicts(GRADING_EXECUTIVES, add)
+        except Exception:  # noqa: BLE001  (the name list is a help, never blocks the save)
+            pass
         from core import tracking_sheet
         tracking_sheet.publish(backend)
         from core import indents
@@ -260,8 +316,8 @@ def save(backend, entries: list[dict], user: str) -> int:
 
 
 VIEW = {"production_date": "Date", "city": "City", "parent_sku": "Fruit", "origin": "Origin", "variety": "Variety",
-        "brand": "Brand", "size": "Size", "box_kg": "Box kg", "pcs_per_box": "Pcs/box", "table_no": "Table",
-        "boxes_moved": "Boxes", "stock_type": "Stock", "saved_by": "By"}
+        "brand": "Brand", "size": "Spec", "box_kg": "Box kg", "pcs_per_box": "Pcs/box", "executive": "Executive",
+        "table_no": "Table", "boxes_moved": "Boxes", "stock_type": "Stock", "saved_by": "By"}
 
 
 def view(saved: pd.DataFrame, day: str | None = None, city: str | None = None) -> pd.DataFrame:

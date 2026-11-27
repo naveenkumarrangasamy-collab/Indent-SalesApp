@@ -47,9 +47,19 @@ def test_options_only_for_picked_country_and_variety():
 
 def test_entry_errors():
     ok = {"parent_sku": "Avocado", "size": "24C", "box_kg": 4, "table_no": "2", "boxes_moved": 3,
-          "stock_type": "Returns"}
+          "stock_type": "Returns", "executive": "Ravi"}
     assert pa.entry_errors(ok) == []
-    assert pa.entry_errors({**ok, "boxes_moved": 0, "table_no": ""}) == ["Table", "Boxes"]
+    assert pa.entry_errors({**ok, "boxes_moved": 0, "table_no": ""}) == ["Table number", "Number of boxes"]
+    assert pa.entry_errors({**ok, "executive": " "}) == ["Executive name"]
+
+
+def test_executives_per_city():
+    tab = pd.DataFrame([{"City": "PTP Bangalore", "Name": "Ravi"}, {"City": "PTP Mumbai", "Name": "Asha"},
+                        {"City": "ptp bangalore", "Name": "ravi"}])
+    assert pa.executives(tab, "PTP Bangalore") == ["Ravi"] and pa.executives(tab, "PTP Mumbai") == ["Asha"]
+    new = pa.new_executive_rows([{"city": "PTP Mumbai", "executive": "Ravi"}, {"city": "PTP Mumbai", "executive": "Asha"}],
+                                tab, "u", "t")
+    assert [(r["City"], r["Name"]) for r in new] == [("PTP Mumbai", "Ravi")]
 
 
 def test_defaults_with_missing_numbers():
