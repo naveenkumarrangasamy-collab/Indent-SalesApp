@@ -51,6 +51,14 @@ def test_pool_from_production_detail_and_grade_words():
     saved = pd.DataFrame(p2.snapshot(it, [{"pack": "2PC", "mt_packs": 150}, {"pack": "1Kg", "mt_loose_kg": 60}],
                                      {}, "", "draft", DAY, CITY, "me"))
     assert dd.mt_made(lots, saved, DAY, CITY) == {"apple|gala|2pc": 150, "apple|gala|kg": 60}
+    assert dd.pool_of("Blueberry", "", "Pack", "125 gm") == ("blueberry||125gm", "packs", 1.0)
+    assert dd.pool_of("Grapes", "", "Pack", "250 gm")[0] == "grapes||250gm" and dd.pool_label("grapes||250gm") == "Grapes · 250gm"
+    g = pd.DataFrame([{"entry_id": "g", "production_date": DAY, "city": CITY, "parent_sku": "Grapes", "variety": "Red Globe",
+                       "size": "22mm+", "origin": "China", "brand": "", "table_no": "4", "box_kg": "6.5",
+                       "pcs_per_box": "", "boxes_moved": "4", "executive": "A"}])
+    gi = list(p2.items(g).values())[0]
+    gs = pd.DataFrame(p2.snapshot(gi, [{"pack": "250gm", "mt_packs": 85}], {}, "", "draft", DAY, CITY, "me"))
+    assert dd.mt_made(g, gs, DAY, CITY) == {"grapes||250gm": 85}
 
 
 def test_rounds_add_up_and_full_check():

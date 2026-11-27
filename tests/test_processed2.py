@@ -93,3 +93,20 @@ def test_category_efficiency_clubs_counts_per_variety_country_brand():
     one, _ = p2.category_rows(raw, saved, {"2026-11-26"}, "B")
     assert len(one) == 1 and one[0]["Counts clubbed"] == "100C"
     assert [p2.eff_band(x) for x in (0.95, 0.9, 0.85, 0.75, 0.6, None)] == ["green", "green", "amber", "yellow", "red", ""]
+
+
+def test_gram_packs_count_in_packs_and_lotting_loss():
+    raw = pd.DataFrame([{"entry_id": "g", "production_date": "2026-11-26", "city": "B", "parent_sku": "Grapes",
+                         "variety": "Red Globe", "size": "22mm+", "origin": "China", "brand": "", "table_no": "4",
+                         "box_kg": "6.5", "pcs_per_box": "", "boxes_moved": "4", "executive": "A"}])
+    it = list(p2.items(raw).values())[0]
+    lines = [{"pack": "250gm", "mt_packs": 85, "mt_loose_kg": 3}]            # loose kg is not for a pack lot
+    assert p2.lot_unit("250gm") == "Pack" and p2.clean_line(lines[0])["mt_loose_kg"] is None
+    t = p2.total(it, lines, {"left_kg": 1, "gt_kg": 2, "dump_kg": 0.2})      # the team's sheet row of 24 Nov
+    assert round(t["mt_kg"], 2) == 21.25 and round(t["used_kg"], 2) == 25 and round(t["sum"] * 100) == 94
+    saved = pd.DataFrame(p2.snapshot(it, lines, {"left_kg": 1, "gt_kg": 2, "dump_kg": 0.2}, "", "submitted",
+                                     "2026-11-26", "B", "me"))
+    rows, tot = p2.category_rows(raw, saved, {"2026-11-26"}, "B")
+    assert round(rows[0][p2.LOT_KG], 2) == 1.55 and round(rows[0][p2.LOT_PCT], 3) == 0.062   # + = loss
+    assert round(tot["lot"], 2) == 1.55
+    assert p2.state_of({"sum": 1.02, "out_kg": 1}) == "ok" and p2.state_of({"sum": 1.03, "out_kg": 1}) == "over"

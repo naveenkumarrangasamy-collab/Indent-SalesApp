@@ -4,7 +4,7 @@ One *item* = everything of one fruit + variety + size + origin + brand on one ta
 same table join it). For an item the team types MT Ready per customer lot (1PC, 2PC, 1Kg ...), and ONCE for the
 whole item: left-over MT going back, GT stock and dump. Same maths as the team's sheet:
 H = A x B, I = E1*A + E2 + E3*X, J = H - I, K = sum(D1*C + D2), L = F1*A + F2 + F3*X, M = G1 + G2*X.
-Sum check (K + L + M) / J must be 97-101 % (never above 101 %); efficiency = K / J.
+Sum check (K + L + M) / J must be 97-102 % (never above 102 %); efficiency = K / J.
 
 Tab Processed_Table: every save / submit writes a full snapshot of the item (one row per customer lot + one
 'table' row), tied by save_id; the newest snapshot of an item wins. status = draft | submitted."""
@@ -55,7 +55,7 @@ def clean_line(ln: dict) -> dict:
     """The MT line with the box that does not belong to its lot type emptied."""
     u = lot_unit(ln.get("pack", ""))
     out = dict(ln)
-    if u == "PC":
+    if u in ("PC", "Pack"):          # piece lots and gram packs are counted in packs
         out["mt_loose_kg"] = None
     elif u == "Kg":      # typed in kg; packs saved the old way (30 x 1Kg) are carried over as kg
         kg = pr._f(ln.get("mt_loose_kg")) + pr._f(ln.get("mt_packs")) * (pr.pack_kg(ln.get("pack", ""), 1.0)[0] or 0)
@@ -202,9 +202,10 @@ def latest(saved: pd.DataFrame, day: str | None = None, city: str | None = None)
     return out
 
 
+LOT_KG, LOT_PCT = "Lotting loss kg (+ loss / − gain)", "Lotting loss % (of J)"
 CAT_HEAD = ["Fruit", "Variety", "Country", "Brand", "Counts clubbed", "Boxes", "Kg taken", "Kg used (J)",
-            "MT kg (K)", "GT kg (L)", "Dump kg (M)", "Category Efficiency % (K / J)", "GT Created % (L / J)",
-            "Dump % (M / J)", "Status"]
+            "MT kg (K)", "GT kg (L)", "Dump kg (M)", LOT_KG, "Category Efficiency % (K / J)",
+            "GT Created % (L / J)", "Dump % (M / J)", LOT_PCT, "Status"]
 
 
 def eff_band(v: float | None) -> str:
@@ -253,6 +254,9 @@ def category_rows(lots: pd.DataFrame, saved: pd.DataFrame, days: set[str] | None
     def pct(n, j):
         return n / j if j > 0 else None
 
+    def lot(g):      # the team's sheet: J - (K + L + M); + means loss, - means gain
+        return g["j"] - (g["k"] + g["l"] + g["m"])
+
     def size_key(x):
         m = re.match(r"\d+(?:\.\d+)?", x)
         return (float(m.group(0)) if m else 1e9, x)
@@ -266,10 +270,12 @@ def category_rows(lots: pd.DataFrame, saved: pd.DataFrame, days: set[str] | None
         rows.append({"Fruit": gk[0], "Variety": gk[1], "Country": gk[2], "Brand": gk[3],
                      "Counts clubbed": ", ".join(sorted(g["sizes"], key=size_key)), "Boxes": g["boxes"],
                      "Kg taken": g["taken"], "Kg used (J)": g["j"], "MT kg (K)": g["k"], "GT kg (L)": g["l"],
-                     "Dump kg (M)": g["m"], "Category Efficiency % (K / J)": pct(g["k"], g["j"]),
+                     "Dump kg (M)": g["m"], LOT_KG: lot(g) if g["j"] > 0 else None,
+                     "Category Efficiency % (K / J)": pct(g["k"], g["j"]),
                      "GT Created % (L / J)": pct(g["l"], g["j"]), "Dump % (M / J)": pct(g["m"], g["j"]),
-                     "Status": " · ".join(bits)})
-    tot.update(efficiency=pct(tot["k"], tot["j"]), gt=pct(tot["l"], tot["j"]), dump=pct(tot["m"], tot["j"]))
+                     LOT_PCT: pct(lot(g), g["j"]), "Status": " · ".join(bits)})
+    tot.update(efficiency=pct(tot["k"], tot["j"]), gt=pct(tot["l"], tot["j"]), dump=pct(tot["m"], tot["j"]),
+               lot=lot(tot), lotting=pct(lot(tot), tot["j"]))
     return rows, tot
 
 

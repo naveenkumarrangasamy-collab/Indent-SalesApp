@@ -612,7 +612,7 @@ def _group_sum(t: dict) -> None:
     bg, fg = pr.sum_colour(sc)
     pct = 0 if sc is None else max(0.0, min(sc, 1.0)) * 100
     msg = ("Pick a customer lot to start" if sc is None else "In the 97–100% band · accounted ✓"
-           if fg == "#27500A" else ("Over 101% of the kg taken · check the entries · can't save" if pr.over_limit(t)
+           if fg == "#27500A" else ("Over 102% of the kg taken · check the entries · can't save" if pr.over_limit(t)
                                     else "Add the next customer lot or fix a box"))
     eff = pr.pct(t["efficiency"]) if t["efficiency"] is not None and t["out_kg"] > 0 else "–"
     st.markdown(f"<div class='pg-gs' style='background:{bg};color:{fg}'><div class='pg-gs-h'><span>Group sum check · "
@@ -657,7 +657,7 @@ def _group_block(i: int, g: dict, glines: list, states: dict, packs: list, title
         with st.container(key=f"pgadd_{g['entry_id'].replace('+', '_')}"):
             if st.button(f"＋ Add next customer lot · {left:,.1f} kg still to account" if t["out_kg"] > 0
                          else "＋ Add next customer lot", key=f"pg_add_{g['entry_id']}", width="stretch",
-                         disabled=not ready, help=None if ready else ("Over 101% · fix the entries first"
+                         disabled=not ready, help=None if ready else ("Over 102% · fix the entries first"
                                                                       if pr.over_limit(t)
                                                                       else "Pick the customer lot above first")):
                 for ln in glines:
@@ -763,14 +763,14 @@ def _grid_body(rows, lots, packs, day, city, user, key) -> None:
                 miss.append(f"**{g.get('parent_sku')} · {g.get('variety', '')} · Table {g.get('table_no', '')}**: "
                             + ", ".join(dict((c[0], c[1]) for c in COLS).get(m, m) for m in s["missing"]))
                 keys |= {f"pg_{ln['id']}_{'pack' if m == 'Cux Lot' else m}" for m in s["missing"]}
-        for gid in dict.fromkeys(ln["lot_id"] for ln, _s in todo):   # 26 Nov: never more than 101 % of taken
+        for gid in dict.fromkeys(ln["lot_id"] for ln, _s in todo):   # 26 Nov: never more than 102 % of taken
             g = lots[gid]
             t = pr.group_total([(states[x["id"]]["pack"], states[x["id"]]["vals"]) for x in rows
                                 if x["lot_id"] == gid and states[x["id"]]["pack"]], g)
             if pr.over_limit(t):
                 miss.append(f"**{g.get('parent_sku')} · {g.get('variety', '')} · Table {g.get('table_no', '')}**: "
                             f"{t['out_kg']:,.1f} kg entered for {t['used_kg']:,.1f} kg used = {pr.pct(t['sum'])}. "
-                            "It can't be more than 101 %. Check the MT / GT / Dump numbers are correct.")
+                            "It can't be more than 102 %. Check the MT / GT / Dump numbers are correct.")
         if miss:
             st.session_state["pg_bad"] = keys
             st.session_state["pg_miss"] = miss

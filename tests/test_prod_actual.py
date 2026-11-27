@@ -67,7 +67,11 @@ def test_defaults_with_missing_numbers():
                                 "lot": "", "box_kg": float("nan")}])
     df = pa.option_rows("Blueberry", parent_tab, None)
     kg, pcs = pa.defaults(df, origin="Peru", variety="Blueberry", size="18mm")
-    assert (kg, pcs) == (None, None)     # nothing known for this size: left blank, no crash
+    assert (kg, pcs) == (1.5, 12)        # 27 Nov: a blueberry tray is always 12 punnets = 1.5 kg
+    e = {"parent_sku": "Blueberry", "size": "18mm", "box_kg": 1.5, "executive": "A", "table_no": "1",
+         "boxes_moved": 2, "stock_type": "Unused Vendor Lot"}
+    assert pa.entry_errors(e) == ["Brand name"] and pa.entry_errors({**e, "brand": "Beta"}) == []
+    assert pa.entry_errors({**e, "parent_sku": "Apple"}) == []
     assert pa.defaults(pa.option_rows("Garlic", None, None), size="X") == (None, None)
 
 
@@ -110,3 +114,11 @@ def test_nz_has_only_graded_gala():
     df = pa.option_rows("Apple", tab, None)
     assert "Gala" not in pa.choices(df, "variety", origin="NZ") and "Gala HG" in pa.choices(df, "variety", origin="NZ")
     assert pa.choices(df, "variety", origin="Poland") == ["Gala"]
+
+
+def test_spec_sizes_are_in_count_order():
+    tab = pd.DataFrame([{"parent": "Apple", "grade": "Gala HG", "country": "NewZealand", "spec": "80c, 100c, 110c",
+                         "box_kg": 17.5}])
+    brand = pd.DataFrame([{"Parent SKU": "Apple", "Origin": "NZ", "Variety": "Gala HG", "Size": "110C", "Brand": "Enza"}])
+    sw = pa.size_weights(pa.option_rows("Apple", tab, None, brand), origin="NZ", variety="Gala HG")
+    assert list(sw) == ["80C", "100C", "110C"]

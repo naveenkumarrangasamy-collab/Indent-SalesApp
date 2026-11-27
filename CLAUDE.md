@@ -774,7 +774,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 - **Balance cases from the 27 Nov end-to-end test** (user: "show me this list when I ask for the balance cases"):
   2. MT stock matched too loosely: every 1-piece avocado SKU shares one stock, every Gala 2PC SKU one stock
      (count / size ignored).
-  3. Gram packs (Blueberry 125 gm, grapes 250 gm) show in kg, not punnets / packs, in the end-of-day table.
+  3. (done 27 Nov night) gram packs are their own MT stock, in packs.
   4. Dispatch tile says "PO qty" even when the indent qty is used (no PO).
   5. A fully sent (locked) dispatch card hides what was sent (only inside "Send more" / Returns).
   7. Dispatch / Returns entry boxes are not amber as in the preview.
@@ -782,3 +782,18 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
   9. Returned stock is only recorded; it does not go back to MT / GT stock.
   Also open: test entries of 26 Nov Bangalore (Executive A / B, Brand A, IN-071 dispatch + returns) still on the
   trial sheet; no invoice PDF; box SKUs have no MT figure.
+
+### 27 Nov night (TRIAL branch only; user voice note)
+
+- **Blueberry**: goes by **brand name** (Brand name is required on Pre-Production Actual; country not needed); a
+  tray is always **12 punnets = 1.5 kg** (`prod_actual.TRAY`; the master says "12 pcs tray"). Pcs/box shows 12.
+- **Customer lots for fruit sold by weight** (no pieces per box, or Grapes / Blueberry / Litchi / Longan;
+  `processed.lot_choices`, `GRAM_PACKS`): 100gm, 200gm, 250gm, 500gm, 750gm (+ 125gm punnet for Blueberry) and 1Kg;
+  **no piece lots**. A gram pack is typed in **packs** (like the team's sheet: "0.250 kg" lot, D1 = packs);
+  `pack_kg` unit 'Pack'; the label is "250gm" (old rows saved as "0.250 kg" still read). Dispatch: gram packs are
+  their own MT stock in packs (`day_dispatch.pool_of`).
+- **Pieces and packs are whole numbers** on Production Detail Process (MT packs, loose pcs of left-over / GT / dump).
+- **Sum check limit is 102 %** (was 101 %; `processed.MAX_SUM`): up to 102 % saves, to be questioned later.
+- **Lotting loss** on Production Summary → Category efficiency: kg and % of J, = J − (K + L + M) as the team's
+  sheet column "Lotting gain vs loss" (+ loss, − gain); also a tile.
+- Spec sizes are listed in count order (NZ Gala HG 110C was first in the list, not missing).

@@ -49,6 +49,8 @@ def pool_of(parent, variety, lot, lot_size) -> tuple[str, str, float]:
     base = f"{pkey(parent)}|{vkey(parent, variety)}"
     if kind == "pcs":
         return f"{base}|{n:g}pc", "packs", 1.0
+    if kind == "kg" and n and n < 1:        # gram packs (250 gm, a 125 gm punnet): counted in packs
+        return f"{base}|{n * 1000:g}gm", "packs", 1.0
     if kind == "kg" and n:
         return f"{base}|kg", "kg", float(n)
     return "", "box", 0.0
@@ -56,8 +58,8 @@ def pool_of(parent, variety, lot, lot_size) -> tuple[str, str, float]:
 
 def pool_label(key: str) -> str:
     p, v, pack = (key.split("|") + ["", ""])[:3]
-    return " · ".join(x for x in (p.title(), v.title(), pack.upper().replace("PC", " PC") if pack != "kg" else "Kg")
-                      if x)
+    shown = "Kg" if pack == "kg" else pack if pack.endswith("gm") else pack.upper().replace("PC", " PC")
+    return " · ".join(x for x in (p.title(), v.title(), shown) if x)
 
 
 def mt_made(lots: pd.DataFrame, saved: pd.DataFrame, day: str, city: str) -> dict[str, float]:
@@ -73,8 +75,11 @@ def mt_made(lots: pd.DataFrame, saved: pd.DataFrame, day: str, city: str) -> dic
             ln = p2.clean_line(ln)
             base = f"{pkey(it.get('parent_sku'))}|{vkey(it.get('parent_sku'), it.get('variety'))}"
             m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*PC", _s(ln.get("pack")), flags=re.I)
+            pk, unit = pr.pack_kg(ln.get("pack", ""), 1.0)
             if m:
                 k, q = f"{base}|{float(m.group(1)):g}pc", pr._f(ln.get("mt_packs"))
+            elif unit == "Pack":
+                k, q = f"{base}|{pk * 1000:g}gm", pr._f(ln.get("mt_packs"))
             elif p2.lot_unit(ln.get("pack", "")) == "Kg":
                 k, q = f"{base}|kg", pr._f(ln.get("mt_loose_kg"))
             else:

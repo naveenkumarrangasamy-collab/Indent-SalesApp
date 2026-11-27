@@ -20,7 +20,13 @@ def test_kg_pack_mandarin_row():
 
 def test_pack_labels_and_needs():
     assert pr.pack_label("2 Pcs") == "2PC" and pr.pack_label("1 Kg") == "1Kg"
-    assert pr.pack_label("250 gm") == "0.250 kg"
+    assert pr.pack_label("250 gm") == "250gm"
+    assert pr.pack_kg("250gm", None) == (0.25, "Pack") and pr.pack_kg("0.250 kg", None) == (0.25, "Pack")
+    assert pr.pack_kg("1Kg", None) == (1.0, "Kg") and pr.pack_kg("2PC", 0.18)[1] == "PC"
+    grapes = pr.lot_choices("Grapes", False, ["250gm"])          # sold by weight: gram packs + 1Kg, no pieces
+    assert grapes == ["250gm", "100gm", "200gm", "500gm", "750gm", "1Kg"]
+    assert pr.lot_choices("Blueberry", True, [])[0] == "125gm" and "1PC" not in pr.lot_choices("Blueberry", True, [])
+    assert pr.lot_choices("Apple", True, ["2PC"]) == ["2PC", "1PC", "3PC", "4PC", "1Kg"]
     lines = pd.DataFrame([
         {"delivery_date": "2026-11-25", "city": "B", "parent_sku": "Avocado", "lot_size": "1 Pcs", "qty": 300},
         {"delivery_date": "2026-11-25", "city": "B", "parent_sku": "Avocado", "lot_size": "1 Pcs", "qty": 420},
@@ -72,9 +78,9 @@ def test_group_lots_clubs_same_spec_and_sums():
     assert round(t["out_kg"]) == 2079 and pr.sum_colour(t["sum"])[1] == "#27500A"
 
 
-def test_over_101_percent_is_blocked():
+def test_over_102_percent_is_blocked():
     g = {"box_kg": 10, "pcs_per_box": 0, "boxes_moved": 10}          # 100 kg taken
-    ok = pr.group_total([("1Kg", {"mt_packs": 100, "dump_kg": 1})], g)   # 101 kg -> allowed
+    ok = pr.group_total([("1Kg", {"mt_packs": 100, "dump_kg": 2})], g)   # 102 kg -> allowed (27 Nov)
     bad = pr.group_total([("1Kg", {"mt_packs": 100, "dump_kg": 5})], g)  # 105 kg -> blocked
     assert not pr.over_limit(ok) and pr.sum_colour(ok["sum"])[1] == "#27500A"
     assert pr.over_limit(bad) and pr.sum_colour(bad["sum"])[1] == "#791F1F"

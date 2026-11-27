@@ -33,7 +33,7 @@ def _f(v) -> float:
 
 
 def pack_label(lot_size: str) -> str:
-    """'2 Pcs' -> '2PC', '1 Kg' -> '1Kg', '250 gm' -> '0.250 kg'; else as given."""
+    """'2 Pcs' -> '2PC', '1 Kg' -> '1Kg', '250 gm' -> '250gm'; else as given."""
     s = str(lot_size or "").strip()
     m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(pcs?|pc|piece|pieces)", s, flags=re.I)
     if m:
@@ -43,20 +43,42 @@ def pack_label(lot_size: str) -> str:
         return f"{float(m.group(1)):g}Kg"
     m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(g|gm|gms|gram|grams)", s, flags=re.I)
     if m:
-        return f"{float(m.group(1)) / 1000:.3f} kg"
+        return f"{float(m.group(1)):g}gm"
     return s
 
 
 def pack_kg(label: str, x: float | None) -> tuple[float | None, str]:
-    """(kg in one pack, 'PC' | 'Kg') for a pack label; pieces need X (kg per piece)."""
+    """(kg in one pack, 'PC' | 'Pack' | 'Kg') for a pack label; pieces need X (kg per piece).
+    'Pack' = a gram pack ('250gm', or '0.250 kg' as saved before 27 Nov): counted in packs like a piece lot.
+    'Kg' = a kg lot ('1Kg'): typed in kg."""
     s = str(label or "").strip()
     m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*PC", s, flags=re.I)
     if m:
         return (float(m.group(1)) * x if x else None), "PC"
+    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*(g|gm|gms)", s, flags=re.I)
+    if m:
+        return float(m.group(1)) / 1000, "Pack"
     m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*kg", s, flags=re.I)
     if m:
-        return float(m.group(1)), "Kg"
+        return float(m.group(1)), ("Kg" if float(m.group(1)) >= 1 else "Pack")
     return None, ""
+
+
+GRAM_PACKS = ["100gm", "200gm", "250gm", "500gm", "750gm"]   # 27 Nov (user): customer lots of fruit sold by weight
+GRAM_PARENTS = {"grapes", "blueberry", "litchi", "longan"}   # never offered piece lots (1PC, 2PC ...)
+EXTRA_GRAM = {"blueberry": ["125gm"]}                        # the punnet
+
+
+def lot_choices(parent: str, piece: bool, indent_packs: list[str]) -> list[str]:
+    """Customer lots offered for an item. Fruit sold by weight (no pieces per box, or grapes / blueberry /
+    litchi / longan): gram packs + 1Kg, never piece lots. Others: the day's indent packs, 1-4 PC and 1Kg."""
+    from core.prod_actual import pkey
+    k = pkey(parent)
+    if not piece or k in GRAM_PARENTS:
+        base = [p for p in indent_packs if pack_kg(p, None)[0]] + EXTRA_GRAM.get(k, []) + GRAM_PACKS + ["1Kg"]
+    else:
+        base = list(indent_packs) + ["1PC", "2PC", "3PC", "4PC", "1Kg"]
+    return list(dict.fromkeys(base))
 
 
 def compute(box_kg, pcs_per_box, boxes, pack: str, vals: dict) -> dict:
@@ -103,16 +125,16 @@ def sum_check(r: dict) -> float | None:
     return (r["mt_kg"] + r["gt_kg_total"] + r["dump_kg_total"]) / j if j > 0 else None
 
 
-MAX_SUM = 1.01   # 26 Nov (user): a group can never account for more than 101 % of the kg taken; saving is blocked
+MAX_SUM = 1.02   # 27 Nov (user): up to 102 % is saved (and questioned later); above it saving is blocked (was 101 %)
 
 
 def over_limit(t: dict) -> bool:
-    """True when a group's customer lots add up to more than 101 % of what was used."""
+    """True when a group's customer lots add up to more than 102 % of what was used."""
     return t.get("sum") is not None and t["sum"] > MAX_SUM + 1e-9
 
 
 def sum_colour(v: float | None) -> tuple[str, str]:
-    """Target band 97-101 % green, 90-96 % amber, otherwise red (26 Nov)."""
+    """Target band 97-102 % green, 90-96 % amber, otherwise red (26 Nov)."""
     if v is None:
         return "#F1F5F9", "#64748B"
     if 0.97 <= v <= MAX_SUM:

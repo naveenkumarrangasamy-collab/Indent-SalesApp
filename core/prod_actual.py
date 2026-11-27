@@ -126,7 +126,20 @@ def option_rows(parent: str, parent_tab: pd.DataFrame | None, saved: pd.DataFram
     for c in ("origin", "variety", "brand", "size"):
         df[c] = df[c].map(_t)
     df["origin"] = df["origin"].map(country)
+    if k in TRAY:      # 27 Nov (user): a blueberry tray is always 12 punnets = 1.5 kg ("12 pcs tray" in the master)
+        kg, pcs = TRAY[k]
+        df["box_kg"] = [kg if not _num(x) else x for x in df["box_kg"]]
+        df["pcs"] = [pcs if not _num(x) else x for x in df["pcs"]]
     return _graded_only(df)
+
+
+TRAY = {"blueberry": (1.5, 12)}
+BRAND_NEEDED = {"blueberry"}    # 27 Nov (user): blueberry goes by its brand name (country not specific)
+
+
+def _size_key(s: str):
+    m = re.match(r"\d+(?:\.\d+)?", s)
+    return (float(m.group(0)) if m else 1e9, s)
 
 
 GRADED_ONLY = {"nz"}      # 27 Nov (user): New Zealand has Gala HG / SG / XF ..., never a plain "Gala"
@@ -286,7 +299,7 @@ def add_executive(backend, city: str, name: str, user: str) -> bool:
 
 def size_weights(df: pd.DataFrame, **picked) -> dict[str, list[float]]:
     """Box weights per spec for the picked origin / variety ('60C' -> [10.0])."""
-    return {s: box_weights(df, **picked, size=s) for s in choices(df, "size", **picked)}
+    return {s: box_weights(df, **picked, size=s) for s in sorted(choices(df, "size", **picked), key=_size_key)}
 
 
 def new_executive_rows(entries: list[dict], tab: pd.DataFrame | None, user: str, stamp: str) -> list[dict]:
@@ -309,6 +322,8 @@ def entry_errors(e: dict) -> list[str]:
         errs.append("Fruit")
     if not e.get("size"):
         errs.append("Spec size")
+    if pkey(e.get("parent_sku")) in BRAND_NEEDED and not _t(e.get("brand")):
+        errs.append("Brand name")
     if not _num(e.get("box_kg")):
         errs.append("Box kg")
     if not _t(e.get("executive")):

@@ -1,7 +1,7 @@
 """Production Detail Process (27 Nov, trial; was 'Processed · option 2'): by grading executive, + its tracking.
 
 Only tables still in process are listed (folded; tap to open). Inside a table, per item: MT Ready per customer
-lot, then left-over / GT / dump once for the item, a sum check (97-101 %), Save draft and Submit. A submitted
+lot, then left-over / GT / dump once for the item, a sum check (97-102 %), Save draft and Submit. A submitted
 item leaves the list (Done today; owners can reopen). Logic: core/processed2.py."""
 from __future__ import annotations
 
@@ -20,7 +20,6 @@ from core.sheets import SheetError, get_backend
 from pages_src import common
 
 PICK = "Choose…"
-DEFAULT_PACKS = ["1PC", "2PC", "3PC", "4PC", "1Kg"]
 LABEL = {"mt_packs": "MT Ready (Cux lots) D1", "mt_loose_kg": "MT Ready (loose kg) D2",
          "left_box": "Vendor lots E1", "left_kg": "Loose kg E2", "left_pcs": "Loose pcs E3",
          "gt_box": "Box F1", "gt_kg": "Loose kg F2", "gt_pcs": "Loose pcs F3",
@@ -149,7 +148,14 @@ def _seed(k: str, v, kind: str = "num") -> str:
     return k
 
 
-def _num(label: str, key: str, value) -> None:
+def _num(label: str, key: str, value, whole: bool = False) -> None:
+    """whole=True (27 Nov, user): pieces and packs are whole numbers, never 2.5."""
+    if whole:
+        if key not in st.session_state or isinstance(st.session_state[key], float):
+            v = st.session_state.get(key, value)
+            st.session_state[key] = None if v in (None, "") else int(round(float(v)))
+        st.number_input(label, min_value=0, step=1, key=key, format="%d", placeholder="0")
+        return
     st.number_input(label, min_value=0.0, step=1.0, key=_seed(key, value), format="%g", placeholder="0")
 
 
@@ -306,10 +312,8 @@ def _item(it: dict, e: dict, lines, day: str, city: str, user: User) -> None:
     iid = _iid(day, city, it["key"])
     t = p2.total(it, e["lines"], e["tbl"])
     piece = bool(t["x"])
-    packs = [p for p in pr.packs_for(lines, str(it.get("parent_sku", "")), day, city)]
-    packs += [p for p in DEFAULT_PACKS if p not in packs]
-    if not piece:
-        packs = [p for p in packs if pr.pack_kg(p, None)[0]]
+    packs = pr.lot_choices(str(it.get("parent_sku", "")), piece,
+                           list(pr.packs_for(lines, str(it.get("parent_sku", "")), day, city)))
     with st.container(key=f"p2i_{iid}"):
         extra = " · ".join(x for x in [str(it.get("origin") or ""), f"brand {it['brand']}" if it.get("brand") else "",
                                        f"{pr._f(it['box_kg']):g} kg box",
@@ -332,10 +336,10 @@ def _item(it: dict, e: dict, lines, day: str, city: str, user: User) -> None:
                 # 27 Nov (user): a piece lot is typed ONLY in packs, a kg lot ONLY in kg (this line only;
                 # left over, GT and dump keep every box)
                 unit = p2.lot_unit(ln["pack"])
-                if unit == "PC":
+                if unit in ("PC", "Pack"):
                     with c[2]:
-                        _num(LABEL["mt_packs"], f"p2_{ln['id']}_mt_packs", ln.get("mt_packs"))
-                    _locked(c[3], "MT Ready (kg)", "Not for pieces")
+                        _num(LABEL["mt_packs"], f"p2_{ln['id']}_mt_packs", ln.get("mt_packs"), whole=True)
+                    _locked(c[3], "MT Ready (kg)", "Not for pieces" if unit == "PC" else "Packs only")
                     _drop(ln, "mt_loose_kg")
                 elif unit == "Kg":
                     _locked(c[2], "MT Ready (packs)", "Not for kg")
@@ -371,7 +375,7 @@ def _item(it: dict, e: dict, lines, day: str, city: str, user: User) -> None:
                     if f in PCS_FIELDS and not piece:
                         continue
                     with col:
-                        _num(LABEL[f], f"p2_{iid}_{f}", e["tbl"].get(f))
+                        _num(LABEL[f], f"p2_{iid}_{f}", e["tbl"].get(f), whole=f in PCS_FIELDS)
         st.text_input("Comments (optional)", key=_seed(f"p2_{iid}_comment", e["comment"], "txt"),
                       placeholder="Type a note")
         state = p2.state_of(t)
@@ -386,11 +390,11 @@ def _item(it: dict, e: dict, lines, day: str, city: str, user: User) -> None:
                     f"{t['left_kg']:,.1f} kg</span></div></div>", unsafe_allow_html=True)
         if state == "over":
             st.markdown(f"<div class='p2-note' style='background:#FCEBEB;color:#791F1F'>Can't save or submit · "
-                        f"{pr.pct(t['sum'])} of the kg used. It can't be more than 101%. Check MT / GT / Dump."
+                        f"{pr.pct(t['sum'])} of the kg used. It can't be more than 102%. Check MT / GT / Dump."
                         "</div>", unsafe_allow_html=True)
         elif state == "low":
             st.markdown(f"<div class='p2-note' style='background:#FAEEDA;color:#633806'>{t['to_go']:,.1f} kg not "
-                        "accounted yet (target 97–101%).</div>", unsafe_allow_html=True)
+                        "accounted yet (target 97–102%).</div>", unsafe_allow_html=True)
         # never disabled and no pop-up: Save just saves, Submit just submits (user 27 Nov)
         c = st.columns([1, 2])
         if c[0].button("Save", key=f"p2_{iid}_save", width="stretch"):
@@ -408,7 +412,7 @@ def _drop(ln: dict, field: str) -> None:
 
 def _write(it: dict, e: dict, status: str, day: str, city: str, user: User, state: str) -> None:
     if state == "over":
-        st.toast("Not saved: more than 101% of the kg used.", icon="⚠️")
+        st.toast("Not saved: more than 102% of the kg used.", icon="⚠️")
         return
     if state == "empty":
         st.toast("Nothing entered yet.", icon="⚠️")
@@ -577,17 +581,20 @@ def _category(lots, saved, days: set[str], city: str, label: str) -> None:
 
     def pc(v):
         return "–" if v is None else f"{round(v * 100)}%"
-    c = st.columns(4)
+    c = st.columns(5)
     c[0].metric("Kg used (J)", f"{tot['j']:,.0f}")
     c[1].metric("Category efficiency (K / J)", pc(tot["efficiency"]))
     c[2].metric("GT created (L / J)", pc(tot["gt"]))
     c[3].metric("Dump (M / J)", pc(tot["dump"]))
+    c[4].metric("Lotting loss (+ loss / − gain)", f"{tot['lot']:+,.1f} kg" if tot["j"] else "–",
+                None if tot["lotting"] is None else f"{tot['lotting'] * 100:+.1f}% of kg used", delta_color="off")
     if tot["saved"] or tot["none"]:
         st.caption(" · ".join(x for x in (
             f"**{tot['saved']}** item(s) are saved but not submitted yet; they are counted in these percentages"
             if tot["saved"] else "",
             f"**{tot['none']}** item(s) are not started; they are not counted" if tot["none"] else "") if x) + ".")
     pcts = ["Category Efficiency % (K / J)", "GT Created % (L / J)", "Dump % (M / J)"]
+    signed = {p2.LOT_KG: "{:+,.2f}", p2.LOT_PCT: "{:+.1%}"}
     df = pd.DataFrame(rows, columns=p2.CAT_HEAD).astype(object)   # object: an empty % stays None, not NaN
     df = df.where(df.notna(), None)
     band = [p2.eff_band(v) for v in df[pcts[0]]]
@@ -596,6 +603,8 @@ def _category(lots, saved, days: set[str], city: str, label: str) -> None:
         show[col] = [f"{float(v):,.1f}".rstrip("0").rstrip(".") if v else "" for v in df[col]]
     for col in pcts:
         show[col] = ["" if v is None else f"{round(float(v) * 100)}%" for v in df[col]]
+    for col, fmt in signed.items():
+        show[col] = ["" if v is None else fmt.format(float(v) + 0.0) for v in df[col]]
     show.insert(0, "No", [str(i) for i in range(1, len(show) + 1)])
 
     def paint(col):
