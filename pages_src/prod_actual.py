@@ -4,6 +4,8 @@ Fruit (parent SKU) is the only header; everything else is picked from short drop
 (Brand can also be typed). Entries collect in a preview list and are saved together."""
 from __future__ import annotations
 
+import uuid
+
 import pandas as pd
 import streamlit as st
 
@@ -23,7 +25,7 @@ CSS = """<style>
   display:flex; justify-content:space-between; align-items:center; font-weight:800; flex-wrap:wrap; gap:6px;}
 .pa-hd span {background:#fff; color:#0C447C; border:1px solid #B5D4F4; border-radius:999px; padding:2px 10px;
   font-size:0.78rem; font-weight:700;}
-.pa-sec {font-size:0.82rem; font-weight:800; color:#2C5496; text-align:left; margin:12px 0 4px 2px;}
+.pa-sec {font-size:0.98rem; font-weight:800; color:#2C5496; text-align:left; margin:12px 0 4px 2px;}
 .st-key-pa_next {border:2px solid #639922; background:#EAF3DE; border-radius:12px; padding:10px 14px;}
 .pa-next {color:#27500A; font-size:0.92rem;}
 .st-key-pa_card [class*="st-key-pa_addrow_"] {position:relative;}
@@ -34,26 +36,34 @@ CSS = """<style>
   font-weight:800; min-height:30px; height:30px; width:34px; padding:0; border-radius:8px;}
 .st-key-pa_card [class*="st-key-pa_addrow_"] input {text-align:left; font-weight:600; padding-right:46px;}
 .st-key-pa_card [class*="st-key-pa_addrow_"] [data-testid="InputInstructions"] {display:none;}
+.pa-lh {font-size:0.85rem; font-weight:800; color:#475569; text-align:center;}
+.pa-line {font-size:1rem; color:#0F172A; padding:4px 2px;}
+.st-key-pa_added [data-baseweb="select"] > div, .st-key-pa_added [data-testid="stNumberInputContainer"] {
+  border:2px solid #EF9F27; border-radius:10px; background:#FFFBF2;}
+.st-key-pa_added [data-baseweb="select"] div, .st-key-pa_added input {text-align:center; justify-content:center;
+  font-weight:800; font-size:1rem;}
+.st-key-pa_added button[data-testid="stNumberInputStepUp"],
+.st-key-pa_added button[data-testid="stNumberInputStepDown"] {display:none;}
 .pa-ex {background:#F4F8FE; color:#0C447C; border:1px solid #B5D4F4; border-radius:10px; padding:6px 12px;
   font-weight:800; margin:10px 0 4px 0; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;}
 .pa-ex span {font-weight:700; font-size:0.8rem; color:#185FA5;}
 .st-key-pa_card [class*="_go"] button {background:#1F6B4A; border-color:#1F6B4A; color:#fff; font-weight:800;}
 .st-key-pa_card [data-testid="stWidgetLabel"] {justify-content:center; width:100%;}
-.st-key-pa_card [data-testid="stWidgetLabel"] p {font-size:0.75rem; font-weight:700; color:#475569; text-align:center;}
+.st-key-pa_card [data-testid="stWidgetLabel"] p {font-size:0.88rem; font-weight:700; color:#475569; text-align:center;}
 .st-key-pa_card [data-baseweb="select"] > div, .st-key-pa_card [data-testid="stNumberInputContainer"],
 .st-key-pa_card [data-testid="stTextInputRootElement"] {border:2px solid #85B7EB; border-radius:12px; background:#fff;}
 .st-key-pa_card [data-baseweb="select"] div, .st-key-pa_card input {text-align:center; justify-content:center;
-  font-weight:700;}
+  font-weight:700; font-size:1.05rem;}
 .st-key-pa_card button[data-testid="stNumberInputStepUp"],
 .st-key-pa_card button[data-testid="stNumberInputStepDown"] {display:none;}
 .st-key-pa_card [class*="st-key-pa_box_"] [data-testid="stNumberInputContainer"] {border-color:#378ADD;}
-.pa-l {font-size:0.75rem; font-weight:700; color:#475569; text-align:center; margin-bottom:4px;}
+.pa-l {font-size:0.88rem; font-weight:700; color:#475569; text-align:center; margin-bottom:4px;}
 .pa-ro {height:42px; border-radius:12px; background:#E6F1FB; display:flex; align-items:center; justify-content:center;
   gap:6px; font-weight:800; color:#0C447C; cursor:not-allowed;}
 .pa-ro small {font-size:0.72rem; color:#185FA5; font-weight:700;}
 .pa-ro.miss {background:#FCEBEB; color:#791F1F;}
 .pa-foot {display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px;}
-.pa-todo {background:#FAEEDA; color:#633806; border-radius:999px; padding:4px 12px; font-size:0.78rem; font-weight:700;}
+.pa-todo {background:#FAEEDA; color:#633806; border-radius:999px; padding:4px 12px; font-size:0.9rem; font-weight:700;}
 .pa-sub {font-size:0.8rem; color:#185FA5; font-weight:700; text-align:center; margin:6px 0 0 0;}
 .st-key-pa_card [class*="_add"] button {background:#2563EB; border-color:#2563EB; color:#fff;
   font-weight:800;}
@@ -129,7 +139,7 @@ def _confirm(rows: list[dict], user: User, nxt: str = "") -> None:
     c1, c2 = st.columns(2)
     if c1.button("Save", type="primary", icon=":material/save:", width="stretch", key="pa_ok"):
         try:
-            n = pa.save(get_backend(), [{k: v for k, v in r.items() if k != "added_at"} for r in rows], user.email)
+            n = pa.save(get_backend(), [{k: v for k, v in r.items() if k not in ("added_at", "rid")} for r in rows], user.email)
         except SheetError as e:
             st.error(f"Not saved. {e}")
             return
@@ -149,40 +159,42 @@ def _line_name(r: dict) -> str:
     return " · ".join(str(b) for b in bits if str(b).strip())
 
 
-@st.dialog("Edit this line")
-def _edit(i: int, names: list[str]) -> None:
-    rows = _pending()
-    if i is None or i >= len(rows):
-        st.rerun()
-    r = rows[i]
-    st.caption(" · ".join(str(x) for x in (r.get("parent_sku"), r.get("origin"), r.get("variety"), r.get("brand"),
-                                             r.get("size"), f"{pa._num(r.get('box_kg')) or 0:g} kg box") if x))
-    cur = str(r.get("executive") or "")
-    opts = names + ([cur] if cur and cur not in names else [])
-    person = st.selectbox("Executive name", opts, index=opts.index(cur) if cur in opts else None,
-                          accept_new_options=True, key=f"pa_ed_ex_{i}")
-    t = str(r.get("table_no") or "")
-    table = st.selectbox("Table number", TABLES, index=TABLES.index(t) if t in TABLES else None,
-                         key=f"pa_ed_t_{i}")
-    boxes = st.number_input("Number of boxes", min_value=0.0, step=1.0, format="%g",
-                            value=float(pa._num(r.get("boxes_moved")) or 0), key=f"pa_ed_n_{i}")
-    s = r.get("stock_type")
-    stock = st.selectbox("Stock", pa.STOCK_CHOICES, key=f"pa_ed_s_{i}",
-                         index=pa.STOCK_CHOICES.index(s) if s in pa.STOCK_CHOICES else 0)
-    st.caption("To change the fruit, spec, brand or box weight, remove the line and add it again.")
-    new = {**r, "executive": str(person or "").strip(), "table_no": table or "", "boxes_moved": boxes or 0,
-           "stock_type": stock}
-    errs = pa.entry_errors(new)
-    c1, c2 = st.columns(2)
-    if c1.button("Update", type="primary", width="stretch", key=f"pa_ed_ok_{i}"):
-        if errs:
-            st.error("Still to fill: " + ", ".join(errs))
-        else:
-            rows[i] = new
-            st.session_state.pop("pa_line", None)
-            st.rerun()
-    if c2.button("Back", width="stretch", key=f"pa_ed_back_{i}"):
-        st.rerun()
+def _added(rows: list[dict]) -> None:
+    """27 Nov (user): the added lines, per executive, with the table number and the number of boxes
+    editable right on the line (amber boxes) and a ✕ to take the line out. Nothing else to open."""
+    last = _last_times(rows, "executive", "added_at")
+    names = list(dict.fromkeys(str(r.get("executive") or "").strip() for r in rows))
+    with st.container(key="pa_added"):
+        for name in names:
+            mine = [r for r in rows if str(r.get("executive") or "").strip() == name]
+            boxes = sum(pa._num(r.get("boxes_moved")) or 0 for r in mine)
+            at = _clock(last.get(name, ""))
+            st.markdown(f"<div class='pa-ex'>{name}<span>{'Last given ' + at + ' · ' if at else ''}{len(mine)} SKU"
+                        f"{'' if len(mine) == 1 else 's'} · {boxes:g} boxes</span></div>", unsafe_allow_html=True)
+            h = st.columns([4.2, 1.3, 1.3, 0.6])
+            h[0].markdown("<div class='pa-lh' style='text-align:left'>Fruit taken</div>", unsafe_allow_html=True)
+            h[1].markdown("<div class='pa-lh'>Table number ✎</div>", unsafe_allow_html=True)
+            h[2].markdown("<div class='pa-lh'>Number of boxes ✎</div>", unsafe_allow_html=True)
+            for n, r in enumerate(mine, start=1):
+                rid = r.setdefault("rid", uuid.uuid4().hex[:8])
+                c = st.columns([4.2, 1.3, 1.3, 0.6], vertical_alignment="center")
+                what = " · ".join(str(x) for x in (r.get("parent_sku"), r.get("origin"), r.get("variety"),
+                                                   r.get("brand"), r.get("size"),
+                                                   f"{pa._num(r.get('box_kg')) or 0:g} kg box") if x)
+                c[0].markdown(f"<div class='pa-line'><b>{n}.</b> {what}</div>", unsafe_allow_html=True)
+                t0 = str(r.get("table_no") or "")
+                t = c[1].selectbox("Table number", TABLES, index=TABLES.index(t0) if t0 in TABLES else None,
+                                   key=f"pa_rt_{rid}", label_visibility="collapsed")
+                b = c[2].number_input("Number of boxes", min_value=0.0, step=1.0, format="%g",
+                                      value=float(pa._num(r.get("boxes_moved")) or 0), key=f"pa_rb_{rid}",
+                                      label_visibility="collapsed")
+                if t and t != t0:
+                    r["table_no"] = t
+                if b and b != (pa._num(r.get("boxes_moved")) or 0):
+                    r["boxes_moved"] = b
+                if c[3].button("✕", key=f"pa_rx_{rid}", help="Remove this line", width="stretch"):
+                    rows.remove(r)
+                    st.rerun()
 
 
 def _clock(stamp) -> str:
@@ -301,17 +313,7 @@ def render(user: User, nxt: str = "") -> None:
     rows = _pending()
     if rows:
         st.markdown(f"#### Added · {len(rows)} to save")
-        _by_executive(_preview_df(rows), "Number of boxes", _last_times(rows, "executive", "added_at"))
-        # 27 Nov (user): a line can be corrected or taken out before saving
-        c = st.columns([2.4, 1, 1], vertical_alignment="bottom")
-        i = c[0].selectbox("Change a line before saving", range(len(rows)), index=None, key="pa_line",
-                           placeholder="Choose the line…", format_func=lambda j: _line_name(rows[j]))
-        if c[1].button("✎ Edit", key="pa_edit", width="stretch", disabled=i is None):
-            _edit(i, pa.executives(exec_tab, rows[i].get("city", "")))
-        if c[2].button("✕ Remove", key="pa_remove", width="stretch", disabled=i is None):
-            rows.pop(i)
-            st.session_state.pop("pa_line", None)
-            st.rerun()
+        _added(rows)
         if st.button("Save", type="primary", icon=":material/save:", key="pa_save"):
             _confirm(rows, user)
 
@@ -409,7 +411,7 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
             if missing:
                 st.toast("Still to fill: " + ", ".join(missing), icon="⚠️")
             else:
-                _pending().append({**entry, "added_at": config.now_iso()})
+                _pending().append({**entry, "added_at": config.now_iso(), "rid": uuid.uuid4().hex[:8]})
                 for x in (f"{k}_n", f"{k}_t", "pa_parent"):    # back to the fruits for the next SKU
                     st.session_state.pop(x, None)
                 st.session_state["pa_top"] = True
@@ -423,7 +425,7 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
                 st.toast("Nothing to save yet. Still to fill: " + ", ".join(missing), icon="⚠️")
             else:
                 if not missing:
-                    _pending().append({**entry, "added_at": config.now_iso()})
+                    _pending().append({**entry, "added_at": config.now_iso(), "rid": uuid.uuid4().hex[:8]})
                     for x in (f"{k}_n", f"{k}_t"):
                         st.session_state.pop(x, None)
                 _confirm(_pending(), user, nxt)
