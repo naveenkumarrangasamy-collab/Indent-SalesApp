@@ -681,19 +681,19 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.
 
-### 27 Nov night: "Ocean Glass" look (TRIAL only for now; user picked it from mockups)
+### 27 Nov night: "Ocean" look (TRIAL only for now; user picked it from mockups)
 
-- **Styling only**: `.streamlit/config.toml` theme colours (blue #1f5fbf on #f3f7fc), `common.ACCENT`, and one
-  extra CSS block `common._THEME_CSS` added after `_CSS` in `inject_css()` (soft blue backdrop, glass sidebar,
-  pill buttons, light glass pills / segmented control, tinted glass tiles, rounded cards, Outfit + Nunito Sans).
-  No page logic, layout or data code changed. To go back: drop `_THEME_CSS` from `inject_css()` and restore the
-  four theme colours. The same change sits on branch `ui-ocean-glass` (cut from main) for the live app later.
-- **Glass only on the frame** (user 27 Nov 11 PM: text was hard to read on see-through panels): the side menu is
-  translucent with colour behind it; cards, tiles, pop-ups, expanders and input boxes are **solid white / solid
-  tints**, and the reading area's backdrop is near white.
-- Not done (would need custom components, user to decide): menu on top, phone tab bar, sliding "lens" motion,
-  dark theme. Page-local CSS (tracker, pre-production, batching plan) and the e-mail colours are unchanged.
-- Mockups: canvas "MT Indent — UI design directions" (rows "Ocean Glass").
+- **Styling only**: `.streamlit/config.toml` theme colours (blue #1f5fbf, page #f5f8fc, inputs white),
+  `common.ACCENT`, and one extra CSS block `common._THEME_CSS` added after `_CSS` in `inject_css()`: flat pale
+  page, white cards with a soft shadow, white side menu with the current page as a blue pill, white pills /
+  day switch (blue when chosen), soft solid tiles (blue / green / amber / red), Outfit + Nunito Sans.
+  No page logic, layout or data code changed. To go back: drop `_THEME_CSS` and restore the theme colours.
+- **No glass, no gradients** (user 27 Nov 11:12 PM, after trying an "Ocean Glass" mix on the trial: uneven
+  gradients, text hard to read). Follow the Ocean mockup as closely as styling allows.
+- Not done (needs more than styling): the mockup's menu across the top. Page-local CSS (tracker,
+  pre-production, batching plan) and the e-mail colours are unchanged.
+- Mockups: canvas "MT Indent — UI design directions" (row "Ocean"). Branch `ui-ocean-glass` (from main) still
+  holds the first glass version and is out of date.
 
 ## 6. Code map (repo root)
 

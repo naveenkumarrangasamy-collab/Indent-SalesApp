@@ -164,25 +164,19 @@ _CSS = f"""
 """
 
 
-# 27 Nov (user): "Ocean Glass" look. Styling only: colours, shapes, type and glass panels.
+# 27 Nov (user): "Ocean" look. Styling only: colours, shapes and type (flat, white cards, one blue).
 # It comes after _CSS and only overrides how things look; no rule here hides, moves or
 # resizes anything, so taking this block out of inject_css() gives the old look back.
 _THEME_CSS = """
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700&display=swap');
-  :root { --og-acc:#1f5fbf; --og-on:#17202e; --og-ov:#4b5870; --og-line:rgba(23,32,46,.08);
-      --og-g:rgba(255,255,255,.72); --og-gb:rgba(255,255,255,.8); --og-edge:rgba(31,95,191,.22);
-      --og-sh:rgba(20,50,110,.14); --og-card:#ffffff;
-      --og-blur:blur(26px) saturate(1.9);
-      --og-spring:cubic-bezier(.34,1.56,.64,1); }
+  /* "Ocean" look, as in the mockup (user 27 Nov 11:12 PM: Ocean only - flat page, white cards, one blue;
+     no glass, no gradients). */
+  :root { --og-acc:#1f5fbf; --og-on:#17202e; --og-ov:#55627a; --og-bd:#e0e7f0; --og-line:#eaeff6;
+      --og-sh:0 1px 2px rgba(20,40,80,.05), 0 10px 28px rgba(20,40,80,.07); }
 
-  /* ---- page: soft blue backdrop, rounded type ---- */
-  .stApp { background:
-      radial-gradient(620px 520px at 0% 0%, #9fc2ff 0, transparent 62%),
-      radial-gradient(520px 620px at 0% 78%, #a9e4f4 0, transparent 62%),
-      radial-gradient(700px 520px at 100% 10%, #b4dcff 0, transparent 60%),
-      radial-gradient(820px 640px at 58% 100%, #c6c9ff 0, transparent 60%), #e9f0fb !important;
-      background-attachment: fixed !important;
+  /* ---- page: flat pale blue-white, rounded type ---- */
+  .stApp { background: #f5f8fc !important;
       font-family: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
   [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stMain"] { background: transparent !important; }
   .stApp button, .stApp input, .stApp textarea, [data-testid="stMarkdownContainer"] p,
@@ -190,100 +184,75 @@ _THEME_CSS = """
       font-family: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
   .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .mt-h, .mt-tile .val {
       font-family: 'Outfit', 'Nunito Sans', system-ui, sans-serif; letter-spacing: -.01em; }
+  .mt-muted, .mt-h span, [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {
+      color: var(--og-ov) !important; opacity: 1 !important; }
 
-  /* ---- sidebar: one glass panel ---- */
-  [data-testid="stSidebar"] { background: rgba(255,255,255,.24) !important; border-right: 1px solid var(--og-gb);
-      border-radius: 0 28px 28px 0;
-      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);
-      box-shadow: 0 10px 30px var(--og-sh), inset -1px 0 0 rgba(255,255,255,.6), inset 0 1px 0 rgba(255,255,255,.6); }
+  /* ---- side menu: plain white, current page as a blue pill ---- */
+  [data-testid="stSidebar"] { background: #ffffff !important; border-right: 1px solid var(--og-bd); }
   [data-testid="stSidebar"] > div, [data-testid="stSidebarContent"] { background: transparent !important; }
   [data-testid="stSidebarNav"] a { border-radius: 999px; }
   [data-testid="stSidebarNav"] a[aria-current="page"] { background: var(--og-acc) !important; }
   [data-testid="stSidebarNav"] a[aria-current="page"] span { color: #ffffff !important; }
 
-  /* ---- buttons: pill shaped, a springy press ---- */
+  /* ---- buttons ---- */
   .stButton button, .stDownloadButton button, .stFormSubmitButton button, [data-testid="stLinkButton"] a {
-      border-radius: 999px !important; font-weight: 700;
-      transition: transform .35s var(--og-spring), box-shadow .2s ease; }
-  .stButton button:active, .stDownloadButton button:active, .stFormSubmitButton button:active { transform: scale(.96); }
-  [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
-      box-shadow: 0 8px 22px rgba(31,95,191,.28), inset 0 1px 0 rgba(255,255,255,.35); }
+      border-radius: 12px !important; font-weight: 600; }
   [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-secondaryFormSubmit"] {
-      background: var(--og-g) !important; border: 1px solid var(--og-edge) !important;
-      box-shadow: 0 4px 14px rgba(20,50,110,.08); }
+      background: #ffffff !important; border: 1px solid var(--og-bd) !important; }
   .st-key-home_po_btn button { background: #17479a !important; border-color: #17479a !important; color: #fff !important; }
   .st-key-home_po_btn button:hover { background: #123a80 !important; }
 
-  /* ---- pills (customers, stores, cities): light glass, blue when chosen ---- */
-  button[data-variant="pills"] { background: var(--og-g) !important; color: var(--og-on) !important;
-      border: 1px solid var(--og-edge) !important; box-shadow: 0 2px 8px rgba(20,50,110,.08) !important;
-      transition: transform .35s var(--og-spring), box-shadow .2s ease; }
+  /* ---- pills (customers, stores, cities): white, blue when chosen ---- */
+  button[data-variant="pills"] { background: #ffffff !important; color: var(--og-on) !important;
+      border: 1px solid var(--og-bd) !important; box-shadow: none !important; }
   button[data-variant="pills"]:hover:not([aria-disabled="true"]):not(:disabled) {
-      transform: translateY(-1px); box-shadow: 0 6px 16px rgba(20,50,110,.16) !important; border-color: var(--og-acc) !important; }
-  button[data-variant="pills"]:active { transform: scale(.95); }
+      transform: none; box-shadow: none !important; border-color: var(--og-acc) !important; }
   button[data-variant="pills"][aria-checked="true"] { background: var(--og-acc) !important; color: #ffffff !important;
-      border: 1px solid var(--og-acc) !important; box-shadow: 0 6px 16px rgba(31,95,191,.3) !important; }
+      border: 1px solid var(--og-acc) !important; box-shadow: none !important; }
 
-  /* ---- segmented control (delivery day): glass bar, white chosen segment ---- */
-  [role="radiogroup"]:has(> button[data-variant="segmented_control"]) { background: var(--og-g);
-      border: 1px solid var(--og-gb); border-radius: 999px;
-      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);
-      box-shadow: 0 4px 14px var(--og-sh); }
-  button[data-variant="segmented_control"] { border-radius: 999px !important; color: var(--og-ov) !important; }
-  button[data-variant="segmented_control"]:hover { background: rgba(255,255,255,.7) !important; color: var(--og-on) !important; }
-  button[data-variant="segmented_control"][aria-checked="true"] { background: #ffffff !important; color: var(--og-on) !important;
-      box-shadow: 0 2px 10px var(--og-sh); }
+  /* ---- segmented control (delivery day): white bar, blue chosen segment ---- */
+  [role="radiogroup"]:has(> button[data-variant="segmented_control"]) { background: #ffffff;
+      border: 1px solid var(--og-bd); border-radius: 12px; box-shadow: none; }
+  button[data-variant="segmented_control"] { border-radius: 9px !important; color: var(--og-ov) !important; }
+  button[data-variant="segmented_control"]:hover { background: #eef3fb !important; color: var(--og-on) !important; }
+  button[data-variant="segmented_control"][aria-checked="true"] { background: var(--og-acc) !important; color: #ffffff !important; }
 
-  /* ---- tiles: tinted glass instead of dark boxes ---- */
-  .mt-tile { background: #ffffff; color: var(--og-on); border: 1px solid var(--og-gb); border-radius: 22px;
-      box-shadow: 0 10px 30px var(--og-sh); }
-  .mt-tile .lbl { color: inherit; font-weight: 700; }
+  /* ---- tiles: soft solid tints ---- */
+  .mt-tile { background: #ffffff; color: var(--og-on); border: 1px solid var(--og-bd); border-radius: 20px;
+      box-shadow: var(--og-sh); }
+  .mt-tile .lbl { color: inherit; font-weight: 600; }
   .mt-tile .sub { color: inherit; }
   .mt-tile .val { font-weight: 600; }
   .mt-tile.good .val, .mt-tile.warn .val, .mt-tile.bad .val, .mt-tile.info .val { color: inherit; }
-  .mt-tile.info { background: #dde9fb; color: #123a80; }
-  .mt-tile.good { background: #dcf3e5; color: #0b5a3c; }
-  .mt-tile.warn { background: #fdebcb; color: #7a4400; }
-  .mt-tile.bad  { background: #fde2e1; color: #8a1c1c; }
+  .mt-tile.info { background: #dde9fb; color: #123a80; border-color: transparent; box-shadow: none; }
+  .mt-tile.good { background: #dcf3e5; color: #0b5a3c; border-color: transparent; box-shadow: none; }
+  .mt-tile.warn { background: #fdebcb; color: #7a4400; border-color: transparent; box-shadow: none; }
+  .mt-tile.bad  { background: #fde2e1; color: #8a1c1c; border-color: transparent; box-shadow: none; }
 
-  /* ---- rows, chips and cards the app draws itself ---- */
-  .mt-line, .mt-crow { border: 1px solid var(--og-line); border-radius: 16px; background: var(--og-card);
-      box-shadow: 0 2px 8px rgba(20,50,110,.05); }
+  /* ---- rows, chips and cards the app draws itself: white cards ---- */
+  .mt-line, .mt-crow { border: 1px solid var(--og-line); border-radius: 14px; background: #ffffff; }
   .mt-line.done, .mt-crow.done { border-left-color: var(--og-line); }
   .mt-line .st.done, .mt-chip.done { background: #dcf3e5; color: #0b5a3c; border-color: transparent; }
   .mt-line .st.open, .mt-chip.open { background: #fdebcb; color: #7a4400; border-color: transparent; }
   .mt-chip.none { background: #e6ebf3; color: #3c4c68; border-color: transparent; }
   .mt-chip.cnl { background: #fde2e1; color: #8a1c1c; border-color: transparent; }
-  .mt-line .ct, .mt-line .cnt, .mt-crow .cnt, .mt-h span { color: var(--og-ov); }
-  .mt-bar { background: var(--og-line); }
-  .mt-strip { border-color: var(--og-edge); background: rgba(221,233,251,.5); border-radius: 16px; }
-  /* anything that holds text to read is solid white, so it stands clear of the backdrop (user, 27 Nov) */
-  .mt-cust, [class*="st-key-mtcard"], .st-key-mt_delivery_card { background: var(--og-card);
-      border-color: #e3e9f2 !important; border-radius: 22px !important;
-      box-shadow: 0 10px 30px var(--og-sh); }
+  .mt-line .ct, .mt-line .cnt, .mt-crow .cnt { color: var(--og-ov); }
+  .mt-bar { background: #e3e9f2; }
+  .mt-strip { border-color: var(--og-bd); background: #eef3fb; border-radius: 14px; }
+  .mt-cust, [class*="st-key-mtcard"], .st-key-mt_delivery_card { background: #ffffff;
+      border-color: var(--og-bd) !important; border-radius: 20px !important; box-shadow: var(--og-sh); }
 
-  /* ---- Streamlit's own boxes: rounder, lighter ---- */
-  [data-testid="stExpander"] details { border-radius: 18px; background: var(--og-card); border-color: #e3e9f2; }
-  /* pop-up windows (PO upload, edit item ...): solid white, rounded */
-  [data-testid="stDialog"] div[role="dialog"] { background: #ffffff !important; border-radius: 28px;
-      box-shadow: 0 24px 60px rgba(20,50,110,.25); }
-  [data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="base-input"] input,
-  [data-testid="stTextInputRootElement"], [data-testid="stTextInputRootElement"] > div, [data-testid="stTextInputRootElement"] input,
-  [data-baseweb="select"] > div, [data-baseweb="select"] > div > div:not([data-baseweb="tag"]),
-  [data-baseweb="textarea"], [data-baseweb="textarea"] textarea { background-color: #ffffff !important; }
-  .mt-muted, [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * { color: var(--og-ov) !important; opacity: 1 !important; }
-  [data-testid="stDataFrame"], [data-testid="stTable"] { border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(20,50,110,.08); }
-  [data-testid="stAlert"] { border-radius: 16px; }
-  [data-testid="stFileUploaderDropzone"] { border-radius: 16px; background: #ffffff; border: 1.5px dashed #9fb0c8; }
-  [data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="select"] > div, [data-baseweb="textarea"] { border-radius: 12px !important; }
-  [data-testid="stForm"] { background: var(--og-g); border: 1px solid var(--og-gb) !important; border-radius: 28px;
-      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);
-      box-shadow: 0 10px 30px var(--og-sh); }
-  [data-testid="stSidebar"] [data-testid="stForm"] { background: transparent; border: 0 !important; box-shadow: none;
-      -webkit-backdrop-filter: none; backdrop-filter: none; }
-
-  @media (prefers-reduced-motion: reduce) {
-    .stButton button, button[data-variant="pills"] { transition: none !important; } }
+  /* ---- Streamlit's own boxes ---- */
+  [data-testid="stExpander"] details { border-radius: 16px; background: #ffffff; border-color: var(--og-bd); }
+  [data-testid="stDataFrame"], [data-testid="stTable"] { border-radius: 14px; overflow: hidden; }
+  [data-testid="stAlert"] { border-radius: 14px; }
+  [data-testid="stFileUploaderDropzone"] { border-radius: 14px; background: #ffffff; border: 1.5px dashed #b3bfd0; }
+  [data-testid="stDialog"] div[role="dialog"] { border-radius: 20px; }
+  [data-baseweb="input"], [data-baseweb="select"] > div, [data-baseweb="textarea"] {
+      border-radius: 10px !important; border-color: #b3bfd0 !important; }
+  [data-testid="stForm"] { background: #ffffff; border: 1px solid var(--og-bd) !important; border-radius: 20px;
+      box-shadow: var(--og-sh); }
+  [data-testid="stSidebar"] [data-testid="stForm"] { border: 0 !important; box-shadow: none; }
 </style>
 """
 
