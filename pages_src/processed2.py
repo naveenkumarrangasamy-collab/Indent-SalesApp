@@ -332,14 +332,17 @@ def _item(it: dict, e: dict, lines, day: str, city: str, user: User) -> None:
                 k = _seed(f"p2_{ln['id']}_pack", ln["pack"], "pack")
                 if st.session_state.get(k) not in opts:
                     st.session_state[k] = PICK
-                c[1].selectbox("Customer lot", opts, key=k)
+                bkg = pr._f(it.get("box_kg"))      # '1Box · 9 kg': the box lot shows this item's own box weight
+                c[1].selectbox("Customer lot", opts, key=k,
+                               format_func=lambda p, bkg=bkg: f"{p} · {bkg:g} kg" if pr.is_box(p) and bkg else p)
                 # 27 Nov (user): a piece lot is typed ONLY in packs, a kg lot ONLY in kg (this line only;
                 # left over, GT and dump keep every box)
                 unit = p2.lot_unit(ln["pack"])
                 if unit in ("PC", "Pack"):
                     with c[2]:
                         _num(LABEL["mt_packs"], f"p2_{ln['id']}_mt_packs", ln.get("mt_packs"), whole=True)
-                    _locked(c[3], "MT Ready (kg)", "Not for pieces" if unit == "PC" else "Packs only")
+                    _locked(c[3], "MT Ready (kg)", "Not for pieces" if unit == "PC" else
+                            "Boxes only" if pr.is_box(ln["pack"]) else "Packs only")
                     _drop(ln, "mt_loose_kg")
                 elif unit == "Kg":
                     _locked(c[2], "MT Ready (packs)", "Not for kg")

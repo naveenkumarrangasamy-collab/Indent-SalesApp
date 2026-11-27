@@ -24,10 +24,11 @@ def test_pack_labels_and_needs():
     assert pr.pack_kg("250gm", None) == (0.25, "Pack") and pr.pack_kg("0.250 kg", None) == (0.25, "Pack")
     assert pr.pack_kg("1Kg", None) == (1.0, "Kg") and pr.pack_kg("2PC", 0.18)[1] == "PC"
     grapes = pr.lot_choices("Grapes", False, ["250gm"])          # sold by weight: gram packs + 1Kg, no pieces
-    assert grapes == ["250gm", "100gm", "200gm", "500gm", "750gm", "1Kg"]
+    assert grapes == ["250gm", "100gm", "200gm", "500gm", "750gm", "1Kg", "1Box"]
     assert pr.lot_choices("Blueberry", True, [])[0] == "125gm" and "1PC" not in pr.lot_choices("Blueberry", True, [])
-    assert pr.lot_choices("Apple", True, ["2PC"]) == ["2PC", "1PC", "3PC", "4PC", "1Kg"]
-    assert pr.lot_choices("Orange", True, []) == ["1PC", "2PC", "3PC", "4PC", "250gm", "1Kg"]
+    assert pr.lot_choices("Apple", True, ["2PC"]) == ["2PC", "1PC", "3PC", "4PC", "1Kg", "1Box"]
+    assert pr.lot_choices("Orange", True, []) == ["1PC", "2PC", "3PC", "4PC", "250gm", "1Kg", "1Box"]
+    assert pr.pack_label("1 Box") == "1Box" and pr.pack_kg("1Box", None, 9) == (9.0, "Pack") and pr.is_box("1 box")
     lines = pd.DataFrame([
         {"delivery_date": "2026-11-25", "city": "B", "parent_sku": "Avocado", "lot_size": "1 Pcs", "qty": 300},
         {"delivery_date": "2026-11-25", "city": "B", "parent_sku": "Avocado", "lot_size": "1 Pcs", "qty": 420},

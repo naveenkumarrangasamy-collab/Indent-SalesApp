@@ -798,3 +798,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
   sheet column "Lotting gain vs loss" (+ loss, − gain); also a tile.
 - Spec sizes are listed in count order (NZ Gala HG 110C was first in the list, not missing).
 - **Orange** also has a **250gm** customer lot (with its piece lots; `processed.PIECE_GRAM`), typed in packs.
+- **Box customer lot (27 Nov 10:20 PM, user)**: every item has a **1Box** customer lot = one box of that item's
+  own box weight (dropdown shows "1Box · 9 kg"; `processed.pack_kg(..., box_kg)`, `is_box`), typed in **boxes**;
+  for fruit graded and repacked as a box and sold as a box. GT / dump in pieces stay for piece fruit (not grapes).
+  Dispatch: box SKUs ("1Box - …") draw from their own MT stock in boxes (`day_dispatch.pool_of`).

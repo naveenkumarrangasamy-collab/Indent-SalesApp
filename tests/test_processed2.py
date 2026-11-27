@@ -110,3 +110,15 @@ def test_gram_packs_count_in_packs_and_lotting_loss():
     assert round(rows[0][p2.LOT_KG], 2) == 1.55 and round(rows[0][p2.LOT_PCT], 3) == 0.062   # + = loss
     assert round(tot["lot"], 2) == 1.55
     assert p2.state_of({"sum": 1.02, "out_kg": 1}) == "ok" and p2.state_of({"sum": 1.03, "out_kg": 1}) == "over"
+
+
+def test_box_customer_lot_uses_the_items_box_weight():
+    raw = pd.DataFrame([{"entry_id": "m", "production_date": "2026-11-27", "city": "B", "parent_sku": "Mandarin",
+                         "variety": "Afourer", "size": "88C", "origin": "Australia", "brand": "", "table_no": "3",
+                         "box_kg": "9", "pcs_per_box": "88", "boxes_moved": "10", "executive": "A"}])
+    it = list(p2.items(raw).values())[0]
+    lines = [{"pack": "1Box", "mt_packs": 6, "mt_loose_kg": 4}, {"pack": "2PC", "mt_packs": 100}]
+    assert p2.lot_unit("1Box") == "Pack" and p2.clean_line(lines[0])["mt_loose_kg"] is None    # boxes only
+    t = p2.total(it, lines, {"gt_pcs": 44, "dump_pcs": 22})          # losses in pieces as well
+    assert [round(x, 2) for x in t["mt_per_line"]] == [54.0, 20.45]  # 6 boxes x 9 kg; 200 pcs x 9/88
+    assert round(t["gt_kg"], 2) == 4.5 and round(t["dump_kg"], 2) == 2.25 and round(t["sum"] * 100) == 90

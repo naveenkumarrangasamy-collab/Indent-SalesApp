@@ -163,7 +163,7 @@ def _dispatch_card(iid: str, its: list[dict], d: dict, left: dict, user: User) -
                 c[1].markdown(_g(it["asked"]) or "0")
                 pool = left.get(it["pool_key"]) if it["pool_key"] else None
                 c[2].markdown("–" if pool is None else f"{_g(pool / it['per']) or '0'}"
-                              + ("" if it["unit"] == "packs" else f" ({_g(pool)} kg)"))
+                              + ("" if it["unit"] in ("packs", "boxes") else f" ({_g(pool)} kg)"))
                 c[3].markdown(_g(got[name]) or "0")
                 rest = max(it["asked"] - got[name], 0.0)
                 c[4].markdown(_g(rest) or "0")

@@ -52,6 +52,8 @@ def test_pool_from_production_detail_and_grade_words():
                                      {}, "", "draft", DAY, CITY, "me"))
     assert dd.mt_made(lots, saved, DAY, CITY) == {"apple|gala|2pc": 150, "apple|gala|kg": 60}
     assert dd.pool_of("Blueberry", "", "Pack", "125 gm") == ("blueberry||125gm", "packs", 1.0)
+    assert dd.pool_of("Blueberry", "", "Box", "1 Box") == ("blueberry||box", "boxes", 1.0)
+    assert dd.pool_label("apple|gala|box") == "Apple · Gala · Box"
     assert dd.pool_of("Grapes", "", "Pack", "250 gm")[0] == "grapes||250gm" and dd.pool_label("grapes||250gm") == "Grapes · 250gm"
     g = pd.DataFrame([{"entry_id": "g", "production_date": DAY, "city": CITY, "parent_sku": "Grapes", "variety": "Red Globe",
                        "size": "22mm+", "origin": "China", "brand": "", "table_no": "4", "box_kg": "6.5",

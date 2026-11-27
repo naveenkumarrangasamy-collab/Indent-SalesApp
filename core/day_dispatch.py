@@ -44,7 +44,7 @@ def vkey(parent, variety) -> str:
 
 def pool_of(parent, variety, lot, lot_size) -> tuple[str, str, float]:
     """(pool key, unit, pool units in one lot). Piece lots: packs of that size; kg / gram lots: kg.
-    Box lots have no pool yet ('' key)."""
+    Box lots: boxes."""
     kind, n = boxes.per_lot(lot, lot_size)
     base = f"{pkey(parent)}|{vkey(parent, variety)}"
     if kind == "pcs":
@@ -53,12 +53,15 @@ def pool_of(parent, variety, lot, lot_size) -> tuple[str, str, float]:
         return f"{base}|{n * 1000:g}gm", "packs", 1.0
     if kind == "kg" and n:
         return f"{base}|kg", "kg", float(n)
+    if kind == "box":                       # sold as a box: its own MT stock, in boxes
+        return f"{base}|box", "boxes", 1.0
     return "", "box", 0.0
 
 
 def pool_label(key: str) -> str:
     p, v, pack = (key.split("|") + ["", ""])[:3]
-    shown = "Kg" if pack == "kg" else pack if pack.endswith("gm") else pack.upper().replace("PC", " PC")
+    shown = ("Kg" if pack == "kg" else "Box" if pack == "box" else pack if pack.endswith("gm")
+             else pack.upper().replace("PC", " PC"))
     return " · ".join(x for x in (p.title(), v.title(), shown) if x)
 
 
@@ -78,6 +81,8 @@ def mt_made(lots: pd.DataFrame, saved: pd.DataFrame, day: str, city: str) -> dic
             pk, unit = pr.pack_kg(ln.get("pack", ""), 1.0)
             if m:
                 k, q = f"{base}|{float(m.group(1)):g}pc", pr._f(ln.get("mt_packs"))
+            elif pr.is_box(ln.get("pack")):
+                k, q = f"{base}|box", pr._f(ln.get("mt_packs"))
             elif unit == "Pack":
                 k, q = f"{base}|{pk * 1000:g}gm", pr._f(ln.get("mt_packs"))
             elif p2.lot_unit(ln.get("pack", "")) == "Kg":
@@ -268,7 +273,7 @@ def stock_rows(made: dict[str, float], items: list[dict], sent: dict, back: dict
         g["asked"] += it["asked"] * it["per"]
         g["sent"] += sent.get(k, 0.0) * it["per"]
         g["back"] += back.get(k, 0.0) * it["per"]
-    return [{"MT stock": pool_label(k), "Unit": "kg" if k.endswith("|kg") else "packs", "MT made": g["made"],
+    return [{"MT stock": pool_label(k), "Unit": "kg" if k.endswith("|kg") else "boxes" if k.endswith("|box") else "packs", "MT made": g["made"],
              "Asked": g["asked"], "Dispatched": g["sent"], "MT left": g["made"] - g["sent"], "Returned": g["back"],
              "Sold of MT": (g["sent"] - g["back"]) / g["made"] if g["made"] > 0 else None}
             for k, g in sorted(agg.items())]
