@@ -167,7 +167,7 @@ def _last_times(rows, name_key: str, time_key: str) -> dict[str, str]:
     """Executive name -> the latest time a lot was given to them."""
     out: dict[str, str] = {}
     for r in rows:
-        n, t = str(r.get(name_key) or "").strip() or "No name", str(r.get(time_key) or "")
+        n, t = str(r.get(name_key) or "").strip() or "Name not recorded (older entry)", str(r.get(time_key) or "")
         if t and t > out.get(n, ""):
             out[n] = t
     return out
@@ -180,7 +180,7 @@ def _by_executive(df: pd.DataFrame, box_col: str, last: dict[str, str] | None = 
         st.dataframe(common.numbered(df), hide_index=True, width="stretch")
         return
     d = df.copy()
-    d["Executive"] = [str(x).strip() or "No name" for x in d["Executive"].fillna("")]
+    d["Executive"] = [str(x).strip() or "Name not recorded (older entry)" for x in d["Executive"].fillna("")]
     for name, part in d.groupby("Executive", sort=True):
         boxes = sum(pa._num(x) or 0 for x in part[box_col])
         at = _clock((last or {}).get(name, ""))
@@ -378,7 +378,7 @@ def _saved_today(saved: pd.DataFrame, city: str, day) -> None:
     v = pa.view(saved, day.isoformat(), city)
     if v.empty:
         return
-    st.markdown(f"#### Saved · {day.strftime('%d %b')} · {len(v)}")
+    st.markdown(f"#### Saved for production · {day.strftime('%d %B %Y').lstrip('0')} · {len(v)}")
     d = saved[(saved["production_date"].astype(str).str[:10] == day.isoformat())
               & (saved["city"].astype(str) == city)] if "saved_at" in saved.columns else saved.iloc[0:0]
     _by_executive(v.drop(columns=["Date", "City"]), "Boxes",
