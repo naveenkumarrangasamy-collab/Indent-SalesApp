@@ -192,15 +192,13 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
         else:
             box_kg = float(weights[0]) if weights else 0.0
             _locked(r2[0], "Box kg", box_kg, "kg", size)
-        pcs = 0
+        pcs = pcs0                # 27 Nov (user): the count is never typed; only the box weight is chosen
         if not only_box:
-            if pcs0:              # a piece count is known: it starts from the master and can be changed
-                with r2[1]:
-                    pcs = int(st.number_input("Pcs/box", min_value=0, step=1, value=pcs0, format="%d",
-                                              key=f"{k}_p_{origin}_{variety}_{size}") or 0)
+            if pcs0 or not size:
+                _locked(r2[1], "Pcs/box", pcs0, "pcs", size)
             else:
-                r2[1].markdown("<div class='pa-l'>Pcs/box</div><div class='pa-ro'>"
-                               + ("Kg only" if size else "Choose a spec first") + "</div>", unsafe_allow_html=True)
+                r2[1].markdown("<div class='pa-l'>Pcs/box</div><div class='pa-ro'>Kg only</div>",
+                               unsafe_allow_html=True)
 
         st.markdown("<div class='pa-sec'>3 · Assign box to grading executive</div>", unsafe_allow_html=True)
         r3 = st.columns(4)
@@ -223,8 +221,6 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
                  "table_no": table or "", "boxes_moved": boxes or 0, "stock_type": stock, "executive": person}
         missing = [("Box kg (choose the weight)" if len(weights) > 1 else "Box kg (not in master)")
                    if m == "Box kg" and size else m for m in pa.entry_errors(entry)]
-        if pcs0 and not pcs:
-            missing.append("Pcs/box")
         f1, f2 = st.columns([3, 1], vertical_alignment="center")
         if missing:
             f1.markdown(f"<span class='pa-todo'>Still to fill: {', '.join(missing)}</span>", unsafe_allow_html=True)
