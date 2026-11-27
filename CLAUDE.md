@@ -692,6 +692,10 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   To go back: drop `_THEME_CSS` and restore the theme colours.
 - History the same night, all on the trial: Ocean Glass mix (gradients uneven, text hard to read) → plain
   Ocean → **G Material "exactly as the mock"** (user 11:16 PM). Do not alter the mock's colours or shapes.
+- **Tables in the mail-list style** (user 27 Nov 11:29 PM: copy Gmail wherever we can): `config.toml` gives the
+  grid tables Google Sans, a very pale blue header (#f2f6fc, replaces #DCEBFA) and faint lines; the hourly
+  tracker and `st.table` get taller rows that light up under the pointer (`_THEME_CSS`). Grid tables
+  (`st.dataframe` / `data_editor`) cannot be restyled further by CSS; real mail-style rows there = page work.
 - Not done (needs more than styling): the mock's search bar on top, the big Create indent button in the menu,
   customer initials, progress bars and rows that open. Page-local CSS and the e-mail colours are unchanged.
 - Mockups: canvas "MT Indent — UI design directions" (row "G"). Branch `ui-ocean-glass` (from main) is out of date.

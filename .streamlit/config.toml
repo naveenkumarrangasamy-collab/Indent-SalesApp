@@ -4,8 +4,10 @@ primaryColor = "#0b57d0"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#ffffff"
 textColor = "#1f1f1f"
-# 27 Nov (user): a mild blue header on every table
-dataframeHeaderBackgroundColor = "#DCEBFA"
+# 27 Nov (user): tables in the mail-list style: Google Sans, a very pale blue header, faint lines
+font = "'Google Sans':https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap"
+dataframeHeaderBackgroundColor = "#f2f6fc"
+dataframeBorderColor = "#e9eef6"
 
 [client]
 toolbarMode = "minimal"

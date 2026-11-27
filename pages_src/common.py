@@ -261,6 +261,23 @@ _THEME_CSS = """
   [data-testid="stForm"] { background: #ffffff; border: 1px solid var(--g-olv) !important; border-radius: 28px; }
   [data-testid="stSidebar"] [data-testid="stForm"] { background: transparent; border: 0 !important; }
 
+  /* ---- tables the app draws itself (hourly tracker, st.table): mail-list rows.
+     Taller rows, faint lines, the whole row lights up under the pointer. ---- */
+  .stApp table.tk, .stApp [data-testid="stTable"] table { font-family: 'Google Sans', 'Google Sans Flex', 'Roboto', system-ui, sans-serif;
+      font-size: 14px; border-collapse: collapse; }
+  .stApp table.tk th, .stApp [data-testid="stTable"] th { font-weight: 500; color: var(--g-ov); background: #ffffff;
+      padding: 10px 10px; border: 0; border-bottom: 1px solid var(--g-sch); }
+  .stApp table.tk td, .stApp [data-testid="stTable"] td { padding: 10px 10px; border: 0; border-bottom: 1px solid var(--g-sch);
+      transition: background .15s ease; }
+  .stApp table.tk tr:hover td, .stApp [data-testid="stTable"] tr:hover td { background: var(--g-hov);
+      box-shadow: inset 0 1px 0 #dadce0, inset 0 -1px 0 #dadce0; }
+  .stApp table.tk tr.c0 td { background: var(--g-hov); color: var(--g-on); font-weight: 700; font-size: 15px; }
+  .stApp table.tk tr.c1 td { background: #ffffff; color: var(--g-on); font-weight: 700; }
+  .stApp table.tk td.po { border-left: 1px solid var(--g-sch); }
+  .stApp table.tk .m { color: var(--g-out); }
+  .stApp table.tk .ok { background: #c4eed0; color: #072711; border-radius: 8px; padding: 2px 8px; }
+  .stApp table.tk .bad { background: #f9dedc; color: #601410; border-radius: 8px; padding: 2px 8px; }
+
   @media (max-width: 640px) { .block-container, [data-testid="stMainBlockContainer"] { border-radius: 0; } }
   @media (prefers-reduced-motion: reduce) { .stButton button, button[data-variant="pills"] { transition: none !important; } }
 </style>
