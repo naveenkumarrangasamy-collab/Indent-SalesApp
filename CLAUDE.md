@@ -681,6 +681,17 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   (0 extra). 5 near-duplicate pairs (Zepto BLR avocado / kiwi ×2 / snacky apple; Swiggy Mumbai pink lady)
   wait for the user.
 
+### 27 Nov night: "Ocean Glass" look (TRIAL only for now; user picked it from mockups)
+
+- **Styling only**: `.streamlit/config.toml` theme colours (blue #1f5fbf on #f3f7fc), `common.ACCENT`, and one
+  extra CSS block `common._THEME_CSS` added after `_CSS` in `inject_css()` (soft blue backdrop, glass sidebar,
+  pill buttons, light glass pills / segmented control, tinted glass tiles, rounded cards, Outfit + Nunito Sans).
+  No page logic, layout or data code changed. To go back: drop `_THEME_CSS` from `inject_css()` and restore the
+  four theme colours. The same change sits on branch `ui-ocean-glass` (cut from main) for the live app later.
+- Not done (would need custom components, user to decide): menu on top, phone tab bar, sliding "lens" motion,
+  dark theme. Page-local CSS (tracker, pre-production, batching plan) and the e-mail colours are unchanged.
+- Mockups: canvas "MT Indent — UI design directions" (rows "Ocean Glass").
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.

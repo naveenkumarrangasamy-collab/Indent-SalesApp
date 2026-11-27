@@ -1,9 +1,9 @@
 [theme]
 base = "light"
-primaryColor = "#1c6b49"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f3f7f5"
-textColor = "#1f2a24"
+primaryColor = "#1f5fbf"
+backgroundColor = "#f3f7fc"
+secondaryBackgroundColor = "#e7eef8"
+textColor = "#17202e"
 # 27 Nov (user): a mild blue header on every table
 dataframeHeaderBackgroundColor = "#DCEBFA"
 
