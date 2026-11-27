@@ -164,8 +164,16 @@ _CSS = f"""
 """
 
 
+# 27 Nov (user): the GitHub / Fork buttons Streamlit shows on top are for Creators only.
+_NO_GITHUB = ("<style>[data-testid='stToolbarActions'], [data-testid='stToolbarActionButton'], "
+              ".stToolbarActions, .stAppToolbar a[href*='github.com'] {display: none !important;}</style>")
+_GITHUB_OK = ("<style>[data-testid='stToolbarActions'], .stToolbarActions {display: flex !important;} "
+              "[data-testid='stToolbarActionButton'], .stAppToolbar a[href*='github.com'] "
+              "{display: inline-flex !important;}</style>")
+
+
 def inject_css() -> None:
-    st.markdown(_CSS, unsafe_allow_html=True)
+    st.markdown(_CSS + _NO_GITHUB, unsafe_allow_html=True)
 
 
 def numbered(df):
@@ -370,6 +378,8 @@ def sheet_error(e: Exception, what: str = "") -> None:
 # ---------------------------------------------------------------- sidebar
 
 def sidebar(user: auth.User) -> None:
+    if user.is_full_owner:
+        st.markdown(_GITHUB_OK, unsafe_allow_html=True)
     with st.sidebar:
         st.markdown(f"**{user.label}**  \n<span class='mt-muted'>{user.email} · {role_name(user.role)}</span>",
                     unsafe_allow_html=True)

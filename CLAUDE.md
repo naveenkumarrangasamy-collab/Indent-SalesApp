@@ -743,6 +743,9 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   Blueberry, Kiwi, Mandarin, Orange, Grapes, Grapefruit, Litchi); Namdhari "1Box - Apple / Mandarin / Orange / Grapes".
 - **Namdhari PO dialog starts on Freeze** (user 27 Nov 3:22 PM; Upload PO still offered): `po_first_customers`
   default is now Amazon, Firstclub.
+- **GitHub / Fork buttons (Streamlit's top bar) only for Creators** (user 27 Nov 3:23 PM): hidden by CSS for
+  everyone else and on the sign-in page (`common._NO_GITHUB` / `_GITHUB_OK`). The user also wants the repo
+  **private** (only Creators review the code) — not done yet, see the reply of 27 Nov (needs the repo owner).
 - Production / Home / Upload PO are NOT split by facility yet (all facilities together).
 - Master 27 Nov (12:30): PTP Bangalore **Namdhari** got "1Box - Apple / Mandarin / Orange (72C) / Grapes"; new customer
   **GT Sale** (store **Royal Fruits**; more GT buyers = more stores) with "1Box - <fruit>" for Apple, Avocado,
