@@ -589,13 +589,14 @@ def _category(lots, saved, days: set[str], city: str, label: str) -> None:
             if tot["saved"] else "",
             f"**{tot['none']}** item(s) are not started; they are not counted" if tot["none"] else "") if x) + ".")
     pcts = ["Category Efficiency % (K / J)", "GT Created % (L / J)", "Dump % (M / J)"]
-    df = pd.DataFrame(rows, columns=p2.CAT_HEAD)
+    df = pd.DataFrame(rows, columns=p2.CAT_HEAD).astype(object)   # object: an empty % stays None, not NaN
+    df = df.where(df.notna(), None)
     band = [p2.eff_band(v) for v in df[pcts[0]]]
     show = df.copy()
     for col in ("Boxes", "Kg taken", "Kg used (J)", "MT kg (K)", "GT kg (L)", "Dump kg (M)"):
-        show[col] = [f"{v:,.1f}".rstrip("0").rstrip(".") if v else "" for v in df[col]]
+        show[col] = [f"{float(v):,.1f}".rstrip("0").rstrip(".") if v else "" for v in df[col]]
     for col in pcts:
-        show[col] = ["" if v is None else f"{round(v * 100)}%" for v in df[col]]
+        show[col] = ["" if v is None else f"{round(float(v) * 100)}%" for v in df[col]]
     show.insert(0, "No", [str(i) for i in range(1, len(show) + 1)])
 
     def paint(col):
