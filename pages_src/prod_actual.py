@@ -451,8 +451,13 @@ def _saved_today(saved: pd.DataFrame, city: str, day, exec_tab=None, user=None) 
     names = pa.executives(exec_tab, city)
     names += [n for n in dict.fromkeys(x for x in base[EX] if x) if n.casefold() not in {y.casefold() for y in names}]
     nonce = st.session_state.get("pa_saved_n", 0)
+    # a mild blue on the read-only cells (the ✎ cells stay white = can be changed); tall enough that the
+    # side-scroll bar never covers the last line
+    look = base.style.set_properties(subset=[c for c in base.columns if c not in (EX, TB, BX)],
+                                     **{"background-color": "#F1F6FD", "color": "#0F172A"})
     out = st.data_editor(
-        base, hide_index=True, width="stretch", num_rows="fixed", key=f"pa_saved_{day}_{city}_{nonce}",
+        look, hide_index=True, width="stretch", num_rows="fixed", key=f"pa_saved_{day}_{city}_{nonce}",
+        height=38 + 35 * len(base) + 22,
         disabled=[c for c in base.columns if c not in (EX, TB, BX)],
         column_config={EX: st.column_config.SelectboxColumn(EX, options=names, required=False),
                        TB: st.column_config.SelectboxColumn(TB, options=TABLES, required=True),
