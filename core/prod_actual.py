@@ -293,7 +293,7 @@ def entry_errors(e: dict) -> list[str]:
     if not e.get("parent_sku"):
         errs.append("Fruit")
     if not e.get("size"):
-        errs.append("Spec")
+        errs.append("Spec size")
     if not _num(e.get("box_kg")):
         errs.append("Box kg")
     if not _t(e.get("executive")):

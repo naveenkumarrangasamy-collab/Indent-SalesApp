@@ -21,13 +21,13 @@ TABLES = [str(i) for i in range(1, 11)]
 CSS = """<style>
 /* 26 Nov: same look as Processed: blue header, centred bold fields, locked box kg / pcs from the master */
 .st-key-pa_card {border:2px solid rgba(59,130,246,.45); border-radius:16px; padding:14px 16px; background:#FFFFFF;}
-.pa-hd {background:#F4F8FE; color:#0C447C; border:2px solid #85B7EB; border-radius:12px; padding:10px 14px;
+.pa-hd {font-size:1.08rem; background:#F4F8FE; color:#0C447C; border:2px solid #85B7EB; border-radius:12px; padding:10px 14px;
   display:flex; justify-content:space-between; align-items:center; font-weight:800; flex-wrap:wrap; gap:6px;}
 .pa-hd span {background:#fff; color:#0C447C; border:1px solid #B5D4F4; border-radius:999px; padding:2px 10px;
-  font-size:0.78rem; font-weight:700;}
-.pa-sec {font-size:0.98rem; font-weight:800; color:#2C5496; text-align:left; margin:12px 0 4px 2px;}
+  font-size:0.86rem; font-weight:700;}
+.pa-sec {font-size:1.06rem; font-weight:800; color:#2C5496; text-align:left; margin:12px 0 4px 2px;}
 .st-key-pa_next {border:2px solid #639922; background:#EAF3DE; border-radius:12px; padding:10px 14px;}
-.pa-next {color:#27500A; font-size:0.92rem;}
+.pa-next {color:#27500A; font-size:1rem;}
 .st-key-pa_card [class*="st-key-pa_addrow_"] {position:relative;}
 .st-key-pa_card [class*="st-key-pa_addrow_"] [class*="st-key-pa_tick_"] {position:absolute; right:5px; top:5px;
   width:34px; z-index:3;}
@@ -36,8 +36,8 @@ CSS = """<style>
   font-weight:800; min-height:30px; height:30px; width:34px; padding:0; border-radius:8px;}
 .st-key-pa_card [class*="st-key-pa_addrow_"] input {text-align:left; font-weight:600; padding-right:46px;}
 .st-key-pa_card [class*="st-key-pa_addrow_"] [data-testid="InputInstructions"] {display:none;}
-.pa-lh {font-size:0.85rem; font-weight:800; color:#475569; text-align:center;}
-.pa-line {font-size:1rem; color:#0F172A; padding:4px 2px;}
+.pa-lh {font-size:0.93rem; font-weight:800; color:#475569; text-align:center;}
+.pa-line {font-size:1.08rem; color:#0F172A; padding:4px 2px;}
 .st-key-pa_added [data-baseweb="select"] > div, .st-key-pa_added [data-testid="stNumberInputContainer"] {
   border:2px solid #EF9F27 !important; border-radius:10px; background:#FFFBF2 !important;}
 .st-key-pa_added [data-baseweb="select"] div, .st-key-pa_added input {text-align:center; justify-content:center;
@@ -46,25 +46,25 @@ CSS = """<style>
 .st-key-pa_added button[data-testid="stNumberInputStepDown"] {display:none;}
 .pa-ex {background:#F4F8FE; color:#0C447C; border:1px solid #B5D4F4; border-radius:10px; padding:6px 12px;
   font-weight:800; margin:10px 0 4px 0; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;}
-.pa-ex span {font-weight:700; font-size:0.8rem; color:#185FA5;}
+.pa-ex span {font-weight:700; font-size:0.88rem; color:#185FA5;}
 .st-key-pa_card [class*="_go"] button {background:#1F6B4A; border-color:#1F6B4A; color:#fff; font-weight:800;}
 .st-key-pa_card [data-testid="stWidgetLabel"] {justify-content:center; width:100%;}
-.st-key-pa_card [data-testid="stWidgetLabel"] p {font-size:0.88rem; font-weight:700; color:#475569; text-align:center;}
+.st-key-pa_card [data-testid="stWidgetLabel"] p {font-size:0.96rem; font-weight:700; color:#475569; text-align:center;}
 .st-key-pa_card [data-baseweb="select"] > div, .st-key-pa_card [data-testid="stNumberInputContainer"],
 .st-key-pa_card [data-testid="stTextInputRootElement"] {border:2px solid #85B7EB; border-radius:12px; background:#fff;}
 .st-key-pa_card [data-baseweb="select"] div, .st-key-pa_card input {text-align:center; justify-content:center;
-  font-weight:700; font-size:1.05rem;}
+  font-weight:700;}
 .st-key-pa_card button[data-testid="stNumberInputStepUp"],
 .st-key-pa_card button[data-testid="stNumberInputStepDown"] {display:none;}
 .st-key-pa_card [class*="st-key-pa_box_"] [data-testid="stNumberInputContainer"] {border-color:#378ADD;}
-.pa-l {font-size:0.88rem; font-weight:700; color:#475569; text-align:center; margin-bottom:4px;}
+.pa-l {font-size:0.96rem; font-weight:700; color:#475569; text-align:center; margin-bottom:4px;}
 .pa-ro {height:42px; border-radius:12px; background:#E6F1FB; display:flex; align-items:center; justify-content:center;
   gap:6px; font-weight:800; color:#0C447C; cursor:not-allowed;}
 .pa-ro small {font-size:0.72rem; color:#185FA5; font-weight:700;}
 .pa-ro.miss {background:#FCEBEB; color:#791F1F;}
 .pa-foot {display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px;}
-.pa-todo {background:#FAEEDA; color:#633806; border-radius:999px; padding:4px 12px; font-size:0.9rem; font-weight:700;}
-.pa-sub {font-size:0.8rem; color:#185FA5; font-weight:700; text-align:center; margin:6px 0 0 0;}
+.pa-todo {background:#FAEEDA; color:#633806; border-radius:999px; padding:4px 12px; font-size:0.98rem; font-weight:700;}
+.pa-sub {font-size:0.9rem; color:#185FA5; font-weight:700; text-align:center; margin:6px 0 0 0;}
 .st-key-pa_card [class*="_add"] button {background:#2563EB; border-color:#2563EB; color:#fff;
   font-weight:800;}
 </style>"""
@@ -132,7 +132,7 @@ def _pending() -> list[dict]:
 
 def _preview_df(rows: list[dict]) -> pd.DataFrame:
     return pd.DataFrame([{"Fruit": r["parent_sku"], "Origin": r["origin"], "Variety": r["variety"],
-                          "Brand name": r["brand"], "Spec": r["size"], "Box kg": r["box_kg"], "Pcs/box": r["pcs_per_box"] or "",
+                          "Brand name": r["brand"], "Spec size": r["size"], "Box kg": r["box_kg"], "Pcs/box": r["pcs_per_box"] or "",
                           "Executive": r.get("executive", ""), "Table": r["table_no"],
                           "Number of boxes": r["boxes_moved"], "Stock": r["stock_type"],
                           "Kg on table": round(float(r["box_kg"]) * float(r["boxes_moved"]), 2)} for r in rows])
@@ -310,7 +310,7 @@ def _locked(col, label: str, val, unit: str, size: str) -> None:
         body = f"{val:g}<small>{unit}</small> <span title='From the master'>🔒</span>"
         cls = "pa-ro"
     else:
-        body, cls = ("Choose a spec first", "pa-ro") if not size else ("Not in master", "pa-ro miss")
+        body, cls = ("Choose a spec size first", "pa-ro") if not size else ("Not in master", "pa-ro miss")
     col.markdown(f"<div class='pa-l'>{label}</div><div class='{cls}'>{body}</div>", unsafe_allow_html=True)
 
 
@@ -336,7 +336,7 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
             def _spec(s, sw=sw, usual=usual):      # "60C · 10 kg": a spec that only comes in the other box
                 w = sw.get(s) or []
                 return f"{s} · {w[0]:g} kg" if len(w) == 1 and usual is not None and w[0] != usual else s
-            size = _pick("Spec", list(sw), f"{k}_s", blank=False, fmt=_spec)
+            size = _pick("Spec size", list(sw), f"{k}_s", blank=False, fmt=_spec)
         with r1[3]:   # brands per SKU (fruit + origin + variety + size) from the Brand_Master tab
             b_opts = pa.brands(opts, origin, variety, size)
             brand = _typed("Brand name", b_opts, f"{k}_b", "Choose")
@@ -439,7 +439,7 @@ def _saved_today(saved: pd.DataFrame, city: str, day, exec_tab=None, user=None) 
         EX: [txt(r.get("executive")) or None for r in recs],
         "Fruit": [txt(r.get("parent_sku")) for r in recs], "Origin": [txt(r.get("origin")) for r in recs],
         "Variety": [txt(r.get("variety")) for r in recs], "Brand name": [txt(r.get("brand")) for r in recs],
-        "Spec": [txt(r.get("size")) for r in recs],
+        "Spec size": [txt(r.get("size")) for r in recs],
         "Box kg": [g(r.get("box_kg")) for r in recs], "Pcs/box": [g(r.get("pcs_per_box")) for r in recs],
         TB: [txt(r.get("table_no")) or None for r in recs],
         BX: [g(r.get("boxes_moved")) or "0" for r in recs],
@@ -478,7 +478,7 @@ def _saved_today(saved: pd.DataFrame, city: str, day, exec_tab=None, user=None) 
         if not ch:
             continue
         name = f"No {k + 1} · " + " · ".join(x for x in (base["Fruit"].iloc[k], base["Variety"].iloc[k],
-                                                          base["Spec"].iloc[k]) if x)
+                                                          base["Spec size"].iloc[k]) if x)
         if not eid or not out[TB].iloc[k]:
             bad.append(k + 1)
         elif not b:                      # an item cannot be 0: delete it or go back and edit it
