@@ -24,6 +24,8 @@ CSS = """<style>
 .pa-hd span {background:#fff; color:#0C447C; border:1px solid #B5D4F4; border-radius:999px; padding:2px 10px;
   font-size:0.78rem; font-weight:700;}
 .pa-sec {font-size:0.82rem; font-weight:800; color:#2C5496; text-align:left; margin:12px 0 4px 2px;}
+.st-key-pa_next {border:2px solid #639922; background:#EAF3DE; border-radius:12px; padding:10px 14px;}
+.pa-next {color:#27500A; font-size:0.92rem;}
 .pa-ex {background:#F4F8FE; color:#0C447C; border:1px solid #B5D4F4; border-radius:10px; padding:6px 12px;
   font-weight:800; margin:10px 0 4px 0; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;}
 .pa-ex span {font-weight:700; font-size:0.8rem; color:#185FA5;}
@@ -106,6 +108,7 @@ def _confirm(rows: list[dict], user: User, nxt: str = "") -> None:
             st.error(f"Not saved. {e}")
             return
         st.session_state["pa_rows"] = []
+        st.session_state.pop("pa_just", None)
         common.flash("success", f"{n} entr{'y' if n == 1 else 'ies'} saved.")
         if nxt and nxt in common.PAGES:        # Save / Proceed for production
             st.switch_page(common.PAGES[nxt])
@@ -190,6 +193,21 @@ def _by_executive(df: pd.DataFrame, box_col: str, last: dict[str, str] | None = 
                      width="stretch")
 
 
+def _summary(df: pd.DataFrame, box_col: str, last: dict[str, str] | None = None) -> None:
+    """Who got what: one row per executive + table (SKUs, boxes, time of the last lot)."""
+    if "Executive" not in df.columns or df.empty:
+        return
+    d = df.copy()
+    d["Executive"] = [str(x).strip() or "Name not recorded (older entry)" for x in d["Executive"].fillna("")]
+    d["_b"] = [pa._num(x) or 0 for x in d[box_col]]
+    g = (d.groupby(["Executive", "Table"], sort=True).agg(SKUs=(box_col, "size"), Boxes=("_b", "sum"))
+          .reset_index())
+    g["Boxes"] = [f"{x:g}" for x in g["Boxes"]]
+    g["Last given"] = [_clock((last or {}).get(n, "")) for n in g["Executive"]]
+    st.dataframe(common.numbered(g.rename(columns={"Table": "Table number", "Boxes": "Number of boxes"})),
+                 hide_index=True, width="stretch")
+
+
 def _to_top() -> None:
     """After Add the page goes back up to the fruits."""
     if not st.session_state.pop("pa_top", False):
@@ -232,7 +250,20 @@ def render(user: User, nxt: str = "") -> None:
         return
     if not ready:
         st.session_state.pop("pa_parent", None)
-    parent = st.pills("Fruit picked from inventory", parents, key="pa_parent", disabled=not ready)
+    just = st.session_state.get("pa_just")
+    if just and ready and _pending() and not st.session_state.get("pa_parent"):
+        # 27 Nov (user): after Add it must be obvious what comes next
+        with st.container(key="pa_next"):
+            b1, b2 = st.columns([3, 1.3], vertical_alignment="center")
+            b1.markdown(f"<div class='pa-next'>✓ Added: {just}<br><b>Next: pick the next fruit below</b>, "
+                        "or save and go to production.</div>", unsafe_allow_html=True)
+            if b2.button("Save / Proceed for production", icon=":material/arrow_forward:", key="pa_go_top",
+                         type="primary", width="stretch"):
+                _confirm(_pending(), user, nxt)
+    elif st.session_state.get("pa_parent"):
+        st.session_state.pop("pa_just", None)
+    parent = st.pills("Pick the next fruit from inventory" if just and _pending() else "Fruit picked from inventory",
+                      parents, key="pa_parent", disabled=not ready)
     if not ready:
         st.caption("Choose the " + " and the ".join(x for x, ok in (("date", day), ("city", city)) if not ok)
                    + " first.")
@@ -359,6 +390,7 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
                 for x in (f"{k}_n", f"{k}_t", "pa_parent"):    # back to the fruits for the next SKU
                     st.session_state.pop(x, None)
                 st.session_state["pa_top"] = True
+                st.session_state["pa_just"] = _line_name(entry)
                 st.rerun()
         # 27 Nov (user): save here itself and go on to production (a filled card is included)
         if f3.button("Save / Proceed for production", icon=":material/arrow_forward:", key=f"{k}_go",
@@ -381,5 +413,6 @@ def _saved_today(saved: pd.DataFrame, city: str, day) -> None:
     st.markdown(f"#### {day.strftime('%d/%b/%y')} - Production Items Taken · {len(v)}")
     d = saved[(saved["production_date"].astype(str).str[:10] == day.isoformat())
               & (saved["city"].astype(str) == city)] if "saved_at" in saved.columns else saved.iloc[0:0]
-    _by_executive(v.drop(columns=["Date", "City"]), "Boxes",
-                  _last_times(d.to_dict("records"), "executive", "saved_at"))
+    last = _last_times(d.to_dict("records"), "executive", "saved_at")
+    _summary(v, "Boxes", last)
+    _by_executive(v.drop(columns=["Date", "City"]), "Boxes", last)
