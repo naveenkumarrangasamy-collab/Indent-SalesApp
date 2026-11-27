@@ -178,10 +178,10 @@ _THEME_CSS = """
 
   /* ---- page: soft blue backdrop, rounded type ---- */
   .stApp { background:
-      radial-gradient(460px 520px at 0% 0%, #9fc2ff 0, transparent 64%),
-      radial-gradient(420px 600px at 0% 62%, #a9e4f4 0, transparent 64%),
-      radial-gradient(440px 520px at 0% 100%, #c6c9ff 0, transparent 64%),
-      radial-gradient(520px 360px at 100% 0%, #d9e9ff 0, transparent 62%), #f5f8fc !important;
+      radial-gradient(620px 520px at 0% 0%, #9fc2ff 0, transparent 62%),
+      radial-gradient(520px 620px at 0% 78%, #a9e4f4 0, transparent 62%),
+      radial-gradient(700px 520px at 100% 10%, #b4dcff 0, transparent 60%),
+      radial-gradient(820px 640px at 58% 100%, #c6c9ff 0, transparent 60%), #e9f0fb !important;
       background-attachment: fixed !important;
       font-family: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
   [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stMain"] { background: transparent !important; }
@@ -268,8 +268,10 @@ _THEME_CSS = """
   [data-testid="stDialog"] div[role="dialog"] { background: #ffffff !important; border-radius: 28px;
       box-shadow: 0 24px 60px rgba(20,50,110,.25); }
   [data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="base-input"] input,
-  [data-baseweb="select"] > div, [data-baseweb="textarea"], [data-baseweb="textarea"] textarea { background-color: #ffffff !important; }
-  .mt-muted, [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color: var(--og-ov) !important; }
+  [data-testid="stTextInputRootElement"], [data-testid="stTextInputRootElement"] > div, [data-testid="stTextInputRootElement"] input,
+  [data-baseweb="select"] > div, [data-baseweb="select"] > div > div:not([data-baseweb="tag"]),
+  [data-baseweb="textarea"], [data-baseweb="textarea"] textarea { background-color: #ffffff !important; }
+  .mt-muted, [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * { color: var(--og-ov) !important; opacity: 1 !important; }
   [data-testid="stDataFrame"], [data-testid="stTable"] { border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(20,50,110,.08); }
   [data-testid="stAlert"] { border-radius: 16px; }
   [data-testid="stFileUploaderDropzone"] { border-radius: 16px; background: #ffffff; border: 1.5px dashed #9fb0c8; }
