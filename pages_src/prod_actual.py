@@ -219,38 +219,6 @@ def _last_times(rows, name_key: str, time_key: str) -> dict[str, str]:
     return out
 
 
-def _by_executive(df: pd.DataFrame, box_col: str, last: dict[str, str] | None = None) -> None:
-    """One small table per executive name (27 Nov: executive level, not table level), headed by the name
-    and the time the last lot was given to them (table numbers are in the rows)."""
-    if "Executive" not in df.columns:
-        st.dataframe(common.numbered(df), hide_index=True, width="stretch")
-        return
-    d = df.copy()
-    d["Executive"] = [str(x).strip() or "Name not recorded (older entry)" for x in d["Executive"].fillna("")]
-    for name, part in d.groupby("Executive", sort=True):
-        boxes = sum(pa._num(x) or 0 for x in part[box_col])
-        at = _clock((last or {}).get(name, ""))
-        st.markdown(f"<div class='pa-ex'>{name}<span>{'Last given ' + at + ' · ' if at else ''}{len(part)} SKU"
-                    f"{'' if len(part) == 1 else 's'} · {boxes:g} boxes</span></div>", unsafe_allow_html=True)
-        st.dataframe(common.numbered(part.drop(columns=["Executive"]).reset_index(drop=True)), hide_index=True,
-                     width="stretch")
-
-
-def _summary(df: pd.DataFrame, box_col: str, last: dict[str, str] | None = None) -> None:
-    """Who got what: one row per executive + table (SKUs, boxes, time of the last lot)."""
-    if "Executive" not in df.columns or df.empty:
-        return
-    d = df.copy()
-    d["Executive"] = [str(x).strip() or "Name not recorded (older entry)" for x in d["Executive"].fillna("")]
-    d["_b"] = [pa._num(x) or 0 for x in d[box_col]]
-    g = (d.groupby(["Executive", "Table"], sort=True).agg(SKUs=(box_col, "size"), Boxes=("_b", "sum"))
-          .reset_index())
-    g["Boxes"] = [f"{x:g}" for x in g["Boxes"]]
-    g["Last given"] = [_clock((last or {}).get(n, "")) for n in g["Executive"]]
-    st.dataframe(common.numbered(g.rename(columns={"Table": "Table number", "Boxes": "Number of boxes"})),
-                 hide_index=True, width="stretch")
-
-
 def _to_top() -> None:
     """After Add the page goes back up to the fruits."""
     if not st.session_state.pop("pa_top", False):
@@ -323,7 +291,7 @@ def render(user: User, nxt: str = "") -> None:
             _confirm(rows, user)
 
     if ready:
-        _saved_today(saved, city, day)
+        _saved_today(saved, city, day, exec_tab, user)
 
 
 def _locked(col, label: str, val, unit: str, size: str) -> None:
@@ -438,13 +406,75 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
                 _confirm(_pending(), user, nxt)
 
 
-def _saved_today(saved: pd.DataFrame, city: str, day) -> None:
-    v = pa.view(saved, day.isoformat(), city)
-    if v.empty:
+def _saved_today(saved: pd.DataFrame, city: str, day, exec_tab=None, user=None) -> None:
+    """27 Nov (user): ONE table, 'Total Production Items Taken', with the executive name after #.
+    Executive name, table and boxes can be corrected right in the table (✎ columns), then Save changes."""
+    if saved is None or saved.empty or "production_date" not in saved.columns or "entry_id" not in saved.columns:
         return
-    st.markdown(f"#### {day.strftime('%d/%b/%y')} - Production Items Taken · {len(v)}")
     d = saved[(saved["production_date"].astype(str).str[:10] == day.isoformat())
-              & (saved["city"].astype(str) == city)] if "saved_at" in saved.columns else saved.iloc[0:0]
-    last = _last_times(d.to_dict("records"), "executive", "saved_at")
-    _summary(v, "Boxes", last)
-    _by_executive(v.drop(columns=["Date", "City"]), "Boxes", last)
+              & (saved["city"].astype(str) == city)]
+    if d.empty:
+        return
+    recs = d.to_dict("records")
+    ids = [str(r.get("entry_id") or "") for r in recs]
+
+    def txt(v):
+        return "" if v is None or (isinstance(v, float) and v != v) else str(v).strip()
+    EX, TB, BX = "Executive name ✎", "Table ✎", "Boxes ✎"
+    base = pd.DataFrame({
+        "#": range(1, len(recs) + 1),
+        EX: [txt(r.get("executive")) or None for r in recs],
+        "Fruit": [txt(r.get("parent_sku")) for r in recs], "Origin": [txt(r.get("origin")) for r in recs],
+        "Variety": [txt(r.get("variety")) for r in recs], "Brand name": [txt(r.get("brand")) for r in recs],
+        "Spec": [txt(r.get("size")) for r in recs],
+        "Box kg": [pa._num(r.get("box_kg")) for r in recs], "Pcs/box": [pa._num(r.get("pcs_per_box")) for r in recs],
+        TB: [txt(r.get("table_no")) or None for r in recs],
+        BX: [float(pa._num(r.get("boxes_moved")) or 0) for r in recs],
+        "Stock": [txt(r.get("stock_type")) for r in recs],
+        "Given at": [_clock(r.get("saved_at")) for r in recs], "By": [txt(r.get("saved_by")) for r in recs],
+        "Kg on table": [round((pa._num(r.get("box_kg")) or 0) * (pa._num(r.get("boxes_moved")) or 0), 2)
+                        for r in recs]})
+    st.markdown(f"#### {day.strftime('%d/%b/%y')} - Total Production Items Taken · {len(recs)}")
+    names = pa.executives(exec_tab, city)
+    names += [n for n in dict.fromkeys(x for x in base[EX] if x) if n.casefold() not in {y.casefold() for y in names}]
+    nonce = st.session_state.get("pa_saved_n", 0)
+    out = st.data_editor(
+        base, hide_index=True, width="stretch", num_rows="fixed", key=f"pa_saved_{day}_{city}_{nonce}",
+        disabled=[c for c in base.columns if c not in (EX, TB, BX)],
+        column_config={EX: st.column_config.SelectboxColumn(EX, options=names, required=False),
+                       TB: st.column_config.SelectboxColumn(TB, options=TABLES, required=True),
+                       BX: st.column_config.NumberColumn(BX, min_value=0, step=1, format="%g")})
+    st.caption("To correct a saved line, change its **Executive name**, **Table** or **Boxes** in the table "
+               "(the ✎ columns), then press Save changes. A new name is added with ＋ Add name in the card above.")
+    changes, bad = {}, []
+    for k, eid in enumerate(ids):
+        ch = {}
+        if (out[EX].iloc[k] or "") != (base[EX].iloc[k] or ""):
+            ch["executive"] = out[EX].iloc[k] or ""
+        if (out[TB].iloc[k] or "") != (base[TB].iloc[k] or ""):
+            ch["table_no"] = out[TB].iloc[k] or ""
+        b = pa._num(out[BX].iloc[k]) or 0
+        if b != base[BX].iloc[k]:
+            ch["boxes_moved"] = b
+        if ch:
+            if not eid or not (pa._num(out[BX].iloc[k]) and out[TB].iloc[k]):
+                bad.append(k + 1)
+            else:
+                changes[eid] = ch
+    if changes or bad:
+        c = st.columns([1.2, 1, 3], vertical_alignment="center")
+        if bad:
+            c[2].warning(f"Line {', '.join(map(str, bad))}: the table and the boxes cannot be empty.")
+        if c[0].button(f"Save changes · {len(changes)}", type="primary", icon=":material/save:",
+                       key="pa_saved_ok", disabled=not changes or bool(bad), width="stretch"):
+            try:
+                n = pa.update_entries(get_backend(), changes, getattr(user, "email", ""))
+            except SheetError as e:
+                st.error(f"Not saved. {e}")
+                return
+            st.session_state["pa_saved_n"] = nonce + 1
+            common.flash("success", f"{n} line(s) corrected.")
+            st.rerun()
+        if c[1].button("Undo", key="pa_saved_undo", width="stretch"):
+            st.session_state["pa_saved_n"] = nonce + 1
+            st.rerun()

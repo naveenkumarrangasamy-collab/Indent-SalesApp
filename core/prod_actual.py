@@ -334,6 +334,46 @@ def save(backend, entries: list[dict], user: str) -> int:
     return len(rows)
 
 
+def update_entries(backend, changes: dict[str, dict], user: str) -> int:
+    """27 Nov: correct saved lines in place (executive / table_no / boxes_moved), found by entry_id."""
+    if not changes:
+        return 0
+    backend._header(PREPROD_ENTRIES)          # makes sure newer columns (executive) exist
+    values = backend.read_values(PREPROD_ENTRIES)
+    if not values:
+        return 0
+    head = [str(h).strip().casefold() for h in values[0]]
+    col = head.index("entry_id") if "entry_id" in head else 0
+    n = 0
+    for row_no, r in enumerate(values[1:], start=2):
+        eid = str(r[col]).strip() if len(r) > col else ""
+        if eid in changes:
+            backend.update_cells(PREPROD_ENTRIES, row_no, changes[eid])
+            n += 1
+    if n:
+        stamp = config.now_iso()
+        try:
+            city_of = {str(r[col]).strip(): (r[head.index("city")] if "city" in head and len(r) > head.index("city")
+                                             else "") for r in values[1:] if len(r) > col}
+            add = new_executive_rows([{"city": city_of.get(e, ""), "executive": c.get("executive", "")}
+                                      for e, c in changes.items()], read_executives(backend), user, stamp)
+            if add:
+                backend.append_dicts(GRADING_EXECUTIVES, add)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from core import tracking_sheet
+            tracking_sheet.publish(backend)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            from core import indents
+            indents.clear_cache()
+        except Exception:  # noqa: BLE001
+            pass
+    return n
+
+
 VIEW = {"production_date": "Date", "city": "City", "parent_sku": "Fruit", "origin": "Origin", "variety": "Variety",
         "brand": "Brand", "size": "Spec", "box_kg": "Box kg", "pcs_per_box": "Pcs/box", "executive": "Executive",
         "table_no": "Table", "boxes_moved": "Boxes", "stock_type": "Stock", "saved_by": "By"}
