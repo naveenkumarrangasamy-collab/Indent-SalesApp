@@ -218,9 +218,26 @@ def test_make_ready_boxes_and_blueberry_trays():
     mr = make_ready(_lines([row("Zepto", "2PC - Apple Royal Gala Imported", "450", "Pcs", "Apple"),
                             row("Zepto", "125gm - Blueberry Imported", "100", "Pack", "Blueberry"),
                             row("Swiggy", "1Box - Imported Blueberry", "19", "Box", "Blueberry")]), m)
-    got = {r["Parent SKU"]: (r["Pack"], r["Make ready"], r["Spec Size"]) for r in mr.to_dict("records")}
-    assert got["Apple"] == ("2 Pcs", "450 Punnet", "90C: 10 Box | 100C: 9 Box")
-    assert got["Blueberry"] == ("Punnet", "119 Punnet", "16mm: 10 Tray")      # 119 punnets / 12 a tray
+    got = {(r["Parent SKU"], r["Pack"]): (r["Make ready"], r["Fruit needed"], r["Spec Size"])
+           for r in mr.to_dict("records")}
+    assert got[("Apple", "2 Pcs")] == ("450 Punnet", "900 pcs", "90C: 10 Box | 100C: 9 Box")
+    assert got[("Blueberry", "Punnet")] == ("100 Punnet", "", "16mm: 9 Tray")     # 100 punnets / 12 a tray
+    # 1 Box of Blueberry = 1 Tray = 12 punnets (user 27 Nov)
+    assert got[("Blueberry", "1 Tray")] == ("19 Tray", "228 punnets", "16mm: 19 Tray")
+
+
+def test_box_is_tray_for_blueberry_and_gt_sale(monkeypatch):
+    from core import config, lots, preprod
+    from core.batch_city import unit_word
+    monkeypatch.setattr(config, "get", lambda k, d=None: d)
+    assert lots.detect_lot("1Box - Imported Blueberry") == "Tray"
+    assert lots.lot_size("1Box - Imported Blueberry") == "1 Tray"
+    assert lots.detect_lot("1Box - Apple") == "Box"
+    assert lots.tray_lot("Box", "1Box - Apple", "GT Sale") == "Tray"
+    assert lots.tray_lot("Box", "1Box - Apple", "Namdhari") == "Box"
+    assert preprod.need_unit("1Box - Imported Blueberry", "Box", "Blueberry") == ("punnets", 12.0)
+    assert preprod.need_unit("125gm - Blueberry", "Pack", "Blueberry") == ("punnets", 1.0)
+    assert unit_word("punnets", 12.0) == "trays of 12 punnets"
 
 
 def test_by_customer_clubs_stores_keeps_skus_apart_and_shows_own_spec():

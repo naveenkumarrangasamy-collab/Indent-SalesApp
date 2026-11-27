@@ -91,11 +91,23 @@ def _per_tray() -> float:
     return float(next(iter(config.punnets_per_tray().values()), 12))
 
 
+def berry_trays(sku_name: str, lot: str = "") -> float:
+    """Trays in one pack of a Blueberry box / tray line ('1Box - Blueberry' -> 1); 0 for punnet packs."""
+    size = lot_size(sku_name) or ""
+    if "tray" in size.casefold() or "box" in size.casefold():
+        nums = re.findall(r"\d+(?:\.\d+)?", size.split()[0]) if size.split() else []
+        return float(nums[0]) if nums and "kg" not in size.casefold() else 1.0
+    return 1.0 if str(lot or "").strip().casefold() in ("tray", "box") else 0.0
+
+
 def need_unit(sku_name: str, lot: str, parent: str = "") -> tuple[str, float]:
     """What the indent qty is counted in for batching: ('pcs', pieces per pack), ('kg', kg per pack) or
     ('packs', 1) when neither is known (gram packs, boxes). Every Blueberry is ('punnets', 1): 12 a tray."""
     from core.production_calc import _kg_per_lot, _pcs_per_lot
     if _c(parent).casefold() in config.punnets_per_tray():
+        tray = berry_trays(sku_name, lot)
+        if tray:                       # '1Box / 1Tray - Blueberry': 1 tray = 12 punnets (user 27 Nov)
+            return "punnets", tray * _per_tray()
         return "punnets", 1.0          # every Blueberry: punnets, 12 a tray at any size (user 23 Nov)
     size = lot_size(sku_name) or _c(lot)
     pcs = _pcs_per_lot(size)

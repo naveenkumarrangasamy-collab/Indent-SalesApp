@@ -754,6 +754,15 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   Indents: IN-084 Reliance Huskur, IN-085 Namdhari, IN-086 GT Sale · Royal Fruits (Blueberry 50 Box).
 - Master 27 Nov: PTP Bangalore Reliance "1Box - Royal Gala" (Gala; New tab: Box, 90C, 100C, 110C, Poland).
 
+- **Box = Tray (27 Nov 4:56 PM, user)**: **Blueberry: 1 Box = 1 Tray = 12 punnets, every customer**
+  (`lots.detect_lot` / `lot_size` read a Blueberry "Box" as "Tray", e.g. "1Box - Imported Blueberry" → lot Tray,
+  "1 Tray"; names kept so PO links still match). `preprod.need_unit` → ("punnets", 12 × trays), so
+  pre-production / batching / dispatch count 50 trays as 600 punnets (before: 50 punnets). Make-ready: Blueberry
+  tray lines are their own "1 Tray" row ("19 Tray", Fruit needed "228 punnets"); dispatch unit "trays of 12 punnets".
+  **GT Sale (Royal Fruits): every Box is a Tray**: master renamed "1Box - X" → "1Tray - X" (All Cux City 498–515,
+  New 547–564, repacking Tray) and IN-086 → "1Tray - Blueberry", Tray, "1 Tray". `lots.tray_lot` + secret
+  `tray_customers` (default ["GT Sale"]) turn any Box lot of those customers into Tray on read (`indents.prepare`).
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.

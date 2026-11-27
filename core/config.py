@@ -271,6 +271,12 @@ def tray_parents() -> list[str]:
     return [str(x).strip() for x in ([v] if isinstance(v, str) else (v or [])) if str(x).strip()]
 
 
+def tray_customers() -> list[str]:
+    """Customers whose 'Box' is a 'Tray' (1 Box = 1 Tray). Secret `tray_customers`, default ["GT Sale"]."""
+    v = get("tray_customers", ["GT Sale"])
+    return [str(x) for x in (v if isinstance(v, (list, tuple)) else [v]) if str(x).strip()]
+
+
 def punnets_per_tray() -> dict[str, int]:
     """Parents sold as punnets whatever the gram size in the name, and how many
     punnets go in one tray. Secret `punnets_per_tray`, default {Blueberry = 12}."""

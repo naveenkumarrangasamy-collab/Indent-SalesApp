@@ -200,7 +200,8 @@ def make_ready(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     df = df.rename(columns={"Lot Size": "Pack"})
     punnet = config.punnets_per_tray()
     is_p = df["Parent SKU"].astype(str).str.casefold().isin(punnet)
-    df.loc[is_p, "Pack"] = "Punnet"            # blueberry: always punnets, whatever the gram size
+    cont = df["Pack"].map(_is_container)
+    df.loc[is_p & ~cont, "Pack"] = "Punnet"    # blueberry: punnets whatever the gram size; a box / tray = 1 Tray
     keys = ["City", "Parent SKU", "Variety", "Repacking", "Pack"]
     g = (df.assign(**{k + "_k": df[k].astype(str).str.casefold() for k in keys})
            .groupby([k + "_k" for k in keys], sort=False)
@@ -212,8 +213,10 @@ def make_ready(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
         pcs, kg = _pcs_per_lot(pack), _kg_per_lot(pack, r["_lot"])
         bulk = rep.casefold() in _BULK
         if _is_container(pack):
-            make.append(f"{fmt_num(q)} {pack.split()[-1]}")
-            need.append("")
+            make.append(f"{fmt_num(q * _first_num(pack))} {pack.split()[-1]}")
+            berry = str(r["Parent SKU"]).casefold() in punnet
+            need.append(f"{fmt_num(q * _first_num(pack) * punnet[str(r['Parent SKU']).casefold()])} punnets"
+                        if berry else "")
         elif bulk and pcs:
             make.append(f"{fmt_num(q * pcs)} pcs loose")
             need.append(f"{fmt_num(q * pcs)} pcs")
@@ -226,6 +229,13 @@ def make_ready(lines: pd.DataFrame, masters: Masters | None) -> pd.DataFrame:
     g["Make ready"], g["Fruit needed"] = make, need
     g["Spec Size"] = [" | ".join(c) for c in _by_size(df, keys, g)]
     return g.sort_values(keys, key=_SORT)[MAKE_READY_COLUMNS].reset_index(drop=True)
+
+
+def _first_num(pack: str) -> float:
+    """'2 Tray' -> 2, '1 Box' -> 1, 'Tray' -> 1."""
+    import re
+    m = re.search(r"\d+(?:\.\d+)?", str(pack or ""))
+    return float(m.group()) if m else 1.0
 
 
 def _count_label(spec: str) -> str:
@@ -271,7 +281,9 @@ def _spec_cells(parent: str, pack: str, lot: str, specs: dict[str, float]) -> li
     cells = []
     for spec, q in sorted(specs.items(), key=lambda kv: (_counts(kv[0]) or [999])[0]):
         counts = _counts(spec)
-        if parent in punnet:
+        if parent in punnet and _is_container(pack):          # Blueberry trays: q is trays already
+            cells.append(f"{_count_label(spec)}: {fmt_num(q * _first_num(pack))} Tray")
+        elif parent in punnet:
             cells.append(f"{_count_label(spec)}: {math.ceil(q / punnet[parent] - 1e-9)} Tray")
         elif pcs and counts:
             n = q * pcs
@@ -420,7 +432,8 @@ def make_ready_by_customer(lines: pd.DataFrame, masters: Masters | None) -> list
     df["_group"] = [customer_group(c, s) for c, s in zip(df["customer"], df["store"])]
     df["_store"] = [_store_label(c, s) for c, s in zip(df["customer"], df["store"])]
     df["Customer SKU Name"] = df["customer_sku_name"].map(clean)
-    df["_pack"] = ["Punnet" if str(p).casefold() in punnet else ls for p, ls in zip(df["Parent SKU"], df["Lot Size"])]
+    df["_pack"] = ["Punnet" if str(p).casefold() in punnet and not _is_container(ls) else ls
+                   for p, ls in zip(df["Parent SKU"], df["Lot Size"])]
     for (grp, city), part in sorted(df.groupby(["_group", "City"]),
                                     key=lambda kv: (kv[0][0].casefold(), kv[0][1].casefold())):
         stores = sorted(part["_store"].unique(), key=str.casefold)

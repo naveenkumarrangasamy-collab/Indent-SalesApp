@@ -124,7 +124,7 @@ def extra_pct(customer: str) -> float:
 def unit_word(unit: str, per: float) -> str:
     """'packs of 2 pcs', 'pcs', 'kg', 'packs of 0.5 kg', 'punnets', 'packs'."""
     if unit == "punnets":
-        return "punnets"
+        return "punnets" if abs(per - 1) < 1e-9 else f"trays of {fmt_num(per)} punnets"
     if unit in ("pcs", "kg"):
         return unit if abs(per - 1) < 1e-9 else f"packs of {fmt_num(per)} {unit}"
     return "packs"

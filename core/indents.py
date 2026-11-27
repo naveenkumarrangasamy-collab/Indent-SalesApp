@@ -19,7 +19,7 @@ import pandas as pd
 import streamlit as st
 
 from core import changelog, config
-from core.lots import lot_size, normalize_lot
+from core.lots import lot_size, normalize_lot, tray_lot
 from core.masters import Masters
 from core.models import IndentHeader, IndentLine, IndentSnapshot, fmt_num, to_number
 from core.schema import (CHANGE_LOG, DRAFTS, INDENT_LINES, LOTS, PO_END, PO_FREEZE, PO_KIND,
@@ -195,6 +195,8 @@ def prepare(df: pd.DataFrame) -> pd.DataFrame:
     for c in ("qty", "price", "amount"):
         df[c] = df[c].map(to_number)
     df["lot"] = df["lot"].map(normalize_lot)  # rows saved as "gms" read as "Pack"
+    cust = df["customer"] if "customer" in df.columns else [""] * len(df)
+    df["lot"] = [tray_lot(lot, n, c) for lot, n, c in zip(df["lot"], df["customer_sku_name"], cust)]  # Box -> Tray
     if "facility" not in df.columns:
         df["facility"] = ""
     df["facility"] = df["facility"].fillna("").astype(str)

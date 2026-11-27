@@ -30,8 +30,19 @@ _PACKED = re.compile(r"\d(?:[\d.,]*)\s*(?:kgs?|gms?|grams?)\s*[-–]?\s*(box(?:e
                      re.IGNORECASE)
 
 
+def _berry(sku_name) -> bool:
+    """Blueberry: a box of it is one tray (12 punnets), whoever the customer (user 27 Nov)."""
+    return "blueberr" in str(sku_name or "").casefold()
+
+
 def detect_lot(sku_name: str | None) -> str | None:
-    """Return 'Kg', 'Pack' (gm / pack), 'Pcs', 'Box' or 'Tray', or None if no unit word."""
+    """Return 'Kg', 'Pack' (gm / pack), 'Pcs', 'Box' or 'Tray', or None if no unit word.
+    A Blueberry 'Box' is a 'Tray' (1 Box = 1 Tray = 12 punnets)."""
+    lot = _detect_lot(sku_name)
+    return "Tray" if lot == "Box" and _berry(sku_name) else lot
+
+
+def _detect_lot(sku_name: str | None) -> str | None:
     if not sku_name:
         return None
     packed = _PACKED.search(str(sku_name))
@@ -71,7 +82,8 @@ def lot_size(sku_name: str | None) -> str:
     num = re.sub(r"\s*-\s*", "-", m.group(1))
     unit = _UNIT_LABEL[m.group(2).lower()]
     box = m.group(3)
-    return f"{num} {unit}" + (f" {_UNIT_LABEL[box.lower()]}" if box else "")
+    out = f"{num} {unit}" + (f" {_UNIT_LABEL[box.lower()]}" if box else "")
+    return out.replace("Box", "Tray") if _berry(sku_name) else out   # Blueberry: 1 Box = 1 Tray
 
 
 def normalize_lot(value: str | None) -> str:
@@ -81,3 +93,18 @@ def normalize_lot(value: str | None) -> str:
     if v in LOTS:
         return v
     return detect_lot(v) or v
+
+
+def tray_lot(lot: str | None, sku_name: str | None, customer: str | None = None) -> str:
+    """Lot as shown / counted: a Box is a Tray for Blueberry (any customer) and for the
+    customers in secret `tray_customers` (default GT Sale)."""
+    v = str(lot or "").strip()
+    if v.casefold() != "box":
+        return v
+    if _berry(sku_name):
+        return "Tray"
+    from core import config
+    cust = str(customer or "").casefold().strip()
+    if cust and any(cust == c.casefold().strip() for c in config.tray_customers()):
+        return "Tray"
+    return v
