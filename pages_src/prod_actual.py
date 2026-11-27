@@ -26,6 +26,9 @@ CSS = """<style>
 .pa-sec {font-size:0.82rem; font-weight:800; color:#2C5496; text-align:left; margin:12px 0 4px 2px;}
 .st-key-pa_next {border:2px solid #639922; background:#EAF3DE; border-radius:12px; padding:10px 14px;}
 .pa-next {color:#27500A; font-size:0.92rem;}
+.st-key-pa_card [class*="st-key-pa_tick_"] button {background:#1F6B4A; border-color:#1F6B4A; color:#fff;
+  font-weight:800; min-height:38px; padding:0;}
+.st-key-pa_card [class*="_new"] input {text-align:left; font-weight:600;}
 .pa-ex {background:#F4F8FE; color:#0C447C; border:1px solid #B5D4F4; border-radius:10px; padding:6px 12px;
   font-weight:800; margin:10px 0 4px 0; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;}
 .pa-ex span {font-weight:700; font-size:0.8rem; color:#185FA5;}
@@ -70,6 +73,22 @@ def _typed(label: str, opts: list[str], key: str, hint: str) -> str:
     return str(v or "").strip()
 
 
+def _add_row(key: str, hint: str, on_tick, args: tuple) -> None:
+    """A visible 'add' box with a tick next to it: type the name, press the tick, it is added and chosen."""
+    a, b = st.columns([4, 1], vertical_alignment="center")
+    a.text_input(hint, key=f"{key}_new", placeholder=hint, label_visibility="collapsed")
+    with b.container(key=f"pa_tick_{key}"):
+        st.button("✓", key=f"{key}_tick", on_click=on_tick, args=args, width="stretch", help="Save this name")
+
+
+def _add_brand(key: str) -> None:
+    """＋ Add brand name: choose the typed brand (it joins the brand list of this SKU on Save)."""
+    name = " ".join(str(st.session_state.get(f"{key}_new") or "").split())
+    if name:
+        st.session_state[key] = name
+        st.session_state[f"{key}_new"] = ""
+
+
 def _add_name(city: str, key: str) -> None:
     """＋ Add name: save the typed name for this city and select it."""
     name = " ".join(str(st.session_state.get(f"{key}_new") or "").split())
@@ -91,7 +110,7 @@ def _pending() -> list[dict]:
 
 def _preview_df(rows: list[dict]) -> pd.DataFrame:
     return pd.DataFrame([{"Fruit": r["parent_sku"], "Origin": r["origin"], "Variety": r["variety"],
-                          "Brand": r["brand"], "Spec": r["size"], "Box kg": r["box_kg"], "Pcs/box": r["pcs_per_box"] or "",
+                          "Brand name": r["brand"], "Spec": r["size"], "Box kg": r["box_kg"], "Pcs/box": r["pcs_per_box"] or "",
                           "Executive": r.get("executive", ""), "Table": r["table_no"],
                           "Number of boxes": r["boxes_moved"], "Stock": r["stock_type"],
                           "Kg on table": round(float(r["box_kg"]) * float(r["boxes_moved"]), 2)} for r in rows])
@@ -328,7 +347,8 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
             size = _pick("Spec", list(sw), f"{k}_s", blank=False, fmt=_spec)
         with r1[3]:   # brands per SKU (fruit + origin + variety + size) from the Brand_Master tab
             b_opts = pa.brands(opts, origin, variety, size)
-            brand = _typed("Brand", b_opts, f"{k}_b", "Choose or type")   # typed in the same box, Enter adds it
+            brand = _typed("Brand name", b_opts, f"{k}_b", "Choose")
+            _add_row(f"{k}_b", "＋ Add brand name", _add_brand, (f"{k}_b",))
 
         _, pcs0 = pa.defaults(opts, origin=origin, variety=variety, size=size) if size else (None, None)
         weights = pa.box_weights(opts, origin=origin, variety=variety, size=size) if size else []
@@ -359,11 +379,7 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
         ek = f"pa_ex_{pa.pkey(city)}"
         with r3[0]:    # names of this city only; ＋ Add name onboards a new one for the city at once
             person = _typed("Executive name", names, ek, "Choose a name")
-            with st.popover("＋ Add name", width="stretch"):
-                st.text_input("New executive name", key=f"{ek}_new", placeholder="Type the name")
-                st.button("Add", key=f"{ek}_addbtn", type="primary", width="stretch",
-                          on_click=_add_name, args=(city, ek))
-                st.caption(f"Kept for {city} only.")
+            _add_row(ek, "＋ Add name", _add_name, (city, ek))
         table = r3[1].selectbox("Table number", TABLES, index=None, placeholder="Choose…", key=f"{k}_t")
         with r3[2].container(key=f"pa_box_{k}"):
             boxes = st.number_input("Number of boxes", min_value=0.0, step=1.0, value=None,
