@@ -102,3 +102,11 @@ def test_newzealand_is_nz():
     origins = pa.choices(df, "origin")
     assert "NZ" in origins and "NewZealand" not in origins
     assert pa.choices(df, "size", origin="NZ", variety="Gala") == ["30C", "100C"]
+
+
+def test_nz_has_only_graded_gala():
+    tab = pd.DataFrame([{"parent": "Apple", "grade": "Gala HG", "country": "NewZealand", "spec": "80c", "box_kg": 17.5},
+                        {"parent": "Apple", "grade": "Gala", "country": "Poland", "spec": "100c", "box_kg": 18}])
+    df = pa.option_rows("Apple", tab, None)
+    assert "Gala" not in pa.choices(df, "variety", origin="NZ") and "Gala HG" in pa.choices(df, "variety", origin="NZ")
+    assert pa.choices(df, "variety", origin="Poland") == ["Gala"]

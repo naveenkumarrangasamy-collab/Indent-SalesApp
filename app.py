@@ -143,7 +143,7 @@ pages = {
                         url_path="preprod-actual-2"),
     "processed2": st.Page(lambda: processed2.render(user), title="Production Detail Process", icon="✅",
                           url_path="processed-2"),
-    "tracking2": st.Page(lambda: processed2.render_tracking(user), title="Production Tracking", icon="📊",
+    "tracking2": st.Page(lambda: processed2.render_tracking(user), title="Production Summary", icon="📊",
                          url_path="production-tracking-2"),
 }
 if user.opens_access:

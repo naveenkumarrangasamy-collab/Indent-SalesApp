@@ -534,9 +534,14 @@ def _day_confirm(its: dict, box: dict, day: str, city: str, user: User) -> None:
         st.rerun()
 
 
+BAND = {"green": "#EAF3DE", "amber": "#FAEEDA", "yellow": "#FFF6C2", "red": "#FCEBEB"}
+
+
 def render_tracking(user: User) -> None:
+    """27 Nov (user): 'Production Summary' with two views: the Production tracker (as before) and Category
+    efficiency (fruit + variety + country + brand, counts clubbed). One date, or a date range."""
     common.show_flash()
-    st.markdown("### Production Tracking · option 2")
+    st.markdown("### Production Summary")
     try:
         m = masters.load_masters()
         lots = pa.read()
@@ -545,18 +550,68 @@ def render_tracking(user: User) -> None:
         common.sheet_error(e, "Could not load.")
         return
     cities = [c for c in m.cities() if user.sees_all_cities or user.in_my_cities(c)]
-    top = st.columns([1, 1, 3])
-    day = top[0].date_input("Date", value=config.now_ist().date(), key="t2_day", format="DD/MM/YYYY").isoformat()
-    all_days = top[1].toggle("All dates", key="t2_all")
+    today = config.now_ist().date()
+    top = st.columns([1, 0.9, 1, 3])
+    d1 = top[0].date_input("Date", value=today, key="t2_day", format="DD/MM/YYYY")
+    ranged = top[1].toggle("Date range", key="t2_range", help="Add a second date to see a week, a month ...")
+    d2 = top[2].date_input("To", value=d1, min_value=d1, key="t2_to", format="DD/MM/YYYY") if ranged else d1
+    if d2 < d1:
+        d2 = d1
+    days = {d.date().isoformat() for d in pd.date_range(d1, d2)}
+    label = d1.isoformat() if d1 == d2 else f"{d1.isoformat()}_to_{d2.isoformat()}"
     city = cities[0] if cities else ""
     if len(cities) > 1:
-        with top[2]:
+        with top[3]:
             city = st.pills("City", cities, default=cities[0], key="t2_city") or cities[0]
+    t_track, t_cat = st.tabs(["Production tracker", "Category efficiency"])
+    with t_track:
+        _tracker(lots, saved, days, city, label)
+    with t_cat:
+        _category(lots, saved, days, city, label)
+
+
+def _category(lots, saved, days: set[str], city: str, label: str) -> None:
+    rows, tot = p2.category_rows(lots, saved, days, city)
+    if not rows:
+        st.info("Nothing was given to executives for this date yet. Start on **Pre-Production Actual**.")
+        return
+
+    def pc(v):
+        return "–" if v is None else f"{round(v * 100)}%"
+    c = st.columns(4)
+    c[0].metric("Kg used (J)", f"{tot['j']:,.0f}")
+    c[1].metric("Category efficiency (K / J)", pc(tot["efficiency"]))
+    c[2].metric("GT created (L / J)", pc(tot["gt"]))
+    c[3].metric("Dump (M / J)", pc(tot["dump"]))
+    if tot["saved"] or tot["none"]:
+        st.caption(" · ".join(x for x in (
+            f"**{tot['saved']}** item(s) are saved but not submitted yet; they are counted in these percentages"
+            if tot["saved"] else "",
+            f"**{tot['none']}** item(s) are not started; they are not counted" if tot["none"] else "") if x) + ".")
+    pcts = ["Category Efficiency % (K / J)", "GT Created % (L / J)", "Dump % (M / J)"]
+    df = pd.DataFrame(rows, columns=p2.CAT_HEAD)
+    band = [p2.eff_band(v) for v in df[pcts[0]]]
+    show = df.copy()
+    for col in ("Boxes", "Kg taken", "Kg used (J)", "MT kg (K)", "GT kg (L)", "Dump kg (M)"):
+        show[col] = [f"{v:,.1f}".rstrip("0").rstrip(".") if v else "" for v in df[col]]
+    for col in pcts:
+        show[col] = ["" if v is None else f"{round(v * 100)}%" for v in df[col]]
+    show.insert(0, "No", [str(i) for i in range(1, len(show) + 1)])
+
+    def paint(col):
+        return [f"background-color:{BAND[b]}" if b else "" for b in band]
+    st.dataframe(show.style.apply(paint, subset=[pcts[0]]), hide_index=True, width="stretch")
+    st.caption("One row per fruit + variety + country + brand; every count, table and day in the range is added "
+               "together. Green 90% and above · amber 80–90% · yellow 70–80% · red below 70%.")
+    st.download_button("CSV", data=show.to_csv(index=False).encode("utf-8-sig"),
+                       file_name=f"Category_Efficiency_{label}.csv", mime="text/csv",
+                       icon=":material/download:", key="t2_cat_csv")
+
+
+def _tracker(lots, saved, days: set[str], city: str, label: str) -> None:
     df = pd.DataFrame(p2.track_rows(lots, saved), columns=p2.TRACK_HEAD)
     if not df.empty:
-        df = df[df["City"] == city]
-        if not all_days:
-            df = df[df["Production Date"] == day]
+        df = df[(df["City"] == city) & df["Production Date"].isin(days)]
     if df.empty:
         st.info("Nothing on the tables for this date yet. Start on **Pre-Production Actual**.")
         return
@@ -572,9 +627,8 @@ def render_tracking(user: User) -> None:
 
     def _eff(v):
         n = pr._f(str(v).replace("%", "")) / 100 if str(v).endswith("%") else None
-        if n is None:
-            return ""
-        return "background-color:" + ("#EAF3DE" if n >= 0.9 else "#FAEEDA" if n >= 0.85 else "#FCEBEB")
+        b = p2.eff_band(n)
+        return f"background-color:{BAND[b]}" if b else ""
 
     def _sum(v):
         n = pr._f(str(v).replace("%", "")) / 100 if str(v).endswith("%") else None
@@ -590,8 +644,8 @@ def render_tracking(user: User) -> None:
                "**Production_Tracking_2** tab of the Google Sheet (rewritten after every save).")
     b = st.columns([1, 1, 4])
     b[0].download_button("CSV", data=df.to_csv(index=False).encode("utf-8-sig"),
-                         file_name=f"Production_Tracking_2_{'all' if all_days else day}.csv", mime="text/csv",
-                         icon=":material/download:", width="stretch")
+                         file_name=f"Production_Tracking_2_{label}.csv", mime="text/csv",
+                         icon=":material/download:", width="stretch", key="t2_csv")
     if b[1].button("Update sheet tab", icon=":material/sync:", width="stretch", key="t2_pub"):
         n = p2.publish(get_backend())
         st.success(f"{n} row(s) written.") if n >= 0 else st.error("Could not write the tab.")

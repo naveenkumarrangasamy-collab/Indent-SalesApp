@@ -61,3 +61,34 @@ def test_executive_items_lot_units_and_day_close():
     assert p2.day_state(saved, "2026-11-26", "B")["by"] == "me" and p2.day_state(saved, "2026-11-27", "B") is None
     again = pd.concat([saved, pd.DataFrame(p2.close_rows("2026-11-26", "B", "boss", "open"))], ignore_index=True)
     assert p2.day_state(again, "2026-11-26", "B") is None and p2.latest(again, "2026-11-26", "B") == {}
+
+
+def test_category_efficiency_clubs_counts_per_variety_country_brand():
+    raw = pd.DataFrame([
+        {"entry_id": "a", "production_date": "2026-11-26", "city": "B", "parent_sku": "Apple", "variety": "Gala",
+         "size": "100C", "origin": "Poland", "brand": "X", "table_no": "1", "box_kg": "18", "pcs_per_box": "100",
+         "boxes_moved": "10", "stock_type": "Unused Vendor Lot"},
+        {"entry_id": "b", "production_date": "2026-11-27", "city": "B", "parent_sku": "Apple", "variety": "Gala",
+         "size": "110C", "origin": "Poland", "brand": "X", "table_no": "2", "box_kg": "18", "pcs_per_box": "110",
+         "boxes_moved": "10", "stock_type": "Unused Vendor Lot"},
+        {"entry_id": "c", "production_date": "2026-11-27", "city": "B", "parent_sku": "Apple", "variety": "Gala",
+         "size": "100C", "origin": "USA", "brand": "", "table_no": "3", "box_kg": "20", "pcs_per_box": "100",
+         "boxes_moved": "5", "stock_type": "Unused Vendor Lot"}])
+    it = {d: p2.items(raw[raw["production_date"] == d]) for d in ("2026-11-26", "2026-11-27")}
+    a = [v for v in it["2026-11-26"].values()][0]
+    b = [v for v in it["2026-11-27"].values() if v["origin"] == "Poland"][0]
+    saved = pd.DataFrame(
+        p2.snapshot(a, [{"pack": "1Kg", "mt_loose_kg": 160}], {"gt_kg": 15, "dump_kg": 5}, "", "submitted",
+                    "2026-11-26", "B", "me")
+        + p2.snapshot(b, [{"pack": "1Kg", "mt_loose_kg": 170}], {"gt_kg": 5, "dump_kg": 5}, "", "draft",
+                      "2026-11-27", "B", "me"))
+    rows, tot = p2.category_rows(raw, saved, None, "B")
+    assert [(r["Country"], r["Counts clubbed"]) for r in rows] == [("Poland", "100C, 110C"), ("USA", "100C")]
+    pol, usa = rows
+    assert pol["Kg used (J)"] == 360 and round(pol["Category Efficiency % (K / J)"] * 100) == 92
+    assert round(pol["GT Created % (L / J)"] * 100, 1) == 5.6 and pol["Status"] == "1 submitted · 1 saved, not submitted"
+    assert usa["Category Efficiency % (K / J)"] is None and usa["Status"] == "1 not started" and usa["Kg taken"] == 100
+    assert tot["saved"] == 1 and round(tot["efficiency"] * 100) == 92
+    one, _ = p2.category_rows(raw, saved, {"2026-11-26"}, "B")
+    assert len(one) == 1 and one[0]["Counts clubbed"] == "100C"
+    assert [p2.eff_band(x) for x in (0.95, 0.9, 0.85, 0.75, 0.6, None)] == ["green", "green", "amber", "yellow", "red", ""]

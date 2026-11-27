@@ -126,7 +126,22 @@ def option_rows(parent: str, parent_tab: pd.DataFrame | None, saved: pd.DataFram
     for c in ("origin", "variety", "brand", "size"):
         df[c] = df[c].map(_t)
     df["origin"] = df["origin"].map(country)
-    return df
+    return _graded_only(df)
+
+
+GRADED_ONLY = {"nz"}      # 27 Nov (user): New Zealand has Gala HG / SG / XF ..., never a plain "Gala"
+
+
+def _graded_only(df: pd.DataFrame) -> pd.DataFrame:
+    """For these countries drop a plain variety ('Gala') when the same country has graded ones ('Gala HG')."""
+    if df.empty:
+        return df
+    drop = []
+    for o in {x for x in df["origin"] if x.casefold() in GRADED_ONLY}:
+        vs = {v.casefold() for v in df.loc[df["origin"] == o, "variety"] if v}
+        plain = {v for v in vs if any(w.startswith(v + " ") for w in vs)}
+        drop += list(df.index[(df["origin"] == o) & df["variety"].str.casefold().isin(plain)])
+    return df.drop(index=drop).reset_index(drop=True) if drop else df
 
 
 def _match(df: pd.DataFrame, **picked) -> pd.DataFrame:

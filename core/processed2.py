@@ -201,6 +201,77 @@ def latest(saved: pd.DataFrame, day: str | None = None, city: str | None = None)
     return out
 
 
+CAT_HEAD = ["Fruit", "Variety", "Country", "Brand", "Counts clubbed", "Boxes", "Kg taken", "Kg used (J)",
+            "MT kg (K)", "GT kg (L)", "Dump kg (M)", "Category Efficiency % (K / J)", "GT Created % (L / J)",
+            "Dump % (M / J)", "Status"]
+
+
+def eff_band(v: float | None) -> str:
+    """27 Nov (user): 'green' 90 % and above, 'amber' 80-90, 'yellow' 70-80, 'red' below 70; '' = no number."""
+    if v is None:
+        return ""
+    return "green" if v >= 0.9 else "amber" if v >= 0.8 else "yellow" if v >= 0.7 else "red"
+
+
+def category_rows(lots: pd.DataFrame, saved: pd.DataFrame, days: set[str] | None = None,
+                  city: str | None = None) -> tuple[list[dict], dict]:
+    """Category efficiency (27 Nov): one row per fruit + variety + country + brand, every count / table / day
+    clubbed. J, K, L, M are added up over the items that have something saved (submitted or only saved);
+    items not started add only to boxes and kg taken. Returns (rows, totals); the percentages are numbers
+    0-1 or None."""
+    if lots is None or lots.empty or "production_date" not in lots.columns:
+        return [], {}
+    done = latest(saved)
+    d = lots.copy()
+    d["production_date"] = d["production_date"].astype(str).str[:10]
+    if days is not None:
+        d = d[d["production_date"].isin(days)]
+    if city:
+        d = d[d["city"].astype(str) == city]
+    groups: dict[tuple, dict] = {}
+    for (day, c), grp in d.groupby(["production_date", d["city"].astype(str)], sort=False):
+        for key, it in items(grp).items():
+            gk = tuple(_s(it.get(x)) for x in ("parent_sku", "variety", "origin", "brand"))
+            g = groups.setdefault(gk, {"sizes": [], "boxes": 0.0, "taken": 0.0, "j": 0.0, "k": 0.0, "l": 0.0,
+                                       "m": 0.0, "submitted": 0, "saved": 0, "none": 0})
+            if _s(it.get("size")) and _s(it.get("size")) not in g["sizes"]:
+                g["sizes"].append(_s(it.get("size")))
+            g["boxes"] += pr._f(it.get("boxes_moved"))
+            g["taken"] += it["taken_kg"]
+            s = done.get(f"{day}|{c}|{key}")
+            if not s or not (s["lines"] or any(s["tbl"].values())):
+                g["none"] += 1
+                continue
+            t = total(it, s["lines"], s["tbl"])
+            g["j"] += t["used_kg"]
+            g["k"] += t["mt_kg"]
+            g["l"] += t["gt_kg"]
+            g["m"] += t["dump_kg"]
+            g["submitted" if s["status"] == "submitted" else "saved"] += 1
+
+    def pct(n, j):
+        return n / j if j > 0 else None
+
+    def size_key(x):
+        m = re.match(r"\d+(?:\.\d+)?", x)
+        return (float(m.group(0)) if m else 1e9, x)
+    rows, tot = [], {"j": 0.0, "k": 0.0, "l": 0.0, "m": 0.0, "submitted": 0, "saved": 0, "none": 0}
+    for gk in sorted(groups, key=lambda x: tuple(y.casefold() for y in x)):
+        g = groups[gk]
+        for f in tot:
+            tot[f] += g[f]
+        bits = [f"{g[n]} {w}" for n, w in (("submitted", "submitted"), ("saved", "saved, not submitted"),
+                                           ("none", "not started")) if g[n]]
+        rows.append({"Fruit": gk[0], "Variety": gk[1], "Country": gk[2], "Brand": gk[3],
+                     "Counts clubbed": ", ".join(sorted(g["sizes"], key=size_key)), "Boxes": g["boxes"],
+                     "Kg taken": g["taken"], "Kg used (J)": g["j"], "MT kg (K)": g["k"], "GT kg (L)": g["l"],
+                     "Dump kg (M)": g["m"], "Category Efficiency % (K / J)": pct(g["k"], g["j"]),
+                     "GT Created % (L / J)": pct(g["l"], g["j"]), "Dump % (M / J)": pct(g["m"], g["j"]),
+                     "Status": " · ".join(bits)})
+    tot.update(efficiency=pct(tot["k"], tot["j"]), gt=pct(tot["l"], tot["j"]), dump=pct(tot["m"], tot["j"]))
+    return rows, tot
+
+
 def _r(v, n=2):
     return "" if v in ("", None) else round(float(v), n)
 
