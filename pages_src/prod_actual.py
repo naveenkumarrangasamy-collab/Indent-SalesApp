@@ -39,7 +39,7 @@ CSS = """<style>
 .pa-lh {font-size:0.85rem; font-weight:800; color:#475569; text-align:center;}
 .pa-line {font-size:1rem; color:#0F172A; padding:4px 2px;}
 .st-key-pa_added [data-baseweb="select"] > div, .st-key-pa_added [data-testid="stNumberInputContainer"] {
-  border:2px solid #EF9F27; border-radius:10px; background:#FFFBF2;}
+  border:2px solid #EF9F27 !important; border-radius:10px; background:#FFFBF2 !important;}
 .st-key-pa_added [data-baseweb="select"] div, .st-key-pa_added input {text-align:center; justify-content:center;
   font-weight:800; font-size:1rem;}
 .st-key-pa_added button[data-testid="stNumberInputStepUp"],
@@ -119,6 +119,11 @@ def _add_name(city: str, key: str) -> None:
         return
     st.session_state[key] = name
     st.session_state[f"{key}_new"] = ""
+
+
+def _fk() -> str:
+    """Key of the fruit row; it changes after every Add so the row comes back with nothing chosen."""
+    return f"pa_parent_{st.session_state.get('pa_fruit_n', 0)}"
 
 
 def _pending() -> list[dict]:
@@ -287,9 +292,9 @@ def render(user: User, nxt: str = "") -> None:
         st.info("No fruits mapped for this city yet.")
         return
     if not ready:
-        st.session_state.pop("pa_parent", None)
+        st.session_state.pop(_fk(), None)
     just = st.session_state.get("pa_just")
-    if just and ready and _pending() and not st.session_state.get("pa_parent"):
+    if just and ready and _pending() and not st.session_state.get(_fk()):
         # 27 Nov (user): after Add it must be obvious what comes next
         with st.container(key="pa_next"):
             b1, b2 = st.columns([3, 1.3], vertical_alignment="center")
@@ -298,10 +303,10 @@ def render(user: User, nxt: str = "") -> None:
             if b2.button("Save / Proceed for production", icon=":material/arrow_forward:", key="pa_go_top",
                          type="primary", width="stretch"):
                 _confirm(_pending(), user, nxt)
-    elif st.session_state.get("pa_parent"):
+    elif st.session_state.get(_fk()):
         st.session_state.pop("pa_just", None)
     parent = st.pills("Pick the next fruit from inventory" if just and _pending() else "Fruit picked from inventory",
-                      parents, key="pa_parent", disabled=not ready)
+                      parents, key=_fk(), disabled=not ready)
     if not ready:
         st.caption("Choose the " + " and the ".join(x for x, ok in (("date", day), ("city", city)) if not ok)
                    + " first.")
@@ -412,8 +417,10 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
                 st.toast("Still to fill: " + ", ".join(missing), icon="⚠️")
             else:
                 _pending().append({**entry, "added_at": config.now_iso(), "rid": uuid.uuid4().hex[:8]})
-                for x in (f"{k}_n", f"{k}_t", "pa_parent"):    # back to the fruits for the next SKU
+                for x in (f"{k}_n", f"{k}_t"):
                     st.session_state.pop(x, None)
+                # a fresh fruit row for the next SKU (a new key, so no fruit stays highlighted)
+                st.session_state["pa_fruit_n"] = st.session_state.get("pa_fruit_n", 0) + 1
                 st.session_state["pa_top"] = True
                 st.session_state["pa_just"] = _line_name(entry)
                 st.rerun()
