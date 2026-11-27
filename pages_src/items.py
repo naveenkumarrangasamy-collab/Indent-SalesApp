@@ -163,7 +163,7 @@ def _lines_table(m: Masters) -> None:
         st.info("No items yet. Add them above, or attach the order.")
         return
     total = sum(x.amount for x in lines)
-    value = (f" · order value <span style='color:#1f5fbf'><b>₹{total:,.2f}</b></span>"
+    value = (f" · order value <span style='color:#0b57d0'><b>₹{total:,.2f}</b></span>"
              if config.show_amounts() else "")
     filled = sum(to_number(x.qty) > 0 for x in lines)
     zeros = (f" · {filled} of {len(lines)} filled · lines left at 0 are not saved"
