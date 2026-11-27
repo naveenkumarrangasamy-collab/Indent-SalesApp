@@ -122,3 +122,10 @@ def test_box_customer_lot_uses_the_items_box_weight():
     t = p2.total(it, lines, {"gt_pcs": 44, "dump_pcs": 22})          # losses in pieces as well
     assert [round(x, 2) for x in t["mt_per_line"]] == [54.0, 20.45]  # 6 boxes x 9 kg; 200 pcs x 9/88
     assert round(t["gt_kg"], 2) == 4.5 and round(t["dump_kg"], 2) == 2.25 and round(t["sum"] * 100) == 90
+
+
+def test_submit_needs_95_percent_and_a_comment_below_100():
+    assert p2.submit_block({"sum": 0.05}, "ok").startswith("Can't submit: only 5%")
+    assert p2.submit_block({"sum": 0.949}, "note") != "" and p2.submit_block({"sum": 0.95}, "note") == ""
+    assert p2.submit_block({"sum": 0.98}, "").startswith("Add a comment") and p2.submit_block({"sum": 0.98}, "wet") == ""
+    assert p2.submit_block({"sum": 0.996}, "") == "" and p2.submit_block({"sum": 1.01}, "") == ""

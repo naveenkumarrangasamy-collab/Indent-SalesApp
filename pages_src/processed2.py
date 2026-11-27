@@ -398,6 +398,11 @@ def _item(it: dict, e: dict, lines, day: str, city: str, user: User) -> None:
         elif state == "low":
             st.markdown(f"<div class='p2-note' style='background:#FAEEDA;color:#633806'>{t['to_go']:,.1f} kg not "
                         "accounted yet (target 97–102%).</div>", unsafe_allow_html=True)
+        why = p2.submit_block(t, st.session_state.get(f"p2_{iid}_comment", e["comment"])) \
+            if state not in ("over", "empty") else ""
+        if why:
+            st.markdown(f"<div class='p2-note' style='background:#FCEBEB;color:#791F1F'>{why} Save still works."
+                        "</div>", unsafe_allow_html=True)
         # never disabled and no pop-up: Save just saves, Submit just submits (user 27 Nov)
         c = st.columns([1, 2])
         if c[0].button("Save", key=f"p2_{iid}_save", width="stretch"):
@@ -419,6 +424,10 @@ def _write(it: dict, e: dict, status: str, day: str, city: str, user: User, stat
         return
     if state == "empty":
         st.toast("Nothing entered yet.", icon="⚠️")
+        return
+    why = p2.submit_block(p2.total(it, e["lines"], e["tbl"]), e["comment"]) if status == "submitted" else ""
+    if why:
+        st.toast(why, icon="⚠️")
         return
     rows = p2.snapshot(it, e["lines"], e["tbl"], e["comment"], status, day, city, user.email)
     try:
@@ -444,6 +453,9 @@ def _save_all(keys: list[str], its: dict, box: dict, day: str, city: str, user: 
         if state in ("over", "empty"):
             continue
         status = "submitted" if submit or e["status"] == "submitted" else "draft"
+        if status == "submitted" and e["status"] != "submitted" and \
+                p2.submit_block(p2.total(it, e["lines"], e["tbl"]), e["comment"]):
+            status = "draft"          # below 95 %, or below 100 % without a comment: stays saved, not submitted
         if e["saved"] == _plain(e) and e["status"] == status:
             continue
         rows += p2.snapshot(it, e["lines"], e["tbl"], e["comment"], status, day, city, user.email)
@@ -523,12 +535,19 @@ def _day_confirm(its: dict, box: dict, day: str, city: str, user: User) -> None:
     c[1].metric("Saved, not submitted", n_saved)
     c[2].metric("Not started", n_none)
     st.dataframe(df, hide_index=True, width="stretch")
-    if n_saved:
+    held = [f"Table {its[k]['table_no']} · {its[k].get('parent_sku', '')} ({_name(its[k])})" for k in its
+            if box[k]["status"] != "submitted"
+            and p2.state_of(p2.total(its[k], box[k]["lines"], box[k]["tbl"])) not in ("empty", "over")
+            and p2.submit_block(p2.total(its[k], box[k]["lines"], box[k]["tbl"]), box[k]["comment"])]
+    if held:
+        st.error("The day can't be confirmed yet. These are below 95%, or below 100% without a comment: "
+                 + "; ".join(held) + ".")
+    elif n_saved:
         st.info(f"{n_saved} saved item(s) will be submitted with the day.")
     if n_none:
         st.warning(f"{n_none} item(s) are not started. They stay empty when the day is confirmed.")
     b = st.columns(2)
-    if b[0].button("Yes, confirm the day", type="primary", width="stretch", key="p2_day_ok"):
+    if b[0].button("Yes, confirm the day", type="primary", width="stretch", key="p2_day_ok", disabled=bool(held)):
         _save_all(list(its), its, box, day, city, user, submit=True)
         try:
             p2.save(get_backend(), p2.close_rows(day, city, user.email))

@@ -120,6 +120,22 @@ def state_of(t: dict) -> str:
     return "ok" if t["sum"] >= LOW else "low"
 
 
+MIN_SUBMIT = 0.95      # 27 Nov (user): nothing below 95 % can be submitted
+
+
+def submit_block(t: dict, comment: str) -> str:
+    """Why this item can't be SUBMITTED ('' = it can). Below 95 % never; below 100 % (even 98 %) only with a
+    comment. Saving a draft is not held back by this: a table is filled bit by bit."""
+    if t["sum"] is None:
+        return ""
+    shown = round(t["sum"] * 100)
+    if t["sum"] < MIN_SUBMIT - 1e-9:
+        return f"Can't submit: only {shown}% of the kg used is accounted. It has to be at least 95%."
+    if shown < 100 and not _s(comment):
+        return f"Add a comment to submit: {shown}% accounted (below 100%)."
+    return ""
+
+
 def snapshot(item: dict, mt_lines: list[dict], tbl: dict, comment: str, status: str, day: str, city: str,
              user: str) -> list[dict]:
     sid, stamp = uuid.uuid4().hex[:10], config.now_iso()

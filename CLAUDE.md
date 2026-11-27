@@ -802,3 +802,6 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
   own box weight (dropdown shows "1Box · 9 kg"; `processed.pack_kg(..., box_kg)`, `is_box`), typed in **boxes**;
   for fruit graded and repacked as a box and sold as a box. GT / dump in pieces stay for piece fruit (not grapes).
   Dispatch: box SKUs ("1Box - …") draw from their own MT stock in boxes (`day_dispatch.pool_of`).
+- **Submit rule (27 Nov 10:25 PM, user)** on Production Detail Process (`processed2.submit_block`): nothing below
+  **95 %** of the kg used can be submitted; below **100 %** (even 98 %) a **comment** is required. Save (draft) is
+  not held back. The day can't be confirmed while a saved item fails this. Items submitted before the rule stay.
