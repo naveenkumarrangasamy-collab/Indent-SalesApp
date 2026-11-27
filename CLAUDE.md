@@ -687,7 +687,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   and one extra CSS block `common._THEME_CSS` added after `_CSS` in `inject_css()`: grey-blue ground #f0f4f9 with
   the page content on one white rounded sheet, side menu on the ground colour with the current page as a pale
   blue pill, pill buttons (blue filled / pale blue tonal), outlined 8 px chips and an outlined day switch (pale
-  blue when chosen), flat tonal tiles, list-style rows, outlined cards, Roboto. No page logic changed.
+  blue when chosen), flat tonal tiles, list-style rows, outlined cards, **Google Sans** (user 27 Nov 11:24 PM; from
+  Google Fonts, Roboto as fallback). No page logic changed.
   To go back: drop `_THEME_CSS` and restore the theme colours.
 - History the same night, all on the trial: Ocean Glass mix (gradients uneven, text hard to read) → plain
   Ocean → **G Material "exactly as the mock"** (user 11:16 PM). Do not alter the mock's colours or shapes.

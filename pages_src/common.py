@@ -169,18 +169,20 @@ _CSS = f"""
 # resizes anything, so taking this block out of inject_css() gives the old look back.
 _THEME_CSS = """
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400..700&display=swap');
   @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
   /* "G - Material, mail-style" look, colours and shapes as in the mockup (user 27 Nov 11:16 PM). */
   :root { --g-bg:#f0f4f9; --g-on:#1f1f1f; --g-ov:#444746; --g-out:#747775; --g-olv:#c4c7c5; --g-p:#0b57d0;
       --g-pc:#d3e3fd; --g-opc:#041e49; --g-sc:#c2e7ff; --g-osc:#001d35; --g-sch:#e9eef6; --g-hov:#f2f6fc; }
 
   /* ---- page: grey-blue ground, the content on one white rounded sheet ---- */
-  .stApp { background: var(--g-bg) !important; font-family: 'Roboto', system-ui, sans-serif; }
+  .stApp { background: var(--g-bg) !important; font-family: 'Google Sans', 'Google Sans Flex', 'Roboto', system-ui, sans-serif; }
   [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stMain"] { background: transparent !important; }
   .block-container, [data-testid="stMainBlockContainer"] { background: #ffffff; border-radius: 24px; }
   .stApp button, .stApp input, .stApp textarea, [data-testid="stMarkdownContainer"] p,
   [data-testid="stMarkdownContainer"] li, [data-testid="stWidgetLabel"] p,
-  .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .mt-h { font-family: 'Roboto', system-ui, sans-serif; }
+  .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .mt-h { font-family: 'Google Sans', 'Google Sans Flex', 'Roboto', system-ui, sans-serif; }
   .stApp h1, .stApp h2, .stApp h3, .mt-h { font-weight: 400 !important; }
   .mt-muted, .mt-h span, [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] * {
       color: var(--g-ov) !important; opacity: 1 !important; }
@@ -229,7 +231,7 @@ _THEME_CSS = """
       border: 0; border-radius: 16px; box-shadow: none; }
   .mt-tile .lbl, .mt-tile .sub { color: var(--g-ov); font-weight: 500; }
   .mt-tile .val, .mt-tile.good .val, .mt-tile.warn .val, .mt-tile.bad .val, .mt-tile.info .val {
-      color: var(--g-on); font-weight: 400; font-family: 'Roboto', system-ui, sans-serif; }
+      color: var(--g-on); font-weight: 400; font-family: 'Google Sans', 'Google Sans Flex', 'Roboto', system-ui, sans-serif; }
 
   /* ---- rows: list lines on the sheet, not cards ---- */
   .mt-line, .mt-crow { border: 0; border-bottom: 1px solid var(--g-sch); border-radius: 12px; background: transparent;
