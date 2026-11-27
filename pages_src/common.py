@@ -171,17 +171,17 @@ _THEME_CSS = """
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700&display=swap');
   :root { --og-acc:#1f5fbf; --og-on:#17202e; --og-ov:#4b5870; --og-line:rgba(23,32,46,.08);
-      --og-g:rgba(255,255,255,.32); --og-gb:rgba(255,255,255,.7); --og-edge:rgba(31,95,191,.2);
-      --og-sh:rgba(20,50,110,.14); --og-card:rgba(255,255,255,.5);
+      --og-g:rgba(255,255,255,.72); --og-gb:rgba(255,255,255,.8); --og-edge:rgba(31,95,191,.22);
+      --og-sh:rgba(20,50,110,.14); --og-card:#ffffff;
       --og-blur:blur(26px) saturate(1.9);
       --og-spring:cubic-bezier(.34,1.56,.64,1); }
 
   /* ---- page: soft blue backdrop, rounded type ---- */
   .stApp { background:
-      radial-gradient(620px 520px at 0% 0%, #9fc2ff 0, transparent 62%),
-      radial-gradient(520px 620px at 0% 78%, #a9e4f4 0, transparent 62%),
-      radial-gradient(700px 520px at 100% 10%, #b4dcff 0, transparent 60%),
-      radial-gradient(820px 640px at 58% 100%, #c6c9ff 0, transparent 60%), #e9f0fb !important;
+      radial-gradient(460px 520px at 0% 0%, #9fc2ff 0, transparent 64%),
+      radial-gradient(420px 600px at 0% 62%, #a9e4f4 0, transparent 64%),
+      radial-gradient(440px 520px at 0% 100%, #c6c9ff 0, transparent 64%),
+      radial-gradient(520px 360px at 100% 0%, #d9e9ff 0, transparent 62%), #f5f8fc !important;
       background-attachment: fixed !important;
       font-family: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
   [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stMain"] { background: transparent !important; }
@@ -235,17 +235,16 @@ _THEME_CSS = """
       box-shadow: 0 2px 10px var(--og-sh); }
 
   /* ---- tiles: tinted glass instead of dark boxes ---- */
-  .mt-tile { background: var(--og-g); color: var(--og-on); border: 1px solid var(--og-gb); border-radius: 22px;
-      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);
+  .mt-tile { background: #ffffff; color: var(--og-on); border: 1px solid var(--og-gb); border-radius: 22px;
       box-shadow: 0 10px 30px var(--og-sh); }
   .mt-tile .lbl { color: inherit; font-weight: 700; }
   .mt-tile .sub { color: inherit; }
   .mt-tile .val { font-weight: 600; }
   .mt-tile.good .val, .mt-tile.warn .val, .mt-tile.bad .val, .mt-tile.info .val { color: inherit; }
-  .mt-tile.info { background: rgba(221,233,251,.5); color: #123a80; }
-  .mt-tile.good { background: rgba(220,243,229,.5); color: #0b5a3c; }
-  .mt-tile.warn { background: rgba(253,235,203,.55); color: #7a4400; }
-  .mt-tile.bad  { background: rgba(253,226,225,.55); color: #8a1c1c; }
+  .mt-tile.info { background: #dde9fb; color: #123a80; }
+  .mt-tile.good { background: #dcf3e5; color: #0b5a3c; }
+  .mt-tile.warn { background: #fdebcb; color: #7a4400; }
+  .mt-tile.bad  { background: #fde2e1; color: #8a1c1c; }
 
   /* ---- rows, chips and cards the app draws itself ---- */
   .mt-line, .mt-crow { border: 1px solid var(--og-line); border-radius: 16px; background: var(--og-card);
@@ -258,22 +257,22 @@ _THEME_CSS = """
   .mt-line .ct, .mt-line .cnt, .mt-crow .cnt, .mt-h span { color: var(--og-ov); }
   .mt-bar { background: var(--og-line); }
   .mt-strip { border-color: var(--og-edge); background: rgba(221,233,251,.5); border-radius: 16px; }
+  /* anything that holds text to read is solid white, so it stands clear of the backdrop (user, 27 Nov) */
   .mt-cust, [class*="st-key-mtcard"], .st-key-mt_delivery_card { background: var(--og-card);
-      border-color: var(--og-gb) !important; border-radius: 22px !important;
-      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);
-      box-shadow: 0 10px 30px var(--og-sh), inset 0 1px 0 rgba(255,255,255,.7); }
+      border-color: #e3e9f2 !important; border-radius: 22px !important;
+      box-shadow: 0 10px 30px var(--og-sh); }
 
   /* ---- Streamlit's own boxes: rounder, lighter ---- */
-  [data-testid="stExpander"] details { border-radius: 18px; background: var(--og-card); border-color: var(--og-gb);
-      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur); }
-  /* pop-up windows (PO upload, edit item ...): frosted glass too, a little more solid so text stays easy to read */
-  [data-testid="stDialog"] div[role="dialog"] { background: rgba(255,255,255,.66) !important;
-      border: 1px solid var(--og-gb); border-radius: 28px;
-      -webkit-backdrop-filter: blur(30px) saturate(1.9); backdrop-filter: blur(30px) saturate(1.9);
-      box-shadow: 0 24px 60px rgba(20,50,110,.25), inset 0 1px 0 rgba(255,255,255,.8); }
+  [data-testid="stExpander"] details { border-radius: 18px; background: var(--og-card); border-color: #e3e9f2; }
+  /* pop-up windows (PO upload, edit item ...): solid white, rounded */
+  [data-testid="stDialog"] div[role="dialog"] { background: #ffffff !important; border-radius: 28px;
+      box-shadow: 0 24px 60px rgba(20,50,110,.25); }
+  [data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="base-input"] input,
+  [data-baseweb="select"] > div, [data-baseweb="textarea"], [data-baseweb="textarea"] textarea { background-color: #ffffff !important; }
+  .mt-muted, [data-testid="stCaptionContainer"], [data-testid="stCaptionContainer"] p { color: var(--og-ov) !important; }
   [data-testid="stDataFrame"], [data-testid="stTable"] { border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(20,50,110,.08); }
   [data-testid="stAlert"] { border-radius: 16px; }
-  [data-testid="stFileUploaderDropzone"] { border-radius: 16px; background: rgba(255,255,255,.35); border: 1.5px dashed #9fb0c8; }
+  [data-testid="stFileUploaderDropzone"] { border-radius: 16px; background: #ffffff; border: 1.5px dashed #9fb0c8; }
   [data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="select"] > div, [data-baseweb="textarea"] { border-radius: 12px !important; }
   [data-testid="stForm"] { background: var(--og-g); border: 1px solid var(--og-gb) !important; border-radius: 28px;
       -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);

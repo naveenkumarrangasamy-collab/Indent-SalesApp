@@ -688,6 +688,9 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   pill buttons, light glass pills / segmented control, tinted glass tiles, rounded cards, Outfit + Nunito Sans).
   No page logic, layout or data code changed. To go back: drop `_THEME_CSS` from `inject_css()` and restore the
   four theme colours. The same change sits on branch `ui-ocean-glass` (cut from main) for the live app later.
+- **Glass only on the frame** (user 27 Nov 11 PM: text was hard to read on see-through panels): the side menu is
+  translucent with colour behind it; cards, tiles, pop-ups, expanders and input boxes are **solid white / solid
+  tints**, and the reading area's backdrop is near white.
 - Not done (would need custom components, user to decide): menu on top, phone tab bar, sliding "lens" motion,
   dark theme. Page-local CSS (tracker, pre-production, batching plan) and the e-mail colours are unchanged.
 - Mockups: canvas "MT Indent — UI design directions" (rows "Ocean Glass").
