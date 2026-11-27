@@ -23,7 +23,11 @@ CSS = """<style>
   display:flex; justify-content:space-between; align-items:center; font-weight:800; flex-wrap:wrap; gap:6px;}
 .pa-hd span {background:#fff; color:#0C447C; border:1px solid #B5D4F4; border-radius:999px; padding:2px 10px;
   font-size:0.78rem; font-weight:700;}
-.pa-sec {font-size:0.78rem; font-weight:800; color:#2C5496; text-align:center; margin:12px 0 4px 0;}
+.pa-sec {font-size:0.82rem; font-weight:800; color:#2C5496; text-align:left; margin:12px 0 4px 2px;}
+.pa-ex {background:#F4F8FE; color:#0C447C; border:1px solid #B5D4F4; border-radius:10px; padding:6px 12px;
+  font-weight:800; margin:10px 0 4px 0; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;}
+.pa-ex span {font-weight:700; font-size:0.8rem; color:#185FA5;}
+.st-key-pa_card [class*="_go"] button {background:#1F6B4A; border-color:#1F6B4A; color:#fff; font-weight:800;}
 .st-key-pa_card [data-testid="stWidgetLabel"] {justify-content:center; width:100%;}
 .st-key-pa_card [data-testid="stWidgetLabel"] p {font-size:0.75rem; font-weight:700; color:#475569; text-align:center;}
 .st-key-pa_card [data-baseweb="select"] > div, .st-key-pa_card [data-testid="stNumberInputContainer"],
@@ -92,7 +96,7 @@ def _preview_df(rows: list[dict]) -> pd.DataFrame:
 
 
 @st.dialog("Save these entries?", width="large")
-def _confirm(rows: list[dict], user: User) -> None:
+def _confirm(rows: list[dict], user: User, nxt: str = "") -> None:
     st.dataframe(common.numbered(_preview_df(rows)), hide_index=True, width="stretch")
     c1, c2 = st.columns(2)
     if c1.button("Save", type="primary", icon=":material/save:", width="stretch", key="pa_ok"):
@@ -102,16 +106,45 @@ def _confirm(rows: list[dict], user: User) -> None:
             st.error(f"Not saved. {e}")
             return
         st.session_state["pa_rows"] = []
-        common.flash("success", f"{n} entr{'y' if n == 1 else 'ies'} saved · see Production sheet → "
-                                "Production Actual.")
+        common.flash("success", f"{n} entr{'y' if n == 1 else 'ies'} saved.")
+        if nxt and nxt in common.PAGES:        # Save / Proceed for production
+            st.switch_page(common.PAGES[nxt])
         st.rerun()
     if c2.button("Back", width="stretch", key="pa_back"):
         st.rerun()
 
 
-def render(user: User) -> None:
+def _by_executive(df: pd.DataFrame, box_col: str) -> None:
+    """One small table per executive name (27 Nov: executive level, not table level)."""
+    if "Executive" not in df.columns:
+        st.dataframe(common.numbered(df), hide_index=True, width="stretch")
+        return
+    d = df.copy()
+    d["Executive"] = [str(x).strip() or "No name" for x in d["Executive"].fillna("")]
+    for name, part in d.groupby("Executive", sort=True):
+        tables = ", ".join(sorted({str(t) for t in part["Table"] if str(t).strip()}, key=lambda t: (len(t), t)))
+        boxes = sum(pa._num(x) or 0 for x in part[box_col])
+        st.markdown(f"<div class='pa-ex'>{name}<span>Table {tables or '—'} · {len(part)} SKU"
+                    f"{'' if len(part) == 1 else 's'} · {boxes:g} boxes</span></div>", unsafe_allow_html=True)
+        st.dataframe(common.numbered(part.drop(columns=["Executive"]).reset_index(drop=True)), hide_index=True,
+                     width="stretch")
+
+
+def _to_top() -> None:
+    """After Add the page goes back up to the fruits."""
+    if not st.session_state.pop("pa_top", False):
+        return
+    import streamlit.components.v1 as components
+    components.html("<script>const d = window.parent.document;"
+                    "['stMain', 'stAppViewContainer'].forEach(t => {const e = d.querySelector"
+                    "('[data-testid=\"' + t + '\"]'); if (e) e.scrollTo({top: 0, behavior: 'smooth'});});"
+                    "window.parent.scrollTo(0, 0);</script>", height=0)
+
+
+def render(user: User, nxt: str = "") -> None:
     common.show_flash()
     st.markdown(CSS, unsafe_allow_html=True)
+    _to_top()
     st.markdown("### Pre-Production Actual")
     try:
         m = masters.load_masters()
@@ -144,14 +177,14 @@ def render(user: User) -> None:
         st.caption("Choose the " + " and the ".join(x for x, ok in (("date", day), ("city", city)) if not ok)
                    + " first.")
     elif parent:
-        _entry_card(parent, city, day, parent_tab, saved, brand_tab, exec_tab)
+        _entry_card(parent, city, day, parent_tab, saved, brand_tab, exec_tab, user, nxt)
     else:
         st.caption("Pick a fruit to add what goes onto the tables.")
 
     rows = _pending()
     if rows:
         st.markdown(f"#### Added · {len(rows)} to save")
-        st.dataframe(common.numbered(_preview_df(rows)), hide_index=True, width="stretch")
+        _by_executive(_preview_df(rows), "Number of boxes")
         c = st.columns([1, 1, 3])
         if c[0].button("Save", type="primary", icon=":material/save:", width="stretch", key="pa_save"):
             _confirm(rows, user)
@@ -176,7 +209,8 @@ def _locked(col, label: str, val, unit: str, size: str) -> None:
     col.markdown(f"<div class='pa-l'>{label}</div><div class='{cls}'>{body}</div>", unsafe_allow_html=True)
 
 
-def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, exec_tab=None) -> None:
+def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, exec_tab=None, user=None,
+                nxt: str = "") -> None:
     opts = pa.option_rows(parent, parent_tab, saved, brand_tab)
     k = f"pa_{pa.pkey(parent)}"
     only_box = pa.box_only(parent)
@@ -250,7 +284,7 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
                  "table_no": table or "", "boxes_moved": boxes or 0, "stock_type": stock, "executive": person}
         missing = [("Box kg (choose the weight)" if len(weights) > 1 else "Box kg (not in master)")
                    if m == "Box kg" and size else m for m in pa.entry_errors(entry)]
-        f1, f2 = st.columns([3, 1], vertical_alignment="center")
+        f1, f2, f3 = st.columns([2, 1, 1.4], vertical_alignment="center")
         if missing:
             f1.markdown(f"<span class='pa-todo'>Still to fill: {', '.join(missing)}</span>", unsafe_allow_html=True)
         # never disabled: a number just typed is taken when the button is clicked (no Enter needed)
@@ -259,9 +293,22 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
                 st.toast("Still to fill: " + ", ".join(missing), icon="⚠️")
             else:
                 _pending().append(entry)
-                for x in (f"{k}_n", f"{k}_t"):
+                for x in (f"{k}_n", f"{k}_t", "pa_parent"):    # back to the fruits for the next SKU
                     st.session_state.pop(x, None)
+                st.session_state["pa_top"] = True
                 st.rerun()
+        # 27 Nov (user): save here itself and go on to production (a filled card is included)
+        if f3.button("Save / Proceed for production", icon=":material/arrow_forward:", key=f"{k}_go",
+                     width="stretch"):
+            todo = _pending() + ([] if missing else [entry])
+            if not todo:
+                st.toast("Nothing to save yet. Still to fill: " + ", ".join(missing), icon="⚠️")
+            else:
+                if not missing:
+                    _pending().append(entry)
+                    for x in (f"{k}_n", f"{k}_t"):
+                        st.session_state.pop(x, None)
+                _confirm(_pending(), user, nxt)
 
 
 def _saved_today(saved: pd.DataFrame, city: str, day) -> None:
@@ -269,4 +316,4 @@ def _saved_today(saved: pd.DataFrame, city: str, day) -> None:
     if v.empty:
         return
     st.markdown(f"#### Saved · {day.strftime('%d %b')} · {len(v)}")
-    st.dataframe(common.numbered(v.drop(columns=["Date", "City"])), hide_index=True, width="stretch")
+    _by_executive(v.drop(columns=["Date", "City"]), "Boxes")
