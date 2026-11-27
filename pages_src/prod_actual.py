@@ -430,19 +430,22 @@ def _saved_today(saved: pd.DataFrame, city: str, day, exec_tab=None, user=None) 
 
     def txt(v):
         return "" if v is None or (isinstance(v, float) and v != v) else str(v).strip()
+    def g(v):
+        n = pa._num(v)
+        return f"{n:g}" if n else ""
     EX, TB, BX = "Executive name ✎", "Table ✎", "Boxes ✎"
     base = pd.DataFrame({
-        "No": range(1, len(recs) + 1),
+        "No": [str(i) for i in range(1, len(recs) + 1)],        # text = left aligned (user 27 Nov)
         EX: [txt(r.get("executive")) or None for r in recs],
         "Fruit": [txt(r.get("parent_sku")) for r in recs], "Origin": [txt(r.get("origin")) for r in recs],
         "Variety": [txt(r.get("variety")) for r in recs], "Brand name": [txt(r.get("brand")) for r in recs],
         "Spec": [txt(r.get("size")) for r in recs],
-        "Box kg": [pa._num(r.get("box_kg")) for r in recs], "Pcs/box": [pa._num(r.get("pcs_per_box")) for r in recs],
+        "Box kg": [g(r.get("box_kg")) for r in recs], "Pcs/box": [g(r.get("pcs_per_box")) for r in recs],
         TB: [txt(r.get("table_no")) or None for r in recs],
-        BX: [float(pa._num(r.get("boxes_moved")) or 0) for r in recs],
+        BX: [g(r.get("boxes_moved")) or "0" for r in recs],
         "Stock": [txt(r.get("stock_type")) for r in recs],
         "Given at": [_clock(r.get("saved_at")) for r in recs], "By": [txt(r.get("saved_by")) for r in recs],
-        "Kg on table": [round((pa._num(r.get("box_kg")) or 0) * (pa._num(r.get("boxes_moved")) or 0), 2)
+        "Kg on table": [f"{round((pa._num(r.get('box_kg')) or 0) * (pa._num(r.get('boxes_moved')) or 0), 2):g}"
                         for r in recs]})
     st.markdown(f"#### {day.strftime('%d/%b/%y')} - Total Production Items Taken · {len(recs)}")
     names = pa.executives(exec_tab, city)
@@ -453,7 +456,7 @@ def _saved_today(saved: pd.DataFrame, city: str, day, exec_tab=None, user=None) 
         disabled=[c for c in base.columns if c not in (EX, TB, BX)],
         column_config={EX: st.column_config.SelectboxColumn(EX, options=names, required=False),
                        TB: st.column_config.SelectboxColumn(TB, options=TABLES, required=True),
-                       BX: st.column_config.NumberColumn(BX, min_value=0, step=1, format="%g")})
+                       BX: st.column_config.TextColumn(BX, validate=r"^\s*\d+(\.\d+)?\s*$", max_chars=8)})
     st.caption("To correct a saved line, change its **Executive name**, **Table** or **Boxes** in the table "
                "(the ✎ columns), then press Save changes. A new name is added with ＋ Add name in the card above.")
     changes, bad, zero, notes = {}, [], {}, []
@@ -466,9 +469,10 @@ def _saved_today(saved: pd.DataFrame, city: str, day, exec_tab=None, user=None) 
             ch["table_no"] = out[TB].iloc[k] or ""
             what.append(f"Table {base[TB].iloc[k] or '—'} → {ch['table_no'] or '—'}")
         b = pa._num(out[BX].iloc[k]) or 0
-        if b != base[BX].iloc[k]:
+        b0 = pa._num(base[BX].iloc[k]) or 0
+        if b != b0:
             ch["boxes_moved"] = b
-            what.append(f"Boxes {base[BX].iloc[k]:g} → {b:g}")
+            what.append(f"Boxes {b0:g} → {b:g}")
         if not ch:
             continue
         name = f"No {k + 1} · " + " · ".join(x for x in (base["Fruit"].iloc[k], base["Variety"].iloc[k],
