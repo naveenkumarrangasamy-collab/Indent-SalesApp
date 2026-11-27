@@ -101,7 +101,7 @@ def _confirm(rows: list[dict], user: User, nxt: str = "") -> None:
     c1, c2 = st.columns(2)
     if c1.button("Save", type="primary", icon=":material/save:", width="stretch", key="pa_ok"):
         try:
-            n = pa.save(get_backend(), rows, user.email)
+            n = pa.save(get_backend(), [{k: v for k, v in r.items() if k != "added_at"} for r in rows], user.email)
         except SheetError as e:
             st.error(f"Not saved. {e}")
             return
@@ -114,17 +114,35 @@ def _confirm(rows: list[dict], user: User, nxt: str = "") -> None:
         st.rerun()
 
 
-def _by_executive(df: pd.DataFrame, box_col: str) -> None:
-    """One small table per executive name (27 Nov: executive level, not table level)."""
+def _clock(stamp) -> str:
+    try:
+        return pd.to_datetime(str(stamp)).strftime("%I:%M %p").lstrip("0")
+    except (TypeError, ValueError):
+        return ""
+
+
+def _last_times(rows, name_key: str, time_key: str) -> dict[str, str]:
+    """Executive name -> the latest time a lot was given to them."""
+    out: dict[str, str] = {}
+    for r in rows:
+        n, t = str(r.get(name_key) or "").strip() or "No name", str(r.get(time_key) or "")
+        if t and t > out.get(n, ""):
+            out[n] = t
+    return out
+
+
+def _by_executive(df: pd.DataFrame, box_col: str, last: dict[str, str] | None = None) -> None:
+    """One small table per executive name (27 Nov: executive level, not table level), headed by the name
+    and the time the last lot was given to them (table numbers are in the rows)."""
     if "Executive" not in df.columns:
         st.dataframe(common.numbered(df), hide_index=True, width="stretch")
         return
     d = df.copy()
     d["Executive"] = [str(x).strip() or "No name" for x in d["Executive"].fillna("")]
     for name, part in d.groupby("Executive", sort=True):
-        tables = ", ".join(sorted({str(t) for t in part["Table"] if str(t).strip()}, key=lambda t: (len(t), t)))
         boxes = sum(pa._num(x) or 0 for x in part[box_col])
-        st.markdown(f"<div class='pa-ex'>{name}<span>Table {tables or '—'} · {len(part)} SKU"
+        at = _clock((last or {}).get(name, ""))
+        st.markdown(f"<div class='pa-ex'>{name}<span>{'Last given ' + at + ' · ' if at else ''}{len(part)} SKU"
                     f"{'' if len(part) == 1 else 's'} · {boxes:g} boxes</span></div>", unsafe_allow_html=True)
         st.dataframe(common.numbered(part.drop(columns=["Executive"]).reset_index(drop=True)), hide_index=True,
                      width="stretch")
@@ -184,7 +202,7 @@ def render(user: User, nxt: str = "") -> None:
     rows = _pending()
     if rows:
         st.markdown(f"#### Added · {len(rows)} to save")
-        _by_executive(_preview_df(rows), "Number of boxes")
+        _by_executive(_preview_df(rows), "Number of boxes", _last_times(rows, "executive", "added_at"))
         c = st.columns([1, 1, 3])
         if c[0].button("Save", type="primary", icon=":material/save:", width="stretch", key="pa_save"):
             _confirm(rows, user)
@@ -292,7 +310,7 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
             if missing:
                 st.toast("Still to fill: " + ", ".join(missing), icon="⚠️")
             else:
-                _pending().append(entry)
+                _pending().append({**entry, "added_at": config.now_iso()})
                 for x in (f"{k}_n", f"{k}_t", "pa_parent"):    # back to the fruits for the next SKU
                     st.session_state.pop(x, None)
                 st.session_state["pa_top"] = True
@@ -305,7 +323,7 @@ def _entry_card(parent: str, city: str, day, parent_tab, saved, brand_tab=None, 
                 st.toast("Nothing to save yet. Still to fill: " + ", ".join(missing), icon="⚠️")
             else:
                 if not missing:
-                    _pending().append(entry)
+                    _pending().append({**entry, "added_at": config.now_iso()})
                     for x in (f"{k}_n", f"{k}_t"):
                         st.session_state.pop(x, None)
                 _confirm(_pending(), user, nxt)
@@ -316,4 +334,7 @@ def _saved_today(saved: pd.DataFrame, city: str, day) -> None:
     if v.empty:
         return
     st.markdown(f"#### Saved · {day.strftime('%d %b')} · {len(v)}")
-    _by_executive(v.drop(columns=["Date", "City"]), "Boxes")
+    d = saved[(saved["production_date"].astype(str).str[:10] == day.isoformat())
+              & (saved["city"].astype(str) == city)] if "saved_at" in saved.columns else saved.iloc[0:0]
+    _by_executive(v.drop(columns=["Date", "City"]), "Boxes",
+                  _last_times(d.to_dict("records"), "executive", "saved_at"))
