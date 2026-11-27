@@ -7,7 +7,7 @@ from core import auth, config, indents, masters
 from core.sheets import SheetError, get_backend
 from core.schema import role_name
 
-ACCENT = "#1c6b49"
+ACCENT = "#1f5fbf"   # 27 Nov: Ocean Glass look (was green #1c6b49)
 
 # Filled in by app.py so pages can call st.switch_page(PAGES["indent"]).
 PAGES: dict[str, object] = {}
@@ -164,6 +164,119 @@ _CSS = f"""
 """
 
 
+# 27 Nov (user): "Ocean Glass" look. Styling only: colours, shapes, type and glass panels.
+# It comes after _CSS and only overrides how things look; no rule here hides, moves or
+# resizes anything, so taking this block out of inject_css() gives the old look back.
+_THEME_CSS = """
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700&display=swap');
+  :root { --og-acc:#1f5fbf; --og-on:#17202e; --og-ov:#4b5870; --og-line:rgba(23,32,46,.08);
+      --og-g:rgba(255,255,255,.55); --og-gb:rgba(255,255,255,.82); --og-edge:rgba(31,95,191,.18);
+      --og-sh:rgba(20,50,110,.13); --og-card:rgba(255,255,255,.9);
+      --og-spring:cubic-bezier(.34,1.56,.64,1); }
+
+  /* ---- page: soft blue backdrop, rounded type ---- */
+  .stApp { background:
+      radial-gradient(760px 540px at 6% 0%, #cfe0ff 0, transparent 60%),
+      radial-gradient(640px 520px at 100% 16%, #d6efff 0, transparent 60%),
+      radial-gradient(760px 600px at 55% 100%, #e0e4ff 0, transparent 60%), #f3f7fc !important;
+      background-attachment: fixed !important;
+      font-family: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stMain"] { background: transparent !important; }
+  .stApp button, .stApp input, .stApp textarea, [data-testid="stMarkdownContainer"] p,
+  [data-testid="stMarkdownContainer"] li, [data-testid="stWidgetLabel"] p {
+      font-family: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5, .mt-h, .mt-tile .val {
+      font-family: 'Outfit', 'Nunito Sans', system-ui, sans-serif; letter-spacing: -.01em; }
+
+  /* ---- sidebar: one glass panel ---- */
+  [data-testid="stSidebar"] { background: var(--og-g) !important; border-right: 1px solid var(--og-gb);
+      -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
+      box-shadow: 0 10px 30px var(--og-sh); }
+  [data-testid="stSidebar"] > div, [data-testid="stSidebarContent"] { background: transparent !important; }
+  [data-testid="stSidebarNav"] a { border-radius: 999px; }
+  [data-testid="stSidebarNav"] a[aria-current="page"] { background: var(--og-acc) !important; }
+  [data-testid="stSidebarNav"] a[aria-current="page"] span { color: #ffffff !important; }
+
+  /* ---- buttons: pill shaped, a springy press ---- */
+  .stButton button, .stDownloadButton button, .stFormSubmitButton button, [data-testid="stLinkButton"] a {
+      border-radius: 999px !important; font-weight: 700;
+      transition: transform .35s var(--og-spring), box-shadow .2s ease; }
+  .stButton button:active, .stDownloadButton button:active, .stFormSubmitButton button:active { transform: scale(.96); }
+  [data-testid="stBaseButton-primary"], [data-testid="stBaseButton-primaryFormSubmit"] {
+      box-shadow: 0 8px 22px rgba(31,95,191,.28), inset 0 1px 0 rgba(255,255,255,.35); }
+  [data-testid="stBaseButton-secondary"], [data-testid="stBaseButton-secondaryFormSubmit"] {
+      background: var(--og-g) !important; border: 1px solid var(--og-edge) !important;
+      box-shadow: 0 4px 14px rgba(20,50,110,.08); }
+  .st-key-home_po_btn button { background: #17479a !important; border-color: #17479a !important; color: #fff !important; }
+  .st-key-home_po_btn button:hover { background: #123a80 !important; }
+
+  /* ---- pills (customers, stores, cities): light glass, blue when chosen ---- */
+  button[data-variant="pills"] { background: var(--og-g) !important; color: var(--og-on) !important;
+      border: 1px solid var(--og-edge) !important; box-shadow: 0 2px 8px rgba(20,50,110,.08) !important;
+      transition: transform .35s var(--og-spring), box-shadow .2s ease; }
+  button[data-variant="pills"]:hover:not([aria-disabled="true"]):not(:disabled) {
+      transform: translateY(-1px); box-shadow: 0 6px 16px rgba(20,50,110,.16) !important; border-color: var(--og-acc) !important; }
+  button[data-variant="pills"]:active { transform: scale(.95); }
+  button[data-variant="pills"][aria-checked="true"] { background: var(--og-acc) !important; color: #ffffff !important;
+      border: 1px solid var(--og-acc) !important; box-shadow: 0 6px 16px rgba(31,95,191,.3) !important; }
+
+  /* ---- segmented control (delivery day): glass bar, white chosen segment ---- */
+  [role="radiogroup"]:has(> button[data-variant="segmented_control"]) { background: var(--og-g);
+      border: 1px solid var(--og-gb); border-radius: 999px;
+      -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
+      box-shadow: 0 4px 14px var(--og-sh); }
+  button[data-variant="segmented_control"] { border-radius: 999px !important; color: var(--og-ov) !important; }
+  button[data-variant="segmented_control"]:hover { background: rgba(255,255,255,.7) !important; color: var(--og-on) !important; }
+  button[data-variant="segmented_control"][aria-checked="true"] { background: #ffffff !important; color: var(--og-on) !important;
+      box-shadow: 0 2px 10px var(--og-sh); }
+
+  /* ---- tiles: tinted glass instead of dark boxes ---- */
+  .mt-tile { background: var(--og-g); color: var(--og-on); border: 1px solid var(--og-gb); border-radius: 22px;
+      -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
+      box-shadow: 0 10px 30px var(--og-sh); }
+  .mt-tile .lbl { color: inherit; font-weight: 700; }
+  .mt-tile .sub { color: inherit; }
+  .mt-tile .val { font-weight: 600; }
+  .mt-tile.good .val, .mt-tile.warn .val, .mt-tile.bad .val, .mt-tile.info .val { color: inherit; }
+  .mt-tile.info { background: rgba(221,233,251,.72); color: #123a80; }
+  .mt-tile.good { background: rgba(220,243,229,.72); color: #0b5a3c; }
+  .mt-tile.warn { background: rgba(253,235,203,.76); color: #7a4400; }
+  .mt-tile.bad  { background: rgba(253,226,225,.8);  color: #8a1c1c; }
+
+  /* ---- rows, chips and cards the app draws itself ---- */
+  .mt-line, .mt-crow { border: 1px solid var(--og-line); border-radius: 16px; background: var(--og-card);
+      box-shadow: 0 2px 8px rgba(20,50,110,.05); }
+  .mt-line.done, .mt-crow.done { border-left-color: var(--og-line); }
+  .mt-line .st.done, .mt-chip.done { background: #dcf3e5; color: #0b5a3c; border-color: transparent; }
+  .mt-line .st.open, .mt-chip.open { background: #fdebcb; color: #7a4400; border-color: transparent; }
+  .mt-chip.none { background: #e6ebf3; color: #3c4c68; border-color: transparent; }
+  .mt-chip.cnl { background: #fde2e1; color: #8a1c1c; border-color: transparent; }
+  .mt-line .ct, .mt-line .cnt, .mt-crow .cnt, .mt-h span { color: var(--og-ov); }
+  .mt-bar { background: var(--og-line); }
+  .mt-strip { border-color: var(--og-edge); background: rgba(221,233,251,.5); border-radius: 16px; }
+  .mt-cust { border-color: var(--og-gb); border-radius: 22px; background: var(--og-card); box-shadow: 0 10px 30px var(--og-sh); }
+  [class*="st-key-mtcard"] { border-radius: 22px !important; background: var(--og-card); box-shadow: 0 10px 30px var(--og-sh); }
+  .st-key-mt_delivery_card { background: var(--og-card); border-radius: 22px; box-shadow: 0 10px 30px var(--og-sh); }
+
+  /* ---- Streamlit's own boxes: rounder, lighter ---- */
+  [data-testid="stExpander"] details { border-radius: 18px; background: var(--og-card); border-color: var(--og-gb); }
+  [data-testid="stDataFrame"], [data-testid="stTable"] { border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(20,50,110,.08); }
+  [data-testid="stAlert"] { border-radius: 16px; }
+  [data-testid="stFileUploaderDropzone"] { border-radius: 16px; background: rgba(255,255,255,.6); border: 1.5px dashed #9fb0c8; }
+  [data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="select"] > div, [data-baseweb="textarea"] { border-radius: 12px !important; }
+  [data-testid="stForm"] { background: var(--og-g); border: 1px solid var(--og-gb) !important; border-radius: 28px;
+      -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
+      box-shadow: 0 10px 30px var(--og-sh); }
+  [data-testid="stSidebar"] [data-testid="stForm"] { background: transparent; border: 0 !important; box-shadow: none;
+      -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stButton button, button[data-variant="pills"] { transition: none !important; } }
+</style>
+"""
+
+
 # 27 Nov (user): the GitHub / Fork buttons Streamlit shows on top are for Creators only.
 _NO_GITHUB = ("<style>[data-testid='stToolbarActions'], [data-testid='stToolbarActionButton'], "
               ".stToolbarActions, .stAppToolbar a[href*='github.com'] {display: none !important;}</style>")
@@ -173,7 +286,7 @@ _GITHUB_OK = ("<style>[data-testid='stToolbarActions'], .stToolbarActions {displ
 
 
 def inject_css() -> None:
-    st.markdown(_CSS + _NO_GITHUB, unsafe_allow_html=True)
+    st.markdown(_CSS + _THEME_CSS + _NO_GITHUB, unsafe_allow_html=True)
 
 
 def numbered(df):

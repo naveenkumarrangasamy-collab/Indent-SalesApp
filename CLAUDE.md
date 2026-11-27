@@ -763,6 +763,18 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   New 547–564, repacking Tray) and IN-086 → "1Tray - Blueberry", Tray, "1 Tray". `lots.tray_lot` + secret
   `tray_customers` (default ["GT Sale"]) turn any Box lot of those customers into Tray on read (`indents.prepare`).
 
+### 27 Nov night: "Ocean Glass" look (branch `ui-ocean-glass`, NOT on main yet; user picked it from mockups)
+
+- **Styling only**: `.streamlit/config.toml` theme colours (blue #1f5fbf on #f3f7fc), `common.ACCENT`, and one
+  extra CSS block `common._THEME_CSS` added after `_CSS` in `inject_css()` (soft blue backdrop, glass sidebar,
+  pill buttons, light glass pills / segmented control, tinted glass tiles, rounded cards, Outfit + Nunito Sans).
+  No page logic, layout or data code changed. To go back: drop `_THEME_CSS` from `inject_css()` and restore the
+  four theme colours.
+- Not done (would need custom components, user to decide): menu on top, phone tab bar, sliding "lens" motion,
+  dark theme. Page-local CSS (tracker, pre-production, batching plan) and the e-mail colours are unchanged.
+- Written without Streamlit in the Claude workspace: check on a laptop and an iPhone before merging to main.
+- Mockups: canvas "MT Indent — UI design directions" (rows "Ocean Glass").
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.
