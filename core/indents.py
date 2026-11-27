@@ -364,7 +364,8 @@ def validate(header: IndentHeader, lines: list[IndentLine], m: Masters,
     if header.expected_time and not start <= header.expected_time <= end:
         errors.append(f"Expected delivery time must be between {start} and {end}.")
     if header.city and header.customer and header.store:
-        if header.store not in m.stores_for(header.city, header.customer):
+        direct = config.is_direct_facility(header.facility) and header.store == header.facility
+        if not direct and header.store not in m.stores_for(header.city, header.customer):
             errors.append(f"Store '{header.store}' is not mapped to {header.customer} in {header.city}.")
     if not lines:
         errors.append("Add at least one item.")
