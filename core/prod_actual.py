@@ -374,6 +374,33 @@ def update_entries(backend, changes: dict[str, dict], user: str) -> int:
     return n
 
 
+def delete_entries(backend, ids: list[str]) -> int:
+    """27 Nov: take saved lines out entirely (an item cannot stay at 0 boxes)."""
+    want = {str(i) for i in ids if str(i)}
+    if not want:
+        return 0
+    values = backend.read_values(PREPROD_ENTRIES)
+    if not values:
+        return 0
+    head = [str(h).strip().casefold() for h in values[0]]
+    col = head.index("entry_id") if "entry_id" in head else 0
+    rows = [n for n, r in enumerate(values[1:], start=2) if len(r) > col and str(r[col]).strip() in want]
+    for n in sorted(rows, reverse=True):          # bottom first, so the row numbers above stay right
+        backend.delete_rows(PREPROD_ENTRIES, n, n)
+    if rows:
+        for fn in ("tracking", "cache"):
+            try:
+                if fn == "tracking":
+                    from core import tracking_sheet
+                    tracking_sheet.publish(backend)
+                else:
+                    from core import indents
+                    indents.clear_cache()
+            except Exception:  # noqa: BLE001
+                pass
+    return len(rows)
+
+
 VIEW = {"production_date": "Date", "city": "City", "parent_sku": "Fruit", "origin": "Origin", "variety": "Variety",
         "brand": "Brand", "size": "Spec", "box_kg": "Box kg", "pcs_per_box": "Pcs/box", "executive": "Executive",
         "table_no": "Table", "boxes_moved": "Boxes", "stock_type": "Stock", "saved_by": "By"}

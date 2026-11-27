@@ -140,7 +140,8 @@ def _preview_df(rows: list[dict]) -> pd.DataFrame:
 
 @st.dialog("Save these entries?", width="large")
 def _confirm(rows: list[dict], user: User, nxt: str = "") -> None:
-    st.dataframe(common.numbered(_preview_df(rows)), hide_index=True, width="stretch")
+    st.dataframe(common.numbered(_preview_df(rows)).rename(columns={"#": "No"}), hide_index=True,
+                 width="stretch")
     c1, c2 = st.columns(2)
     if c1.button("Save", type="primary", icon=":material/save:", width="stretch", key="pa_ok"):
         try:
@@ -197,6 +198,15 @@ def _added(rows: list[dict]) -> None:
                     r["table_no"] = t
                 if b and b != (pa._num(r.get("boxes_moved")) or 0):
                     r["boxes_moved"] = b
+                if not b:                 # an item cannot be 0: delete it or edit it
+                    z = st.columns([3, 1.2, 1.2], vertical_alignment="center")
+                    z[0].error(f"Line {n}: boxes cannot be 0. Delete the item or edit it?")
+                    if z[1].button("🗑 Delete the item", key=f"pa_rz_{rid}", width="stretch"):
+                        rows.remove(r)
+                        st.rerun()
+                    if z[2].button("✎ Edit the item", key=f"pa_re_{rid}", width="stretch"):
+                        st.session_state.pop(f"pa_rb_{rid}", None)      # back to the last number
+                        st.rerun()
                 if c[3].button("✕", key=f"pa_rx_{rid}", help="Remove this line", width="stretch"):
                     rows.remove(r)
                     st.rerun()
@@ -422,7 +432,7 @@ def _saved_today(saved: pd.DataFrame, city: str, day, exec_tab=None, user=None) 
         return "" if v is None or (isinstance(v, float) and v != v) else str(v).strip()
     EX, TB, BX = "Executive name ✎", "Table ✎", "Boxes ✎"
     base = pd.DataFrame({
-        "#": range(1, len(recs) + 1),
+        "No": range(1, len(recs) + 1),
         EX: [txt(r.get("executive")) or None for r in recs],
         "Fruit": [txt(r.get("parent_sku")) for r in recs], "Origin": [txt(r.get("origin")) for r in recs],
         "Variety": [txt(r.get("variety")) for r in recs], "Brand name": [txt(r.get("brand")) for r in recs],
@@ -446,35 +456,76 @@ def _saved_today(saved: pd.DataFrame, city: str, day, exec_tab=None, user=None) 
                        BX: st.column_config.NumberColumn(BX, min_value=0, step=1, format="%g")})
     st.caption("To correct a saved line, change its **Executive name**, **Table** or **Boxes** in the table "
                "(the ✎ columns), then press Save changes. A new name is added with ＋ Add name in the card above.")
-    changes, bad = {}, []
+    changes, bad, zero, notes = {}, [], {}, []
     for k, eid in enumerate(ids):
-        ch = {}
+        ch, what = {}, []
         if (out[EX].iloc[k] or "") != (base[EX].iloc[k] or ""):
             ch["executive"] = out[EX].iloc[k] or ""
+            what.append(f"Executive {base[EX].iloc[k] or '—'} → {ch['executive'] or '—'}")
         if (out[TB].iloc[k] or "") != (base[TB].iloc[k] or ""):
             ch["table_no"] = out[TB].iloc[k] or ""
+            what.append(f"Table {base[TB].iloc[k] or '—'} → {ch['table_no'] or '—'}")
         b = pa._num(out[BX].iloc[k]) or 0
         if b != base[BX].iloc[k]:
             ch["boxes_moved"] = b
-        if ch:
-            if not eid or not (pa._num(out[BX].iloc[k]) and out[TB].iloc[k]):
-                bad.append(k + 1)
-            else:
-                changes[eid] = ch
-    if changes or bad:
+            what.append(f"Boxes {base[BX].iloc[k]:g} → {b:g}")
+        if not ch:
+            continue
+        name = f"No {k + 1} · " + " · ".join(x for x in (base["Fruit"].iloc[k], base["Variety"].iloc[k],
+                                                          base["Spec"].iloc[k]) if x)
+        if not eid or not out[TB].iloc[k]:
+            bad.append(k + 1)
+        elif not b:                      # an item cannot be 0: delete it or go back and edit it
+            zero[eid] = name
+        else:
+            changes[eid] = ch
+            notes.append(f"**{name}**: " + ", ".join(what))
+    if changes or bad or zero:
         c = st.columns([1.2, 1, 3], vertical_alignment="center")
         if bad:
-            c[2].warning(f"Line {', '.join(map(str, bad))}: the table and the boxes cannot be empty.")
-        if c[0].button(f"Save changes · {len(changes)}", type="primary", icon=":material/save:",
-                       key="pa_saved_ok", disabled=not changes or bool(bad), width="stretch"):
-            try:
-                n = pa.update_entries(get_backend(), changes, getattr(user, "email", ""))
-            except SheetError as e:
-                st.error(f"Not saved. {e}")
-                return
-            st.session_state["pa_saved_n"] = nonce + 1
-            common.flash("success", f"{n} line(s) corrected.")
-            st.rerun()
+            c[2].warning(f"No {', '.join(map(str, bad))}: the table cannot be empty.")
+        if c[0].button(f"Save changes · {len(changes) + len(zero)}", type="primary", icon=":material/save:",
+                       key="pa_saved_ok", disabled=bool(bad) or not (changes or zero), width="stretch"):
+            _sure(changes, notes, zero, getattr(user, "email", ""), nonce)
         if c[1].button("Undo", key="pa_saved_undo", width="stretch"):
             st.session_state["pa_saved_n"] = nonce + 1
+            st.rerun()
+
+
+@st.dialog("Are you sure?")
+def _sure(changes: dict, notes: list[str], zero: dict, email: str, nonce: int) -> None:
+    """27 Nov (user): every correction of a saved line is confirmed; a line set to 0 boxes is either
+    deleted entirely or taken back to be edited — it never stays at 0."""
+    if zero:
+        st.error("Boxes cannot be 0. Delete the item, or go back and edit it.")
+        for name in zero.values():
+            st.markdown(f"- **{name}**: boxes changed to 0")
+    if notes:
+        st.markdown("These lines will be changed:" if not zero else "Also changed:")
+        for n in notes:
+            st.markdown(f"- {n}")
+
+    def apply(delete: bool) -> None:
+        try:
+            backend = get_backend()
+            n = pa.update_entries(backend, changes, email) if changes else 0
+            d = pa.delete_entries(backend, list(zero)) if delete and zero else 0
+        except SheetError as e:
+            st.error(f"Not saved. {e}")
+            return
+        st.session_state["pa_saved_n"] = nonce + 1
+        common.flash("success", " · ".join(x for x in (f"{n} line(s) changed" if n else "",
+                                                        f"{d} item(s) deleted" if d else "") if x) or "Nothing changed.")
+        st.rerun()
+    c1, c2 = st.columns(2)
+    if zero:
+        if c1.button("🗑 Delete the item" + ("s" if len(zero) > 1 else ""), type="primary", width="stretch",
+                     key="pa_sure_del"):
+            apply(True)
+        if c2.button("✎ Edit the item" + ("s" if len(zero) > 1 else ""), width="stretch", key="pa_sure_edit"):
+            st.rerun()          # back to the table: the number is still there to correct
+    else:
+        if c1.button("Yes, change", type="primary", width="stretch", key="pa_sure_yes"):
+            apply(False)
+        if c2.button("Back", width="stretch", key="pa_sure_back"):
             st.rerun()
