@@ -223,6 +223,13 @@ def _filters(summ: pd.DataFrame) -> pd.DataFrame:
         st.session_state["mi_city_keep"] = c or "All"
         if c and c != "All":
             view = view[view["city"] == c]
+    one_city = sorted(view["city"].unique()) if len(cities) > 1 else cities
+    facs = config.facilities(one_city[0]) if len(one_city) == 1 else []
+    if facs and "facility" in view.columns:     # 27 Nov: each facility's indents listed apart
+        keep_f = st.session_state.get("mi_fac_keep", facs[0])
+        fc = st.pills("Facility", facs, default=keep_f if keep_f in facs else facs[0], key="mi_fac") or facs[0]
+        st.session_state["mi_fac_keep"] = fc
+        view = view[view["facility"] == fc]
     counts = view["customer"].value_counts()
     opts = [f"All · {len(view)}"] + [f"{k} · {n}" for k, n in sorted(counts.items())]
     keep = st.session_state.get("mi_cust_keep", "")      # survives saves (full reruns)

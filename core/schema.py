@@ -50,7 +50,7 @@ TABS: dict[str, list[str]] = {
     INDENT_LINES: ["indent_id", "version", "status", "submitted_at", "submitted_by",
                    "delivery_date", "city", "customer", "store", "expected_time",
                    "parent_sku", "customer_sku_name", "variety", "lot", "lot_size", "qty",
-                   "price", "amount", "change_note"],
+                   "price", "amount", "change_note", "facility"],
     CHANGE_LOG: ["changed_at", "indent_id", "from_version", "to_version", "changed_by",
                  "change_type", "customer_sku_name", "field", "old_value", "new_value"],
     PO_FREEZE: ["indent_id", "version", "po_file_name", "po_customer", "po_store",

@@ -171,7 +171,12 @@ def _duplicate_notice(hdr) -> bool:
 
 def _my_stores(m: Masters, city: str, customer: str) -> list[str]:
     """Stores of this city + customer the user may use (store-limited sales users)."""
+    fac = _facility(city)
+    if config.is_direct_facility(fac):      # Spar / Fusion Huskur: the facility is the delivery point
+        return [fac] if customer else []
     stores = m.stores_for(city, customer) if city and customer else []
+    names = {" ".join(x.split()).casefold() for x in config.facilities(city)}
+    stores = [x for x in stores if " ".join(x.split()).casefold() not in names]
     u = st.session_state.get("user") or {}
     allowed = {x.casefold() for x in (u.get("stores") or [])}
     if u.get("role") not in ("owner", "owner_full") and allowed:
@@ -184,6 +189,15 @@ def _my_stores(m: Masters, city: str, customer: str) -> list[str]:
 
 
 NEW_PARTY = "mt_new_party"
+
+
+def _facility(city: str) -> str:
+    """The facility chosen on Create indent ('' when the city has none)."""
+    facs = config.facilities(city)
+    if not facs:
+        return ""
+    cur = state.header().facility
+    return cur if cur in facs else facs[0]
 
 
 def _same(a, b) -> bool:
@@ -304,9 +318,14 @@ def _on_pick(key: str, field: str) -> None:
         return
     state.set_header_field(field, new)
     if field == "city":
+        state.set_header_field("facility", "")
         state.set_header_field("customer", "")
         state.set_header_field("store", "")
         _clear_items("City")
+    elif field == "facility":
+        state.set_header_field("customer", "")
+        state.set_header_field("store", "")
+        _clear_items("Facility")
     elif field == "customer":
         state.set_header_field("store", "")
         _clear_items("Customer")
@@ -347,6 +366,8 @@ def render(m: Masters) -> bool:
                 "<div class='mt-strip'>"
                 f"<span><b>Delivery</b>{escape(_fmt_day(hdr.delivery_date))}</span>"
                 f"<span><b>City</b>{escape(hdr.city)}</span>"
+                + (f"<span><b>Facility</b>{escape(config.facility_of(hdr.city, hdr.facility))}</span>"
+                   if config.facilities(hdr.city) else "") +
                 f"<span><b>Customer</b>{escape(hdr.customer)}</span>"
                 f"<span><b>Store</b>{escape(hdr.store)}</span></div>", unsafe_allow_html=True)
             st.caption("🔒 Delivery day, city, customer and store of a saved indent cannot be changed.")
@@ -385,6 +406,20 @@ def render(m: Masters) -> bool:
                 st.markdown(f"<span class='mt-muted'>City</span>&nbsp; <b>{cities[0]}</b>",
                             unsafe_allow_html=True)
 
+            # 2b. Facility (27 Nov; only cities that have facilities)
+            facs = config.facilities(hdr.city)
+            if facs:
+                if hdr.facility not in facs:
+                    state.set_header_field("facility", facs[0])
+                    hdr = state.header()
+                k = _k("facility")
+                st.pills("Facility", facs, default=hdr.facility, key=k, on_change=_on_pick,
+                         args=(k, "facility"))
+            elif hdr.facility:
+                state.set_header_field("facility", "")
+                hdr = state.header()
+            direct = config.is_direct_facility(hdr.facility)
+
             # 3. Customer
             customers = _my_customers(m, hdr.city)
             if hdr.customer and hdr.customer not in customers and ind["mode"] == "edit":
@@ -392,11 +427,16 @@ def render(m: Masters) -> bool:
             k = _k("customer")
             st.pills("Customer", customers, default=hdr.customer or None, key=k, on_change=_on_pick,
                      args=(k, "customer"), disabled=not hdr.city)
-            if hdr.city and ind["mode"] != "edit":
+            if hdr.city and ind["mode"] != "edit" and not direct:
                 _new_party_box(hdr)
 
             # 4. Store (shows which ones already have an indent that day)
-            if hdr.customer:
+            if direct:      # no store step: the facility is the delivery point
+                want = hdr.facility if hdr.customer else ""
+                if hdr.store != want:
+                    state.set_header_field("store", want)
+                    hdr = state.header()
+            elif hdr.customer:
                 stores = _my_stores(m, hdr.city, hdr.customer)
                 if hdr.store and hdr.store not in stores and ind["mode"] == "edit":
                     stores = stores + [hdr.store]

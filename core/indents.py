@@ -195,6 +195,9 @@ def prepare(df: pd.DataFrame) -> pd.DataFrame:
     for c in ("qty", "price", "amount"):
         df[c] = df[c].map(to_number)
     df["lot"] = df["lot"].map(normalize_lot)  # rows saved as "gms" read as "Pack"
+    if "facility" not in df.columns:
+        df["facility"] = ""
+    df["facility"] = df["facility"].fillna("").astype(str)
     return df
 
 
@@ -238,7 +241,7 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
     """One row per indent (current version) for the My indents table."""
     cols = ["indent_id", "version", "status", "delivery_date", "city", "customer", "store",
             "expected_time", "lines", "total_amount", "last_edited_at", "last_edited_by",
-            "created_by", "created_at", "can_edit"]
+            "created_by", "created_at", "can_edit", "facility"]
     if df.empty:
         return pd.DataFrame(columns=cols)
     first = (df.sort_values(["indent_id", "version", "_row"])
@@ -249,12 +252,13 @@ def summary(df: pd.DataFrame) -> pd.DataFrame:
               .agg(version=("version", "first"), status=("status", "first"),
                    delivery_date=("delivery_date", "first"), city=("city", "first"),
                    customer=("customer", "first"), store=("store", "first"),
-                   expected_time=("expected_time", "first"),
+                   expected_time=("expected_time", "first"), facility=("facility", "first"),
                    lines=("customer_sku_name", "count"), total_amount=("amount", "sum"),
                    last_edited_at=("submitted_at", "first"),
                    last_edited_by=("submitted_by", "first")))
     out = agg.join(first).reset_index()
     out["total_amount"] = out["total_amount"].round(2)
+    out["facility"] = [config.facility_of(c, f) for c, f in zip(out["city"], out["facility"])]
     out["can_edit"] = (pd.Series([can_edit(d, customer=c) for d, c in zip(out["delivery_date"], out["customer"])],
                                  index=out.index, dtype=bool)
                        & ~out["status"].isin([STATUS_FROZEN, STATUS_LOCKED, STATUS_CANCELLED]))
@@ -327,7 +331,8 @@ def snapshot(df: pd.DataFrame, indent_id: str, version: int | None = None) -> In
         return None
     r = sub.iloc[0]
     header = IndentHeader(delivery_date=r["delivery_date"], city=r["city"], customer=r["customer"],
-                          store=r["store"], expected_time=r["expected_time"])
+                          store=r["store"], expected_time=r["expected_time"],
+                          facility=str(r.get("facility", "") or ""))
     lines = [IndentLine(parent_sku=x["parent_sku"], customer_sku_name=x["customer_sku_name"],
                         variety=x["variety"], lot=x["lot"], qty=to_number(x["qty"]),
                         price=to_number(x["price"]))

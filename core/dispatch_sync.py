@@ -25,7 +25,8 @@ import pandas as pd
 
 from core import config
 
-WIDTH = 13          # A..M
+WIDTH = 14          # A..N once the tab has its Facility column (27 Nov); A..M before that
+FAC = 2             # Facility sits after City (column C)
 EPOCH = dt.date(1899, 12, 30)
 WHITE = (1.0, 1.0, 1.0)
 COLOURS = {"PO lower": (0.973, 0.788, 0.788), "Not on PO": (0.973, 0.788, 0.788),
@@ -113,11 +114,12 @@ def to_rows(view: pd.DataFrame) -> list[dict]:
     """Batching view (with 'Delivery date', with_po columns) -> [{key, values (13), status}]."""
     out = []
     for r in view.to_dict("records"):
-        vals = [str(r["Delivery date"])[:10], r["City"], r["Customer"], r["Delivery point"], r.get("Parent SKU", ""),
+        vals = [str(r["Delivery date"])[:10], r["City"], r.get("Facility", ""), r["Customer"], r["Delivery point"],
+                r.get("Parent SKU", ""),
                 r["Customer SKU Name"], r.get("Variety", ""), r.get("Lot", ""), r.get("Lot Size", ""),
                 r.get("Spec", ""), _num(r.get("Indent qty")), _num(r.get("PO qty")), _num(r.get("Difference"))]
         vals = ["" if v is None or (isinstance(v, float) and pd.isna(v)) else v for v in vals]
-        out.append({"key": key(vals[0], vals[2], vals[3], vals[5], vals[6]), "values": vals,
+        out.append({"key": key(vals[0], vals[3], vals[4], vals[6], vals[7]), "values": vals,
                     "status": r.get("Status", "")})
     return out
 
@@ -143,7 +145,7 @@ def plan(existing: list[list], new: list[dict], day_serials: set[int], city_set:
         r = list(r) + [""] * (WIDTH - len(r))
         if any(str(x).strip() for x in r[:WIDTH]):
             last_used = row
-            k = key(r[0], r[2], r[3], r[5], r[6])
+            k = key(r[0], r[3], r[4], r[6], r[7])
             if k[0] is not None and k not in by_key:
                 by_key[k] = row
     update, append, seen = [], [], set()
@@ -161,11 +163,11 @@ def plan(existing: list[list], new: list[dict], day_serials: set[int], city_set:
         if k in seen or k[0] not in day_serials:
             continue
         old = list(existing[row - first_data_row]) + [""] * WIDTH
-        if _cf(old[1]) not in city_set or _same(old[10], 0):
+        if _cf(old[1]) not in city_set or _same(old[11], 0):
             continue
-        po = old[11]
+        po = old[12]
         has_po = str(po).strip() != ""
-        vals = [_date_text(k[0])] + list(old[1:10]) + [0, po, _num(po) if has_po else ""]
+        vals = [_date_text(k[0])] + list(old[1:11]) + [0, po, _num(po) if has_po else ""]
         update.append((row, vals, "Not on indent" if has_po and not _same(po, 0) else ""))
     append.sort(key=lambda a: (str(a[0][0]), _cf(a[0][2]), _cf(a[0][3]), _cf(a[0][4]), _cf(a[0][5])))
     return {"update": update, "append_at": last_used + 1, "append": append}
@@ -194,6 +196,10 @@ def build(lines: pd.DataFrame, m, days: list[str]) -> list[dict]:
     for day, part in cur.groupby("delivery_date", sort=True):
         v = with_po(batching(part, m), po_qty, po_ids, [e for e in extras if e["day"] == day])
         v.insert(0, "Delivery date", str(day)[:10])
+        fac = {(_cf(c), _cf(s)): config.facility_of(ci, f) for ci, c, s, f in
+               zip(part["city"], part["customer"], part["store"], part.get("facility", [""] * len(part)))}
+        v["Facility"] = [fac.get((_cf(c), _cf(s))) or config.facility_of(ci)
+                         for ci, c, s in zip(v["City"], v["Customer"], v["Delivery point"])]
         out += to_rows(v)
     return out
 
@@ -203,23 +209,40 @@ def _a1(row: int, col: int) -> str:
     return rowcol_to_a1(row, col)
 
 
-def write(ws, p: dict) -> int:
-    """Apply a plan to the worksheet: values with USER_ENTERED (dates become dates), A-M only."""
+def has_facility(head: list) -> bool:
+    """True when the tab's header row has the Facility column after City (column C)."""
+    return len(head) > FAC and _cf(head[FAC]) == "facility"
+
+
+def widen(rows: list[list]) -> list[list]:
+    """Old layout (A-M, no Facility) -> the 14 values used here (blank facility)."""
+    out = []
+    for r in rows:
+        r = list(r)
+        out.append(r[:FAC] + [""] + r[FAC:] if len(r) > FAC else r)
+    return out
+
+
+def write(ws, p: dict, fac: bool = True) -> int:
+    """Apply a plan to the worksheet: values with USER_ENTERED (dates become dates), only the app's
+    columns (A-N with the Facility column, A-M on a tab that has none yet)."""
+    last = "N" if fac else "M"
+    cut = (lambda v: v) if fac else (lambda v: v[:FAC] + v[FAC + 1:])
     data, fmts = [], []
     for row, vals, status in p["update"]:
-        data.append({"range": f"A{row}:M{row}", "values": [vals]})
+        data.append({"range": f"A{row}:{last}{row}", "values": [cut(vals)]})
         fmts.append((row, row, status))
     if p["append"]:
         start = p["append_at"]
         end = start + len(p["append"]) - 1
         if ws.row_count < end:
             ws.add_rows(end - ws.row_count + 50)
-        data.append({"range": f"A{start}:M{end}", "values": [v for v, _ in p["append"]]})
+        data.append({"range": f"A{start}:{last}{end}", "values": [cut(v) for v, _ in p["append"]]})
         fmts += [(start + i, start + i, s) for i, (_, s) in enumerate(p["append"])]
     if not data:
         return 0
     ws.batch_update(data, value_input_option="USER_ENTERED")
-    ws.batch_format([{"range": f"A{a}:M{b}",
+    ws.batch_format([{"range": f"A{a}:{last}{b}",
                       "format": {"backgroundColor": dict(zip(("red", "green", "blue"), COLOURS.get(s, WHITE)))}}
                      for a, b, s in fmts])
     return len(data)
@@ -242,10 +265,16 @@ def sync(backend=None, lines: pd.DataFrame | None = None, m=None, today: dt.date
         m = m if m is not None else masters.load_masters()
         new = build(lines, m, days)
         ws = _worksheet(client)
-        existing = ws.get("A2:M", value_render_option="UNFORMATTED_VALUE",
+        head = ws.get("A1:N1")
+        fac = has_facility(head[0] if head else [])
+        existing = ws.get("A2:N" if fac else "A2:M", value_render_option="UNFORMATTED_VALUE",
                           date_time_render_option="SERIAL_NUMBER")
+        if not fac:
+            existing = widen(existing)
+            for x in new:                     # no Facility column yet: nothing to compare or write there
+                x["values"][FAC] = ""
         p = plan(existing, new, {serial(d) for d in days}, cities())
-        n = write(ws, p)
+        n = write(ws, p, fac)
         return f"ok: {len(p['update'])} updated, {len(p['append'])} added" if n else "ok: up to date"
     except Exception as e:  # noqa: BLE001 - only a copy for the ops team; the next save tries again
         return f"error {type(e).__name__}: {e}"

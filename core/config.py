@@ -342,3 +342,44 @@ def now_ist() -> datetime:
 
 def now_iso() -> str:
     return now_ist().isoformat()
+
+
+def _ckey(v) -> str:
+    return " ".join(str(v or "").split()).casefold()
+
+
+def facilities(city: str) -> list[str]:
+    """27 Nov (user): facilities of a city, picked on Create indent after the city. Secret
+    `facilities` {word of the city: [names]}; the first one is the default (old indents)."""
+    v = get("facilities", {"Bangalore": ["PTP_Cheemchandra", "PTP_Spar", "PTP_Fusion_Huskur"]})
+    try:
+        items = dict(v).items()
+    except (TypeError, ValueError):
+        return []
+    c = _ckey(city)
+    for word, names in items:
+        if c and _ckey(word) in c:
+            names = [names] if isinstance(names, str) else list(names or [])
+            return [str(n).strip() for n in names if str(n).strip()]
+    return []
+
+
+def direct_facilities() -> set[str]:
+    """Facilities with no store step: facility -> customer -> items (the facility is the delivery
+    point). Secret `direct_facilities`, default Spar and Fusion Huskur."""
+    v = get("direct_facilities", ["PTP_Spar", "PTP_Fusion_Huskur"])
+    v = [v] if isinstance(v, str) else list(v or [])
+    return {_ckey(x) for x in v if str(x).strip()}
+
+
+def is_direct_facility(name: str) -> bool:
+    return bool(_ckey(name)) and _ckey(name) in direct_facilities()
+
+
+def facility_of(city: str, value="") -> str:
+    """The facility of an indent row: its own value, else the city's first facility ('' if none)."""
+    s = "" if value is None or (isinstance(value, float) and value != value) else str(value).strip()
+    if s:
+        return s
+    f = facilities(city)
+    return f[0] if f else ""

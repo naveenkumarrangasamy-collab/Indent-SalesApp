@@ -46,14 +46,15 @@ class IndentHeader:
     customer: str = ""
     store: str = ""
     expected_time: str = ""   # HH:MM
+    facility: str = ""        # 27 Nov: PTP_Cheemchandra / PTP_Spar / PTP_Fusion_Huskur (blank = the city's first)
 
-    FIELDS = ("delivery_date", "city", "customer", "store", "expected_time")
+    FIELDS = ("delivery_date", "city", "customer", "store", "expected_time", "facility")
 
 
     def missing(self) -> list[str]:
         labels = {"delivery_date": "Delivery date", "city": "City", "customer": "Customer",
                   "store": "Store", "expected_time": "Expected delivery time"}
-        return [labels[f] for f in self.FIELDS if not str(getattr(self, f) or "").strip()]
+        return [labels[f] for f in labels if not str(getattr(self, f) or "").strip()]
 
     def to_dict(self) -> dict:
         return {f: getattr(self, f) for f in self.FIELDS}

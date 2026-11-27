@@ -720,6 +720,22 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   Creator when this device has no alerts yet (once per sign-in; why + how; Allow / Send test alert / Later), and
   the sidebar box **🔔 PO alerts on this device**.
 
+### 27 Nov: Facility (user-approved, live)
+
+- **Facility** on Create indent after City (pills; only cities in secret `facilities`, default
+  {Bangalore: PTP_Cheemchandra, PTP_Spar, PTP_Fusion_Huskur}; the first is the default and what old indents with a
+  blank facility count as). `config.facilities / facility_of / is_direct_facility`, `IndentHeader.facility`,
+  Indent_Lines column **facility** (last column).
+- **Direct facilities** (secret `direct_facilities`, default PTP_Spar, PTP_Fusion_Huskur): facility → customer →
+  items, no store step; the store / delivery point saved = the facility name (one indent per customer + facility +
+  day). No ＋ New customer / store there.
+- **All indents**: Facility pills under City (one city shown); each facility's indents listed apart.
+- **BLR dispatch sheet**: **Facility** column after City (column C); the app now writes **A–N**, people type from
+  O on. `dispatch_sync` reads the header: no Facility column in C → old A–M layout (`has_facility`, `widen`).
+  The tab is now named "Auto03-BLR_MTDispatch-Live" (found by gid).
+- Production / Batching / mails / Home / Upload PO are NOT split by facility yet (all facilities together).
+- Master 27 Nov: PTP Bangalore Reliance "1Box - Royal Gala" (Gala; New tab: Box, 90C, 100C, 110C, Poland).
+
 ## 6. Code map (repo root)
 
 - `app.py`: entry point.
