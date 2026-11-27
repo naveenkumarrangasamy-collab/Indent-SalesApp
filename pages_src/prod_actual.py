@@ -378,7 +378,7 @@ def _saved_today(saved: pd.DataFrame, city: str, day) -> None:
     v = pa.view(saved, day.isoformat(), city)
     if v.empty:
         return
-    st.markdown(f"#### Saved for production · {day.strftime('%d %B %Y').lstrip('0')} · {len(v)}")
+    st.markdown(f"#### {day.strftime('%d/%b/%y')} - Production Items Taken · {len(v)}")
     d = saved[(saved["production_date"].astype(str).str[:10] == day.isoformat())
               & (saved["city"].astype(str) == city)] if "saved_at" in saved.columns else saved.iloc[0:0]
     _by_executive(v.drop(columns=["Date", "City"]), "Boxes",
