@@ -26,9 +26,14 @@ CSS = """<style>
 .pa-sec {font-size:0.82rem; font-weight:800; color:#2C5496; text-align:left; margin:12px 0 4px 2px;}
 .st-key-pa_next {border:2px solid #639922; background:#EAF3DE; border-radius:12px; padding:10px 14px;}
 .pa-next {color:#27500A; font-size:0.92rem;}
+.st-key-pa_card [class*="st-key-pa_addrow_"] {position:relative;}
+.st-key-pa_card [class*="st-key-pa_addrow_"] [class*="st-key-pa_tick_"] {position:absolute; right:5px; top:5px;
+  width:34px; z-index:3;}
+.st-key-pa_card [class*="st-key-pa_addrow_"]:has(input:placeholder-shown) [class*="st-key-pa_tick_"] {display:none;}
 .st-key-pa_card [class*="st-key-pa_tick_"] button {background:#1F6B4A; border-color:#1F6B4A; color:#fff;
-  font-weight:800; min-height:38px; padding:0;}
-.st-key-pa_card [class*="_new"] input {text-align:left; font-weight:600;}
+  font-weight:800; min-height:30px; height:30px; width:34px; padding:0; border-radius:8px;}
+.st-key-pa_card [class*="st-key-pa_addrow_"] input {text-align:left; font-weight:600; padding-right:46px;}
+.st-key-pa_card [class*="st-key-pa_addrow_"] [data-testid="InputInstructions"] {display:none;}
 .pa-ex {background:#F4F8FE; color:#0C447C; border:1px solid #B5D4F4; border-radius:10px; padding:6px 12px;
   font-weight:800; margin:10px 0 4px 0; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px;}
 .pa-ex span {font-weight:700; font-size:0.8rem; color:#185FA5;}
@@ -75,10 +80,12 @@ def _typed(label: str, opts: list[str], key: str, hint: str) -> str:
 
 def _add_row(key: str, hint: str, on_tick, args: tuple) -> None:
     """A visible 'add' box with a tick next to it: type the name, press the tick, it is added and chosen."""
-    a, b = st.columns([4, 1], vertical_alignment="center")
-    a.text_input(hint, key=f"{key}_new", placeholder=hint, label_visibility="collapsed")
-    with b.container(key=f"pa_tick_{key}"):
-        st.button("✓", key=f"{key}_tick", on_click=on_tick, args=args, width="stretch", help="Save this name")
+    # 27 Nov (user): the tick sits INSIDE the box and shows only once something is typed; Enter saves too
+    with st.container(key=f"pa_addrow_{key}"):
+        st.text_input(hint, key=f"{key}_new", placeholder=hint, label_visibility="collapsed",
+                      on_change=on_tick, args=args)
+        with st.container(key=f"pa_tick_{key}"):
+            st.button("✓", key=f"{key}_tick", on_click=on_tick, args=args, help="Save this name")
 
 
 def _add_brand(key: str) -> None:
