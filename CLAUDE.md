@@ -741,6 +741,8 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
   and the Indent_vs_PO / Indent_Changes tabs (after City).
 - Master 27 Nov: PTP Bangalore customer **GT Sale**, store "Royal Fruits", SKUs "1Box - <fruit>" (Apple, Avocado,
   Blueberry, Kiwi, Mandarin, Orange, Grapes, Grapefruit, Litchi); Namdhari "1Box - Apple / Mandarin / Orange / Grapes".
+- **Namdhari PO dialog starts on Freeze** (user 27 Nov 3:22 PM; Upload PO still offered): `po_first_customers`
+  default is now Amazon, Firstclub.
 - Production / Home / Upload PO are NOT split by facility yet (all facilities together).
 - Master 27 Nov (12:30): PTP Bangalore **Namdhari** got "1Box - Apple / Mandarin / Orange (72C) / Grapes"; new customer
   **GT Sale** (store **Royal Fruits**; more GT buyers = more stores) with "1Box - <fruit>" for Apple, Avocado,
