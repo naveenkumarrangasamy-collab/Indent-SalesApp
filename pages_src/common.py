@@ -171,15 +171,17 @@ _THEME_CSS = """
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,700&display=swap');
   :root { --og-acc:#1f5fbf; --og-on:#17202e; --og-ov:#4b5870; --og-line:rgba(23,32,46,.08);
-      --og-g:rgba(255,255,255,.55); --og-gb:rgba(255,255,255,.82); --og-edge:rgba(31,95,191,.18);
-      --og-sh:rgba(20,50,110,.13); --og-card:rgba(255,255,255,.9);
+      --og-g:rgba(255,255,255,.32); --og-gb:rgba(255,255,255,.7); --og-edge:rgba(31,95,191,.2);
+      --og-sh:rgba(20,50,110,.14); --og-card:rgba(255,255,255,.5);
+      --og-blur:blur(26px) saturate(1.9);
       --og-spring:cubic-bezier(.34,1.56,.64,1); }
 
   /* ---- page: soft blue backdrop, rounded type ---- */
   .stApp { background:
-      radial-gradient(760px 540px at 6% 0%, #cfe0ff 0, transparent 60%),
-      radial-gradient(640px 520px at 100% 16%, #d6efff 0, transparent 60%),
-      radial-gradient(760px 600px at 55% 100%, #e0e4ff 0, transparent 60%), #f3f7fc !important;
+      radial-gradient(620px 520px at 0% 0%, #9fc2ff 0, transparent 62%),
+      radial-gradient(520px 620px at 0% 78%, #a9e4f4 0, transparent 62%),
+      radial-gradient(700px 520px at 100% 10%, #b4dcff 0, transparent 60%),
+      radial-gradient(820px 640px at 58% 100%, #c6c9ff 0, transparent 60%), #e9f0fb !important;
       background-attachment: fixed !important;
       font-family: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif; }
   [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stMain"] { background: transparent !important; }
@@ -190,9 +192,10 @@ _THEME_CSS = """
       font-family: 'Outfit', 'Nunito Sans', system-ui, sans-serif; letter-spacing: -.01em; }
 
   /* ---- sidebar: one glass panel ---- */
-  [data-testid="stSidebar"] { background: var(--og-g) !important; border-right: 1px solid var(--og-gb);
-      -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
-      box-shadow: 0 10px 30px var(--og-sh); }
+  [data-testid="stSidebar"] { background: rgba(255,255,255,.24) !important; border-right: 1px solid var(--og-gb);
+      border-radius: 0 28px 28px 0;
+      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);
+      box-shadow: 0 10px 30px var(--og-sh), inset -1px 0 0 rgba(255,255,255,.6), inset 0 1px 0 rgba(255,255,255,.6); }
   [data-testid="stSidebar"] > div, [data-testid="stSidebarContent"] { background: transparent !important; }
   [data-testid="stSidebarNav"] a { border-radius: 999px; }
   [data-testid="stSidebarNav"] a[aria-current="page"] { background: var(--og-acc) !important; }
@@ -224,7 +227,7 @@ _THEME_CSS = """
   /* ---- segmented control (delivery day): glass bar, white chosen segment ---- */
   [role="radiogroup"]:has(> button[data-variant="segmented_control"]) { background: var(--og-g);
       border: 1px solid var(--og-gb); border-radius: 999px;
-      -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
+      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);
       box-shadow: 0 4px 14px var(--og-sh); }
   button[data-variant="segmented_control"] { border-radius: 999px !important; color: var(--og-ov) !important; }
   button[data-variant="segmented_control"]:hover { background: rgba(255,255,255,.7) !important; color: var(--og-on) !important; }
@@ -233,16 +236,16 @@ _THEME_CSS = """
 
   /* ---- tiles: tinted glass instead of dark boxes ---- */
   .mt-tile { background: var(--og-g); color: var(--og-on); border: 1px solid var(--og-gb); border-radius: 22px;
-      -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
+      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);
       box-shadow: 0 10px 30px var(--og-sh); }
   .mt-tile .lbl { color: inherit; font-weight: 700; }
   .mt-tile .sub { color: inherit; }
   .mt-tile .val { font-weight: 600; }
   .mt-tile.good .val, .mt-tile.warn .val, .mt-tile.bad .val, .mt-tile.info .val { color: inherit; }
-  .mt-tile.info { background: rgba(221,233,251,.72); color: #123a80; }
-  .mt-tile.good { background: rgba(220,243,229,.72); color: #0b5a3c; }
-  .mt-tile.warn { background: rgba(253,235,203,.76); color: #7a4400; }
-  .mt-tile.bad  { background: rgba(253,226,225,.8);  color: #8a1c1c; }
+  .mt-tile.info { background: rgba(221,233,251,.5); color: #123a80; }
+  .mt-tile.good { background: rgba(220,243,229,.5); color: #0b5a3c; }
+  .mt-tile.warn { background: rgba(253,235,203,.55); color: #7a4400; }
+  .mt-tile.bad  { background: rgba(253,226,225,.55); color: #8a1c1c; }
 
   /* ---- rows, chips and cards the app draws itself ---- */
   .mt-line, .mt-crow { border: 1px solid var(--og-line); border-radius: 16px; background: var(--og-card);
@@ -255,18 +258,25 @@ _THEME_CSS = """
   .mt-line .ct, .mt-line .cnt, .mt-crow .cnt, .mt-h span { color: var(--og-ov); }
   .mt-bar { background: var(--og-line); }
   .mt-strip { border-color: var(--og-edge); background: rgba(221,233,251,.5); border-radius: 16px; }
-  .mt-cust { border-color: var(--og-gb); border-radius: 22px; background: var(--og-card); box-shadow: 0 10px 30px var(--og-sh); }
-  [class*="st-key-mtcard"] { border-radius: 22px !important; background: var(--og-card); box-shadow: 0 10px 30px var(--og-sh); }
-  .st-key-mt_delivery_card { background: var(--og-card); border-radius: 22px; box-shadow: 0 10px 30px var(--og-sh); }
+  .mt-cust, [class*="st-key-mtcard"], .st-key-mt_delivery_card { background: var(--og-card);
+      border-color: var(--og-gb) !important; border-radius: 22px !important;
+      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);
+      box-shadow: 0 10px 30px var(--og-sh), inset 0 1px 0 rgba(255,255,255,.7); }
 
   /* ---- Streamlit's own boxes: rounder, lighter ---- */
-  [data-testid="stExpander"] details { border-radius: 18px; background: var(--og-card); border-color: var(--og-gb); }
+  [data-testid="stExpander"] details { border-radius: 18px; background: var(--og-card); border-color: var(--og-gb);
+      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur); }
+  /* pop-up windows (PO upload, edit item ...): frosted glass too, a little more solid so text stays easy to read */
+  [data-testid="stDialog"] div[role="dialog"] { background: rgba(255,255,255,.66) !important;
+      border: 1px solid var(--og-gb); border-radius: 28px;
+      -webkit-backdrop-filter: blur(30px) saturate(1.9); backdrop-filter: blur(30px) saturate(1.9);
+      box-shadow: 0 24px 60px rgba(20,50,110,.25), inset 0 1px 0 rgba(255,255,255,.8); }
   [data-testid="stDataFrame"], [data-testid="stTable"] { border-radius: 16px; overflow: hidden; box-shadow: 0 6px 20px rgba(20,50,110,.08); }
   [data-testid="stAlert"] { border-radius: 16px; }
-  [data-testid="stFileUploaderDropzone"] { border-radius: 16px; background: rgba(255,255,255,.6); border: 1.5px dashed #9fb0c8; }
+  [data-testid="stFileUploaderDropzone"] { border-radius: 16px; background: rgba(255,255,255,.35); border: 1.5px dashed #9fb0c8; }
   [data-baseweb="input"], [data-baseweb="base-input"], [data-baseweb="select"] > div, [data-baseweb="textarea"] { border-radius: 12px !important; }
   [data-testid="stForm"] { background: var(--og-g); border: 1px solid var(--og-gb) !important; border-radius: 28px;
-      -webkit-backdrop-filter: blur(22px) saturate(1.8); backdrop-filter: blur(22px) saturate(1.8);
+      -webkit-backdrop-filter: var(--og-blur); backdrop-filter: var(--og-blur);
       box-shadow: 0 10px 30px var(--og-sh); }
   [data-testid="stSidebar"] [data-testid="stForm"] { background: transparent; border: 0 !important; box-shadow: none;
       -webkit-backdrop-filter: none; backdrop-filter: none; }
