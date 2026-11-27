@@ -4,6 +4,8 @@ primaryColor = "#1c6b49"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f3f7f5"
 textColor = "#1f2a24"
+# 27 Nov (user): a mild blue header on every table
+dataframeHeaderBackgroundColor = "#DCEBFA"
 
 [client]
 toolbarMode = "minimal"

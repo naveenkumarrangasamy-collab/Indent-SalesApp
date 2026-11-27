@@ -444,20 +444,17 @@ def _saved_today(saved: pd.DataFrame, city: str, day, exec_tab=None, user=None) 
         TB: [txt(r.get("table_no")) or None for r in recs],
         BX: [g(r.get("boxes_moved")) or "0" for r in recs],
         "Stock": [txt(r.get("stock_type")) for r in recs],
-        "Given at": [_clock(r.get("saved_at")) for r in recs], "By": [txt(r.get("saved_by")) for r in recs],
+        "Given at": [_clock(r.get("saved_at")) for r in recs], "By": [txt(r.get("saved_by")).split("@")[0] for r in recs],
         "Kg on table": [f"{round((pa._num(r.get('box_kg')) or 0) * (pa._num(r.get('boxes_moved')) or 0), 2):g}"
                         for r in recs]})
     st.markdown(f"#### {day.strftime('%d/%b/%y')} - Total Production Items Taken · {len(recs)}")
     names = pa.executives(exec_tab, city)
     names += [n for n in dict.fromkeys(x for x in base[EX] if x) if n.casefold() not in {y.casefold() for y in names}]
     nonce = st.session_state.get("pa_saved_n", 0)
-    # a mild blue on the read-only cells (the ✎ cells stay white = can be changed); tall enough that the
-    # side-scroll bar never covers the last line
-    look = base.style.set_properties(subset=[c for c in base.columns if c not in (EX, TB, BX)],
-                                     **{"background-color": "#F1F6FD", "color": "#0F172A"})
+    # 27 Nov (user): the table stays as it was (white cells, its own size); only the HEADER is tinted
+    # (theme.dataframeHeaderBackgroundColor in .streamlit/config.toml)
     out = st.data_editor(
-        look, hide_index=True, width="stretch", num_rows="fixed", key=f"pa_saved_{day}_{city}_{nonce}",
-        height=38 + 35 * len(base) + 22,
+        base, hide_index=True, width="stretch", num_rows="fixed", key=f"pa_saved_{day}_{city}_{nonce}",
         disabled=[c for c in base.columns if c not in (EX, TB, BX)],
         column_config={EX: st.column_config.SelectboxColumn(EX, options=names, required=False),
                        TB: st.column_config.SelectboxColumn(TB, options=TABLES, required=True),
