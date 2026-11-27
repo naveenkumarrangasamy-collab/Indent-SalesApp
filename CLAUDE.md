@@ -742,6 +742,11 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - Master 27 Nov: PTP Bangalore customer **GT Sale**, store "Royal Fruits", SKUs "1Box - <fruit>" (Apple, Avocado,
   Blueberry, Kiwi, Mandarin, Orange, Grapes, Grapefruit, Litchi); Namdhari "1Box - Apple / Mandarin / Orange / Grapes".
 - Production / Home / Upload PO are NOT split by facility yet (all facilities together).
+- Master 27 Nov (12:30): PTP Bangalore **Namdhari** got "1Box - Apple / Mandarin / Orange (72C) / Grapes"; new customer
+  **GT Sale** (store **Royal Fruits**; more GT buyers = more stores) with "1Box - <fruit>" for Apple, Avocado,
+  Blueberry, Grapefruit, Grapes, Kiwi, Litchi, Mandarin, Orange (New tab: Box, no spec yet). Variety is picked on
+  the indent for Apple only (other fruits: not asked; a per-customer rule would be a code change).
+  Indents: IN-084 Reliance Huskur, IN-085 Namdhari, IN-086 GT Sale · Royal Fruits (Blueberry 50 Box).
 - Master 27 Nov: PTP Bangalore Reliance "1Box - Royal Gala" (Gala; New tab: Box, 90C, 100C, 110C, Poland).
 
 ## 6. Code map (repo root)
