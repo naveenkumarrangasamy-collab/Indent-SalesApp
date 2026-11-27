@@ -206,7 +206,7 @@ def can_freeze(customer: str) -> bool:
 def po_first(customer: str) -> bool:
     """Freeze customers whose dialog starts on Upload PO (secret `po_first_customers`,
     default Amazon: upload their PO when they send one, else type the qty and Freeze)."""
-    v = get("po_first_customers", ["Amazon", "Namdhari", "Firstclub"])
+    v = get("po_first_customers", ["Amazon", "Firstclub"])   # 27 Nov (user): Namdhari starts on Freeze
     v = [v] if isinstance(v, str) else list(v or [])
     return _first_word_in(customer, {str(x).strip().casefold() for x in v if str(x).strip()})
 

@@ -69,5 +69,5 @@ def test_freeze_customers_24nov():
         assert config.can_freeze(c), c
     for c in ["Swiggy", "Zepto", "Zomato", "Moreover"]:
         assert not config.can_freeze(c), c
-    assert config.po_first("Amazon") and config.po_first("Namdhari") and config.po_first("Firstclub")
+    assert config.po_first("Amazon") and config.po_first("Firstclub") and not config.po_first("Namdhari")
     assert not config.po_first("Trent")
