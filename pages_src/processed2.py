@@ -594,7 +594,7 @@ def _category(lots, saved, days: set[str], city: str, label: str) -> None:
             if tot["saved"] else "",
             f"**{tot['none']}** item(s) are not started; they are not counted" if tot["none"] else "") if x) + ".")
     pcts = ["Category Efficiency % (K / J)", "GT Created % (L / J)", "Dump % (M / J)"]
-    signed = {p2.LOT_KG: "{:+,.2f}", p2.LOT_PCT: "{:+.1%}"}
+    signed = {p2.LOT_KG: ("{:+,.2f}", 2), p2.LOT_PCT: ("{:+.1%}", 3)}
     df = pd.DataFrame(rows, columns=p2.CAT_HEAD).astype(object)   # object: an empty % stays None, not NaN
     df = df.where(df.notna(), None)
     band = [p2.eff_band(v) for v in df[pcts[0]]]
@@ -603,8 +603,9 @@ def _category(lots, saved, days: set[str], city: str, label: str) -> None:
         show[col] = [f"{float(v):,.1f}".rstrip("0").rstrip(".") if v else "" for v in df[col]]
     for col in pcts:
         show[col] = ["" if v is None else f"{round(float(v) * 100)}%" for v in df[col]]
-    for col, fmt in signed.items():
-        show[col] = ["" if v is None else fmt.format(float(v) + 0.0) for v in df[col]]
+    for col, (fmt, nd) in signed.items():      # round first, so a tiny gain is "0.00", never "-0.00"
+        show[col] = ["" if v is None else (fmt.format(round(float(v), nd)) if round(float(v), nd) else "0")
+                     for v in df[col]]
     show.insert(0, "No", [str(i) for i in range(1, len(show) + 1)])
 
     def paint(col):
