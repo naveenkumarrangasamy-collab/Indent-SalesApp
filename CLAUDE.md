@@ -736,7 +736,12 @@ The app reads columns **by header name**, ignoring case, spaces, `-` and `_`. Co
 - **Batching sheet (27 Nov 12:13)**: still every indent of the city, with a **Facility** column after City
   (screen, Excel, CSV; `production_calc.add_facility`). The Batching_Sheet tab has Facility as its **last** column
   (older columns keep their place; an older tab keeps its rows). PDF and the hourly mail unchanged.
-- Production / mails / Home / Upload PO are NOT split by facility yet (all facilities together).
+- **Rule (user 27 Nov 12:24): a new column goes everywhere that content is written.** Facility is also in the
+  hourly Batching mail (block title "Facility · Customer · point" + the Excel), the Batching PDF section titles,
+  and the Indent_vs_PO / Indent_Changes tabs (after City).
+- Master 27 Nov: PTP Bangalore customer **GT Sale**, store "Royal Fruits", SKUs "1Box - <fruit>" (Apple, Avocado,
+  Blueberry, Kiwi, Mandarin, Orange, Grapes, Grapefruit, Litchi); Namdhari "1Box - Apple / Mandarin / Orange / Grapes".
+- Production / Home / Upload PO are NOT split by facility yet (all facilities together).
 - Master 27 Nov: PTP Bangalore Reliance "1Box - Royal Gala" (Gala; New tab: Box, 90C, 100C, 110C, Poland).
 
 ## 6. Code map (repo root)

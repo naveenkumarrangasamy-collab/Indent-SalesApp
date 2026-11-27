@@ -267,7 +267,8 @@ def batching_view(rows: pd.DataFrame, m: Masters | None, day: str) -> pd.DataFra
     if rows is None or rows.empty:
         return pd.DataFrame()
     po_qty, po_ids, extras = po_quantities(rows)
-    return pc.with_po(pc.batching(rows, m), po_qty, po_ids, [e for e in extras if e["day"] == day])
+    view = pc.with_po(pc.batching(rows, m), po_qty, po_ids, [e for e in extras if e["day"] == day])
+    return pc.add_facility(view, rows)          # 27 Nov: Facility after City, as on the page
 
 
 _ORDER = {"PO lower": 0, "Not on PO": 1, "Not on indent": 2, "PO higher": 3, "No PO yet": 4, "Match": 5}
@@ -318,7 +319,11 @@ def batching_blocks(view: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
     many = view["City"].nunique() > 1
     has_var = "Variety" in view.columns and view["Variety"].astype(str).str.strip().astype(bool).any()
     out = []
-    for (city, cust, point), part in view.groupby(["City", "Customer", "Delivery point"], sort=False):
+    fac_col = "Facility" in view.columns
+    keys = ["City"] + (["Facility"] if fac_col else []) + ["Customer", "Delivery point"]
+    for key, part in view.groupby(keys, sort=False):
+        city, cust, point = key[0], key[-2], key[-1]
+        fac = str(key[1]) if fac_col else ""
         part = part.assign(_o=part["Status"].map(lambda x: _ORDER.get(x, 9))).sort_values("_o", kind="stable")
         df = pd.DataFrame({"Customer SKU Name": part["Customer SKU Name"]})
         if has_var:
@@ -328,7 +333,8 @@ def batching_blocks(view: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
         df["PO"] = [_q(x) for x in part["PO qty"]]
         df["Diff"] = [_q(x, sign=True) for x in part["Difference"]]
         df["Status"] = part["Status"].values
-        head = " · ".join(([city] if many else []) + [cust] + ([point] if str(point) != str(cust) else []))
+        head = " · ".join(([city] if many else []) + ([fac] if fac else []) + [cust]
+                          + ([point] if str(point) not in (str(cust), fac) else []))
         out.append((head, production_calc.numbered(df.reset_index(drop=True))))
     return out
 

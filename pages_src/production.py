@@ -409,7 +409,10 @@ def render_batching(user: User) -> None:
     # downloads: PDF one section per delivery point, Excel, CSV (no indent numbers)
     now = config.now_ist().strftime("%d %b %Y, %I:%M %p")
     sub = [st.session_state.get("bs_desc", ""), f"{len(points)} delivery points. Generated {now} IST."]
-    sections = [(f"{i}) {city} / {cust} / {store}", _fmt_date(day), part[cols].reset_index(drop=True))
+    def _fac(part) -> str:
+        f = str(part["Facility"].iloc[0]) if "Facility" in part.columns else ""
+        return f"{f} / " if f else ""
+    sections = [(f"{i}) {city} / {_fac(part)}{cust} / {store}", _fmt_date(day), part[cols].reset_index(drop=True))
                 for i, ((day, city, cust, store), part) in enumerate(points, start=1)]
     from core.reports import xlsx
     c = st.columns([1, 1, 1, 3])

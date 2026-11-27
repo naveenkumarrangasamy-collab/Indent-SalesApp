@@ -14,15 +14,17 @@ import threading
 
 import pandas as pd
 
+from core import config
+
 from core.models import fmt_num
 from core.schema import CHANGE_LOG, INDENT_LINES, PO_END, PO_FREEZE, PO_ITEM_MAP, STATUS_CANCELLED
 
 VS_TAB = "Indent_vs_PO"
 CHANGES_TAB = "Indent_Changes"
 
-VS_COLS = ["Delivery", "City", "Customer", "Store", "Indent", "PO no", "PO at", "Customer SKU Name",
+VS_COLS = ["Delivery", "City", "Facility", "Customer", "Store", "Indent", "PO no", "PO at", "Customer SKU Name",
            "Indent qty", "PO qty", "Diff", "Result"]
-CH_COLS = ["Delivery", "Indent", "City", "Customer", "Store", "Customer SKU Name", "Time", "By", "Change"]
+CH_COLS = ["Delivery", "Indent", "City", "Facility", "Customer", "Store", "Customer SKU Name", "Time", "By", "Change"]
 
 BAD = ("Differs", "Not on PO", "Not on indent")
 RED = (0.99, 0.85, 0.84)
@@ -80,7 +82,8 @@ def vs_rows(lines: pd.DataFrame, po: pd.DataFrame | None, maps: dict | None = No
                  & (po.get("kind", pd.Series("", index=po.index)).astype(str).str.lower() != PO_END)] \
             if po is not None and not po.empty and "indent_id" in po.columns else pd.DataFrame()
         po_at = _when(pos["confirmed_at"].iloc[-1]) if len(pos) and "confirmed_at" in pos.columns else ""
-        base = {"Delivery": _day(h["delivery_date"]), "City": h["city"], "Customer": h["customer"],
+        base = {"Delivery": _day(h["delivery_date"]), "City": h["city"],
+                "Facility": config.facility_of(h["city"], h.get("facility", "")), "Customer": h["customer"],
                 "Store": h["store"], "Indent": iid, "PO no": ", ".join(info["numbers"]), "PO at": po_at}
         if info["pos"] == 0 or info["qty"] is None:
             res = "No PO yet" if info["pos"] == 0 else "PO without item qty"
@@ -138,6 +141,7 @@ def change_rows(lines: pd.DataFrame, log: pd.DataFrame | None) -> list[dict]:
         h = head.loc[iid] if iid in head.index else {}
         rows.append({"_ts": pd.to_datetime(c.get("changed_at"), errors="coerce", utc=True),
                      "Delivery": _day(h.get("delivery_date", "")), "Indent": iid, "City": h.get("city", ""),
+                     "Facility": config.facility_of(h.get("city", ""), h.get("facility", "")) if len(h) else "",
                      "Customer": h.get("customer", ""), "Store": h.get("store", ""),
                      "Customer SKU Name": c.get("customer_sku_name") or "",
                      "Time": _when(c.get("changed_at")),
