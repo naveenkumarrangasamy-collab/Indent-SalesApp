@@ -67,6 +67,7 @@ def pack_kg(label: str, x: float | None) -> tuple[float | None, str]:
 GRAM_PACKS = ["100gm", "200gm", "250gm", "500gm", "750gm"]   # 27 Nov (user): customer lots of fruit sold by weight
 GRAM_PARENTS = {"grapes", "blueberry", "litchi", "longan"}   # never offered piece lots (1PC, 2PC ...)
 EXTRA_GRAM = {"blueberry": ["125gm"]}                        # the punnet
+PIECE_GRAM = {"orange": ["250gm"]}                           # 27 Nov (user): Orange is also packed in 250 gm
 
 
 def lot_choices(parent: str, piece: bool, indent_packs: list[str]) -> list[str]:
@@ -77,7 +78,7 @@ def lot_choices(parent: str, piece: bool, indent_packs: list[str]) -> list[str]:
     if not piece or k in GRAM_PARENTS:
         base = [p for p in indent_packs if pack_kg(p, None)[0]] + EXTRA_GRAM.get(k, []) + GRAM_PACKS + ["1Kg"]
     else:
-        base = list(indent_packs) + ["1PC", "2PC", "3PC", "4PC", "1Kg"]
+        base = list(indent_packs) + ["1PC", "2PC", "3PC", "4PC"] + PIECE_GRAM.get(k, []) + ["1Kg"]
     return list(dict.fromkeys(base))
 
 

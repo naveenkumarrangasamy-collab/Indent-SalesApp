@@ -27,6 +27,7 @@ def test_pack_labels_and_needs():
     assert grapes == ["250gm", "100gm", "200gm", "500gm", "750gm", "1Kg"]
     assert pr.lot_choices("Blueberry", True, [])[0] == "125gm" and "1PC" not in pr.lot_choices("Blueberry", True, [])
     assert pr.lot_choices("Apple", True, ["2PC"]) == ["2PC", "1PC", "3PC", "4PC", "1Kg"]
+    assert pr.lot_choices("Orange", True, []) == ["1PC", "2PC", "3PC", "4PC", "250gm", "1Kg"]
     lines = pd.DataFrame([
         {"delivery_date": "2026-11-25", "city": "B", "parent_sku": "Avocado", "lot_size": "1 Pcs", "qty": 300},
         {"delivery_date": "2026-11-25", "city": "B", "parent_sku": "Avocado", "lot_size": "1 Pcs", "qty": 420},

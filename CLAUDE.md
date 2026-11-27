@@ -797,3 +797,4 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 - **Lotting loss** on Production Summary → Category efficiency: kg and % of J, = J − (K + L + M) as the team's
   sheet column "Lotting gain vs loss" (+ loss, − gain); also a tile.
 - Spec sizes are listed in count order (NZ Gala HG 110C was first in the list, not missing).
+- **Orange** also has a **250gm** customer lot (with its piece lots; `processed.PIECE_GRAM`), typed in packs.
